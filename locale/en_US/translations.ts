@@ -2344,308 +2344,48 @@
             <extracomment>Settings Menu - Description for option</extracomment>
         </message>
         <message>
-            <source>Library Image Orientation</source>
-            <translation>Library Image Orientation</translation>
+            <source>Support Moonfin Development</source>
+            <translation>Support Moonfin Development</translation>
+            <extracomment>Donation Dialog - Title</extracomment>
         </message>
         <message>
-            <source>Select the poster image orientation for the library views.</source>
-            <translation>Select the poster image orientation for the library views.</translation>
+            <source>Moonfin is free and open source. If you find it useful, please consider supporting continued development. Scan the QR code below to donate:</source>
+            <translation>Moonfin is free and open source. If you find it useful, please consider supporting continued development. Scan the QR code below to donate:</translation>
+            <extracomment>Donation Dialog - Message</extracomment>
         </message>
         <message>
-            <source>Default (Varies By Media Type)</source>
-            <translation>Default (Varies By Media Type)</translation>
+            <source>Thank you for your support!</source>
+            <translation>Thank you for your support!</translation>
+            <extracomment>Donation Dialog - Thanks message</extracomment>
         </message>
         <message>
-            <source>Landscape (Wide)</source>
-            <translation>Landscape (Wide)</translation>
+            <source>Close</source>
+            <translation>Close</translation>
         </message>
         <message>
-            <source>Portrait (Vertical)</source>
-            <translation>Portrait (Vertical)</translation>
+            <source>Update Available</source>
+            <translation>Update Available</translation>
+            <extracomment>Update Dialog - Title</extracomment>
         </message>
         <message>
-            <source>Skip Unknown</source>
-            <translation>Skip Segment</translation>
+            <source>Version</source>
+            <translation>Version</translation>
+            <extracomment>Update Dialog - Version label</extracomment>
         </message>
         <message>
-            <source>Skip Commercial</source>
-            <translation>Skip Commercial</translation>
+            <source>is now available</source>
+            <translation>is now available</translation>
+            <extracomment>Update Dialog - Version availability text</extracomment>
         </message>
         <message>
-            <source>Skip Preview</source>
-            <translation>Skip Preview</translation>
+            <source>Current</source>
+            <translation>Current</translation>
+            <extracomment>Update Dialog - Current version label</extracomment>
         </message>
         <message>
-            <source>Skip Recap</source>
-            <translation>Skip Recap</translation>
-        </message>
-        <message>
-            <source>Skip Outro</source>
-            <translation>Skip Outro</translation>
-        </message>
-        <message>
-            <source>Skip Intro</source>
-            <translation>Skip Intro</translation>
-        </message>
-        <message>
-            <source>Go To Genre</source>
-            <translation>Go To Genre</translation>
-        </message>
-        <message>
-            <source>Play Instant Mix</source>
-            <translation>Play Instant Mix</translation>
-        </message>
-        <message>
-            <source>Show Next Episode Details After Finish</source>
-            <translation>Show Next Episode Details After Finish</translation>
-        </message>
-        <message>
-            <source>If auto play next episode is disabled, display the next episode's detail screen after an episode finishes playing. If no next up episode is found, return to the just-played episode's page.</source>
-            <translation>If auto play next episode is disabled, display the next episode's detail screen after an episode finishes playing. If no next up episode is found, return to the just-played episode's page.</translation>
-        </message>
-        <message>
-            <source>Favorites Row</source>
-            <translation>Favorites Row</translation>
-        </message>
-        <message>
-            <source>Settings relating to the favorites row on the home screen.</source>
-            <translation>Settings relating to the favorites row on the home screen.</translation>
-        </message>
-        <message>
-            <source>Sort By Field</source>
-            <translation>Sort By Field</translation>
-        </message>
-        <message>
-            <source>Field to sort the row by.</source>
-            <translation>Field to sort the row by.</translation>
-        </message>
-        <message>
-            <source>Date Created</source>
-            <translation>Date Created</translation>
-        </message>
-        <message>
-            <source>Is Unplayed</source>
-            <translation>Is Unplayed</translation>
-        </message>
-        <message>
-            <source>Sort Order for the row - Ascending,Descending.</source>
-            <translation>Sort Order for the row - Ascending,Descending.</translation>
-        </message>
-        <message>
-            <source>Current Offset</source>
-            <translation>Current Offset</translation>
-        </message>
-        <message>
-            <source>Adjust Subtitle Timing</source>
-            <translation>Adjust Subtitle Timing</translation>
-        </message>
-        <message>
-            <source>Display Episodes In Two Columns</source>
-            <translation>Display Episodes In Two Columns</translation>
-        </message>
-        <message>
-            <source>Screen Settings</source>
-            <translation>Screen Settings</translation>
-        </message>
-        <message>
-            <source>Settings relating to Live TV.</source>
-            <translation>Settings relating to Live TV.</translation>
-            <extracomment>Libraries Setting - Setting Category description</extracomment>
-        </message>
-        <message>
-            <source>Channel Title Info</source>
-            <translation>Channel Title Info</translation>
-            <extracomment>Libraries Setting - Setting title</extracomment>
-        </message>
-        <message>
-            <source>Select what information to use as a channel's title.</source>
-            <translation>Select what information to use as a channel's title.</translation>
-            <extracomment>Libraries Setting - Setting description</extracomment>
-        </message>
-        <message>
-            <source>Settings relating to Live TV.</source>
-            <translation>Settings relating to Live TV.</translation>
-            <extracomment>Libraries Setting - Setting description</extracomment>
-        </message>
-        <message>
-            <source>Channel Number and Name</source>
-            <translation>Channel Number and Name</translation>
-            <extracomment>Libraries Setting - Setting option</extracomment>
-        </message>
-        <message>
-            <source>Channel Number</source>
-            <translation>Channel Number</translation>
-            <extracomment>Libraries Setting - Setting option</extracomment>
-        </message>
-        <message>
-            <source>Channel Name</source>
-            <translation>Channel Name</translation>
-            <extracomment>Libraries Setting - Setting option</extracomment>
-        </message>
-        <message>
-            <source>TV Guide Channel Display</source>
-            <translation>TV Guide Channel Display</translation>
-            <extracomment>Libraries Setting - Setting title</extracomment>
-        </message>
-        <message>
-            <source>Select how to display a channel in the Live TV guide.</source>
-            <translation>Select how to display a channel in the Live TV guide.</translation>
-            <extracomment>Libraries Setting - Setting description</extracomment>
-        </message>
-        <message>
-            <source>Channel Logo and Title</source>
-            <translation>Channel Logo and Title</translation>
-            <extracomment>Libraries Setting - Setting option</extracomment>
-        </message>
-        <message>
-            <source>Channel Logo</source>
-            <translation>Channel Logo</translation>
-            <extracomment>Libraries Setting - Setting option</extracomment>
-        </message>
-        <message>
-            <source>Channel Title</source>
-            <translation>Channel Title</translation>
-            <extracomment>Libraries Setting - Setting option</extracomment>
-        </message>
-        <message>
-            <source>Playback Speed Controls (Experimental)</source>
-            <translation>Playback Speed Controls (Experimental)</translation>
-        </message>
-        <message>
-            <source>Use at your own risk. We make no guarantees this will work for you. \n 1. This feature may not work on this device, yet work on others \n 2. Some speed options may not work on this device, yet work on others \n 3. Roku may block this feature without warning; even if the Jellyfin client doesn't update</source>
-            <translation>Use at your own risk. We make no guarantees this will work for you. \n 1. This feature may not work on this device, yet work on others \n 2. Some speed options may not work on this device, yet work on others \n 3. Roku may block this feature without warning; even if the Jellyfin client doesn't update</translation>
-        </message>
-        <message>
-            <source>Search Unavailable</source>
-            <translation>Search Unavailable</translation>
-        </message>
-        <message>
-            <source>Roku's video player got stuck buffering video</source>
-            <translation>Roku's video player got stuck buffering video</translation>
-        </message>
-        <message>
-            <source>Roku's video player threw the following error</source>
-            <translation>Roku's video player threw the following error</translation>
-        </message>
-        <message>
-            <source>Roku thought it could direct play this media, but playback never started.</source>
-            <translation>Roku thought it could direct play this media, but playback never started.</translation>
-        </message>
-        <message>
-            <source>Always Attempt Direct Playing Video Media</source>
-            <translation>Always Attempt Direct Playing Video Media</translation>
-        </message>
-        <message>
-            <source>Forces Jellyfin to try direct playing video media, Live TV excluded. Enabling this ignores all other playback support settings and will always first attempt direct playback. It also changes how transcode reason is displayed.</source>
-            <translation>Forces Jellyfin to try direct playing video media, Live TV excluded. Enabling this ignores all other playback support settings and will always first attempt direct playback. It also changes how transcode reason is displayed.</translation>
-        </message>
-        <message>
-            <source>Roku thought it could direct play this media, but the playback duration was incorrect.</source>
-            <translation>Roku thought it could direct play this media, but the playback duration was incorrect.</translation>
-        </message>
-        <message>
-            <source>Radio Stations</source>
-            <translation>Radio Stations</translation>
-        </message>
-        <message>
-            <source>Most Played Tracks</source>
-            <translation>Most Played Tracks</translation>
-        </message>
-        <message>
-            <source>Least Played Tracks</source>
-            <translation>Least Played Tracks</translation>
-        </message>
-        <message>
-            <source>Shuffle play your most played tracks</source>
-            <translation>Shuffle play your most played tracks</translation>
-        </message>
-        <message>
-            <source>Shuffle play your least played tracks</source>
-            <translation>Shuffle play your least played tracks</translation>
-        </message>
-        <message>
-            <source>Press Play/Pause to jump to OK button</source>
-            <translation>Press Play/Pause to jump to OK button</translation>
-        </message>
-        <message>
-            <source>Station Name</source>
-            <translation>Station Name</translation>
-        </message>
-        <message>
-            <source>Name to identify radio station</source>
-            <translation>Name to identify radio station</translation>
-        </message>
-        <message>
-            <source>List of years to include in station content</source>
-            <translation>List of years to include in station content</translation>
-        </message>
-        <message>
-            <source>Field to sort media by before cutting off at limit</source>
-            <translation>Field to sort media by before cutting off at limit</translation>
-        </message>
-        <message>
-            <source>Item Limit</source>
-            <translation>Item Limit</translation>
-        </message>
-        <message>
-            <source>Maximum number of items to load</source>
-            <translation>Maximum number of items to load</translation>
-        </message>
-        <message>
-            <source>Create Station</source>
-            <translation>Create Station</translation>
-        </message>
-        <message>
-            <source>Subtitle</source>
-            <translation>Subtitle</translation>
-        </message>
-        <message>
-            <source>A short description of the radio station</source>
-            <translation>A short description of the radio station</translation>
-        </message>
-        <message>
-            <source>List of genres to include in station content</source>
-            <translation>List of genres to include in station content</translation>
-        </message>
-        <message>
-            <source>Direction to sort media before cutting off at limit</source>
-            <translation>Direction to sort media before cutting off at limit</translation>
-        </message>
-        <message>
-            <source>Background Color</source>
-            <translation>Background Color</translation>
-        </message>
-        <message>
-            <source>Background color to use on home screen block</source>
-            <translation>Background color to use on home screen block</translation>
-        </message>
-        <message>
-            <source>The server found no media matching the filter criteria for this radio station.</source>
-            <translation>The server found no media matching the filter criteria for this radio station.</translation>
-        </message>
-        <message>
-            <source>No media matched radio station criteria</source>
-            <translation>No media matched radio station criteria</translation>
-        </message>
-        <message>
-            <source>Your search returned more than 50 tags. Rework your search to reduce the number of matching tags.</source>
-            <translation>Your search returned more than 50 tags. Rework your search to reduce the number of matching tags.</translation>
-        </message>
-        <message>
-            <source>Search Tags</source>
-            <translation>Search Tags</translation>
-        </message>
-        <message>
-            <source>Your search returned no tags.</source>
-            <translation>Your search returned no tags.</translation>
-        </message>
-        <message>
-            <source>Search Term</source>
-            <translation>Search Term</translation>
-        </message>
-        <message>
-            <source>Starts With</source>
-            <translation>Starts With</translation>
+            <source>A new version is available. Please visit the GitHub releases page to download.</source>
+            <translation>A new version is available. Please visit the GitHub releases page to download.</translation>
+            <extracomment>Update Dialog - Default message</extracomment>
         </message>
     </context>
 </TS>

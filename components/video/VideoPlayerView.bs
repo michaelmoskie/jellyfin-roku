@@ -123,52 +123,7 @@ sub init()
     m.playbackRetries = 0 ' Track retry attempts for buffering failures
     m.lastBufferError = 0 ' Timestamp of last buffering error
 
-    if m.global.session.user.settings["ui.design.hideclock"] = true
-        clockNode = findNodeBySubtype(m.top, "clock")
-        if clockNode[0] <> invalid then clockNode[0].parent.removeChild(clockNode[0].node)
-    end if
-
-    m.subtitleSyncValue = m.top.findNode("subtitleSyncValue")
-    m.subtitleSyncValue.font.size = 26
-    m.subtitleSyncValue.text = `${tr("Current Offset")}: 0 ms`
-
-    m.subtitleTimingButtons = m.top.findNode("subtitleTimingButtons")
-    m.subtitleTimingButtons.color = ColorPalette.BLACK90
-
-    m.subtitleSyncPlus100 = m.top.findNode("subtitleSyncPlus100")
-    m.subtitleSyncPlus100.fontSize = 25
-    m.subtitleSyncPlus100.background = ColorPalette.DARKGREY
-    m.subtitleSyncPlus100.color = ColorPalette.WHITE
-    m.subtitleSyncPlus100.focusBackground = ColorPalette.HIGHLIGHT
-    m.subtitleSyncPlus100.focusColor = ColorPalette.WHITE
-
-    m.subtitleSyncPlus500 = m.top.findNode("subtitleSyncPlus500")
-    m.subtitleSyncPlus500.fontSize = 25
-    m.subtitleSyncPlus500.background = ColorPalette.DARKGREY
-    m.subtitleSyncPlus500.color = ColorPalette.WHITE
-    m.subtitleSyncPlus500.focusBackground = ColorPalette.HIGHLIGHT
-    m.subtitleSyncPlus500.focusColor = ColorPalette.WHITE
-
-    m.subtitleSyncMinus100 = m.top.findNode("subtitleSyncMinus100")
-    m.subtitleSyncMinus100.fontSize = 25
-    m.subtitleSyncMinus100.background = ColorPalette.DARKGREY
-    m.subtitleSyncMinus100.color = ColorPalette.WHITE
-    m.subtitleSyncMinus100.focusBackground = ColorPalette.HIGHLIGHT
-    m.subtitleSyncMinus100.focusColor = ColorPalette.WHITE
-
-    m.subtitleSyncMinus500 = m.top.findNode("subtitleSyncMinus500")
-    m.subtitleSyncMinus500.fontSize = 25
-    m.subtitleSyncMinus500.background = ColorPalette.DARKGREY
-    m.subtitleSyncMinus500.color = ColorPalette.WHITE
-    m.subtitleSyncMinus500.focusBackground = ColorPalette.HIGHLIGHT
-    m.subtitleSyncMinus500.focusColor = ColorPalette.WHITE
-
-    m.subtitleSyncReset = m.top.findNode("subtitleSyncReset")
-    m.subtitleSyncReset.fontSize = 25
-    m.subtitleSyncReset.background = ColorPalette.DARKGREY
-    m.subtitleSyncReset.color = ColorPalette.WHITE
-    m.subtitleSyncReset.focusBackground = ColorPalette.HIGHLIGHT
-    m.subtitleSyncReset.focusColor = ColorPalette.WHITE
+    m.videoEndingTime = m.top.findNode("videoEndingTime")
 
     m.nextUp = m.top.findNode("nextUp")
     m.nextUpInfoLoaded = false
@@ -1361,7 +1316,7 @@ end sub
 
 '
 ' When Video Player state changes
-sub onState(msg)
+sub onState()
     if isValid(m.captionTask)
         m.captionTask.playerState = m.top.state + m.top.globalCaptionMode
     end if
@@ -1381,8 +1336,6 @@ sub onState(msg)
         m.bufferCheckTimer.control = "start"
         m.bufferCheckTimer.ObserveField("fire", "bufferCheck")
     else if isStringEqual(m.top.state, MediaPlaybackState.ERROR)
-        print "Error: " m.top.errorCode, m.top.errorMsg, " ErrorStr: " m.top.errorStr
-        print m.top.errorInfo
 
         if not m.playReported and m.top.content.live
             if m.playbackRetries < REPLAY_RETRIES
@@ -1627,7 +1580,8 @@ sub ReportPlayback(state = "update" as string)
         "ItemId": m.top.id,
         "PlaySessionId": m.top.PlaySessionId,
         "PositionTicks": int(m.top.position) * 10000000&, 'Ensure a LongInteger is used
-        "IsPaused": isStringEqual(m.top.state, MediaPlaybackState.PAUSED)
+        "IsPaused": isStringEqual(m.top.state, MediaPlaybackState.PAUSED),
+        "UserId": m.global.session.user.id
     }
     if isValid(m.top.content) and isValid(m.top.content.live) and m.top.content.live
         params.append({
@@ -1650,7 +1604,7 @@ end sub
 
 '
 ' Check the the buffering has not hung
-sub bufferCheck(msg)
+sub bufferCheck()
 
     if m.top.state <> "buffering"
         ' If video is not buffering, stop timer

@@ -29,15 +29,19 @@ sub setupNodes()
     m.librarySettings.observeFieldScoped("selected", "onLibrarySettingsSelected")
     m.librarySettings.highlightBackground = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
 
-    m.toggleDropdownOptionsAnimation = m.top.findNode("toggleDropdownOptionsAnimation")
-    m.dropdownOptionsMove = m.top.findNode("dropdownOptionsMove")
-    m.chipsRowMove = m.top.findNode("chipsRowMove")
-    m.itemGridMove = m.top.findNode("itemGridMove")
-    m.genreListMove = m.top.findNode("genreListMove")
-    m.dropdownOptionsFade = m.top.findNode("dropdownOptionsFade")
+    ' Dropdown options and controls removed
+    ' m.toggleDropdownOptionsAnimation = m.top.findNode("toggleDropdownOptionsAnimation")
+    ' m.dropdownOptionsMove = m.top.findNode("dropdownOptionsMove")
+    ' m.itemGridMove = m.top.findNode("itemGridMove")
+    ' m.genreListMove = m.top.findNode("genreListMove")
+    ' m.dropdownOptionsFade = m.top.findNode("dropdownOptionsFade")
+
     m.options = m.top.findNode("options")
     m.itemGrid = m.top.findNode("itemGrid")
-    m.backdropImage = m.top.findNode("backdropImage")
+    ' m.voiceBox = m.top.findNode("voiceBox")
+    ' m.voiceBoxBackground = m.top.findNode("voiceBoxBackground")
+    m.backdrop = m.top.findNode("backdrop")
+    m.newBackdrop = m.top.findNode("backdropTransition")
     m.emptyText = m.top.findNode("emptyText")
     m.selectedItemName = m.top.findNode("selectedItemName")
     m.selectedItemOverview = m.top.findNode("selectedItemOverview")
@@ -53,27 +57,14 @@ sub setupNodes()
     m.genreList = m.top.findNode("genrelist")
     m.infoGroup = m.top.findNode("infoGroup")
     m.star = m.top.findNode("star")
-    m.chipsRow = m.top.findNode("chipsRow")
-    m.dropdownOptionGroup = m.top.findNode("dropdownOptionGroup")
-    m.dropdownOptionGroup.observeFieldScoped("showOptions", "onShowOptionsChange")
-    m.dropdownOptionGroup.observeFieldScoped("exit", "onExit")
-    m.dropdownOptionGroup.observeFieldScoped("searchTerm", "onDropdownOptionGroupSearchTermChanged")
-end sub
+    ' m.dropdownOptions = m.top.findNode("dropdownOptions")
+    m.submitButton = m.top.findNode("submitButton")
 
-sub onShowOptionsChange()
-    m.options.visible = true
-    m.options.findNode("filterMenu").setFocus(true)
-    group = m.global.sceneManager.callFunc("getActiveScene")
-    group.lastFocus = m.options
-end sub
-
-sub onExit()
-    m.global.sceneManager.unobserveFieldScoped("returnData")
-
-    dropdownExitDirection = m.dropdownOptionGroup.exit
-
-    if dropdownExitDirection = ExitDirection.LEFT
-        alphaDisplayed = m.alpha.callFunc("getDisplay")
+    ' Dropdown button controls removed
+    ' m.sortButton = m.top.findNode("sortButton")
+    ' m.sortOrderButton = m.top.findNode("sortOrderButton")
+    ' m.filterButton = m.top.findNode("filterButton")
+    ' m.viewButton = m.top.findNode("viewButton")
 
         if alphaDisplayed
             m.top.alphaActive = true
@@ -155,6 +146,15 @@ sub init()
     m.genreList.observeFieldScoped("itemSelected", "onGenreItemSelected")
     m.genreList.content = m.genreData
 
+    'Voice filter setup - commented out since voiceBox was removed
+    ' m.voiceBox.observeField("text", "onvoiceFilter")
+
+    'backdrop
+    m.newBackdrop.observeField("loadStatus", "newBGLoaded")
+
+    'Background Image Queued for loading
+    m.queuedBGUri = string.EMPTY
+
     'Item sort
     m.sortField = "SortName"
     m.sortAscending = true
@@ -175,6 +175,55 @@ sub init()
     'set inital counts for overhang before content is loaded.
     m.loadItemsTask.observeField("content", "ItemDataLoaded")
     m.loadItemsTask.totalRecordCount = 0
+
+    'Voice box configuration - commented out since voiceBox was removed
+    ' if not m.global.device.hasVoiceRemote
+    '     m.voiceBox.backgroundUri = "pkg:/images/transparent.png"
+    '     m.voiceBox.translation = "[15, 0]"
+    '     m.voiceBox.width = m.voiceBox.width - 15
+    ' else
+    '     searchPoster = m.voiceBox.getChild(0)
+    '     if isChainValid(searchPoster, "bitmap")
+    '         searchPoster.bitmap = ""
+    '         searchPoster.blendColor = ColorPalette.WHITE
+    '     end if
+
+    '     searchText = m.voiceBox.getChild(1)
+    '     if isChainValid(searchText, "height")
+    '         searchText.vertAlign = "bottom"
+    '         searchText.height = 37
+    '     end if
+
+    '     m.micIcon = m.voiceBox.getChild(6)
+    '     if isValid(m.micIcon)
+    '         m.micIcon.observeFieldScoped("blendColor", "onMicIconBlendColorChange")
+    '     end if
+    ' end if
+end sub
+
+' VoiceTextEditBox.voiceEnabled doesn't have alwaysNotify enabled
+' To trigger a change event, we must change the value to something else, then back to the value we want
+sub onVoiceEnabledChange()
+    'Commented out - voiceBox was removed
+    ' m.voiceBox.voiceEnabled = m.searchButtonDisabled
+    ' m.voiceBox.voiceEnabled = not m.searchButtonDisabled
+end sub
+
+sub onMicIconBlendColorChange()
+    ' DARKGREY: 269488383
+    ' WHITE: -1
+    ' LIGHTGREY: -1431655681
+    ' HIGHLIGHT: -9934849
+
+    if m.voiceBoxBackground.blendColor = -9934849
+        if m.micIcon.blendColor <> -1
+            m.micIcon.blendColor = ColorPalette.WHITE
+        end if
+    else
+        if m.micIcon.blendColor <> 269488383
+            m.micIcon.blendColor = ColorPalette.DARKGREY
+        end if
+    end if
 end sub
 
 sub OnScreenHidden()
@@ -271,6 +320,14 @@ sub redrawItems()
     m.genreList.jumpToRowItem = m.genreList.rowItemSelected
 end sub
 
+'Get the ID to use for this item (libraryId for library folders, id for BoxSets/collections)
+function getParentItemId() as string
+    if isValid(m.top.parentItem.libraryId) and m.top.parentItem.libraryId <> ""
+        return m.top.parentItem.libraryId
+    end if
+    return m.top.parentItem.id
+end function
+
 '
 'Load initial set of Data
 sub loadInitialItems()
@@ -283,15 +340,15 @@ sub loadInitialItems()
         m.backdropImage@.changeImage(m.top.parentItem.backdropUrl ?? string.EMPTY)
     end if
 
-    if m.dropdownOptionGroup.opacity < 1
-        toggleDropdownOptions(true)
-    end if
+    ' Dropdown options removed - skip toggle
 
-    m.sortField = m.global.session.user.settings["display." + m.top.parentItem.Id + ".sortField"]
-    m.filter = m.global.session.user.settings["display." + m.top.parentItem.Id + ".filter"]
-    m.filterOptions = m.global.session.user.settings["display." + m.top.parentItem.Id + ".filterOptions"]
-    m.view = m.global.session.user.settings["display." + m.top.parentItem.Id + ".landing"]
-    m.sortAscending = m.global.session.user.settings["display." + m.top.parentItem.Id + ".sortAscending"]
+    itemId = getParentItemId()
+
+    m.sortField = m.global.session.user.settings["display." + itemId + ".sortField"]
+    m.filter = m.global.session.user.settings["display." + itemId + ".filter"]
+    m.filterOptions = m.global.session.user.settings["display." + itemId + ".filterOptions"]
+    m.view = m.global.session.user.settings["display." + itemId + ".landing"]
+    m.sortAscending = m.global.session.user.settings["display." + itemId + ".sortAscending"]
 
     ' If user has not set a preferred view for this folder, check if they've set a default view
     if not isValid(m.view)
@@ -341,27 +398,27 @@ sub loadInitialItems()
     m.loadItemsTask.studioIds = string.EMPTY
     m.loadItemsTask.view = string.EMPTY
     m.loadItemsTask.passToItem = {
-        libraryID: m.top.parentItem.id
+        libraryID: getParentItemId()
     }
 
     if isStringEqual(m.view, "Genres")
         m.loadItemsTask.view = "Genres"
-        m.loadItemsTask.genreIds = m.top.parentItem.id
+        m.loadItemsTask.genreIds = getParentItemId()
         m.loadItemsTask.itemId = m.top.parentItem.parentFolder
-        m.loadItemsTask.studioIds = m.top.parentItem.Id
+        m.loadItemsTask.studioIds = getParentItemId()
         if isStringEqual(m.top.mediaType, ItemType.MUSICVIDEO)
             m.loadItemsTask.recursive = true
         end if
     else if isStringEqual(m.view, "presentation")
-        m.loadItemsTask.itemId = m.top.parentItem.Id
+        m.loadItemsTask.itemId = getParentItemId()
         m.loadItemsTask.studioIds = string.EMPTY
         m.loadItemsTask.genreIds = string.EMPTY
     else if isStringEqual(m.view, "grid")
-        m.loadItemsTask.itemId = m.top.parentItem.Id
+        m.loadItemsTask.itemId = getParentItemId()
         m.loadItemsTask.studioIds = string.EMPTY
         m.loadItemsTask.genreIds = string.EMPTY
     else if isStringEqual(m.view, "Episodes")
-        m.loadItemsTask.itemId = m.top.parentItem.Id
+        m.loadItemsTask.itemId = getParentItemId()
         m.loadItemsTask.studioIds = string.EMPTY
         m.loadItemsTask.genreIds = string.EMPTY
         if isStringEqual(m.loadItemsTask.sortField, "SortName")
@@ -420,17 +477,8 @@ sub loadInitialItems()
         end if
     end if
 
-    m.dropdownOptionGroup.translation = "[100, 540]"
-    m.chipsRow.translation = "[100, 680]"
-
-    if m.dropdownOptionGroup.opacity < 1
-        m.itemGrid.translation = "[100, 520]"
-    else
-        m.itemGrid.translation = "[100, 740]"
-    end if
-    m.dropdownOptionsMove.keyValue = "[[100, 540], [100, 480]]"
-    m.chipsRowMove.keyValue = "[[100, 680], [100, 540]]"
-    m.itemGridMove.keyValue = "[[100, 740], [100, 600]]"
+    'Default presentation view - grid below description
+    m.itemGrid.translation = "[100, 520]"
 
     m.emptyText.translation = "[0, 750]"
     m.itemGrid.itemSpacing = "[20, 20]"
@@ -448,18 +496,10 @@ sub loadInitialItems()
         m.backdropImage@.clearImage()
         m.itemLogo.visible = false
 
-        if m.dropdownOptionGroup.opacity < 1
-            m.itemGrid.translation = "[100, 60]"
-        else
-            m.itemGrid.translation = "[100, 260]"
-        end if
+        'Dropdown controls removed - set grid position directly
+        m.itemGrid.translation = "[100, 60]"
 
-        m.dropdownOptionsMove.keyValue = "[[100, 60], [100, 0]]"
-        m.chipsRowMove.keyValue = "[[100, 200], [100, 60]]"
-        m.itemGridMove.keyValue = "[[100, 260], [100, 120]]"
         m.emptyText.translation = "[0, 540]"
-        m.dropdownOptionGroup.translation = "[100, 60]"
-        m.chipsRow.translation = "[100, 200]"
         m.itemGrid.numRows = "3"
         m.selectedItemOverview.visible = false
         m.selectedItemName.visible = false
@@ -470,18 +510,10 @@ sub loadInitialItems()
         m.backdropImage@.clearImage()
         m.itemLogo.visible = false
 
-        if m.dropdownOptionGroup.opacity < 1
-            m.itemGrid.translation = "[100, 60]"
-        else
-            m.itemGrid.translation = "[100, 260]"
-        end if
+        'Dropdown controls removed - set grid position directly
+        m.itemGrid.translation = "[100, 60]"
 
-        m.dropdownOptionsMove.keyValue = "[[100, 60], [100, 0]]"
-        m.chipsRowMove.keyValue = "[[100, 200], [100, 60]]"
-        m.itemGridMove.keyValue = "[[100, 260], [100, 120]]"
         m.emptyText.translation = "[0, 540]"
-        m.dropdownOptionGroup.translation = "[100, 60]"
-        m.chipsRow.translation = "[100, 200]"
         m.itemGrid.numRows = "3"
         m.selectedItemOverview.visible = false
         m.selectedItemName.visible = false
@@ -492,18 +524,10 @@ sub loadInitialItems()
         m.backdropImage@.clearImage()
         m.itemLogo.visible = false
 
-        if m.dropdownOptionGroup.opacity < 1
-            m.itemGrid.translation = "[100, 60]"
-        else
-            m.itemGrid.translation = "[100, 260]"
-        end if
+        'Dropdown controls removed - set grid position directly
+        m.itemGrid.translation = "[100, 60]"
 
-        m.dropdownOptionsMove.keyValue = "[[100, 60], [100, 0]]"
-        m.chipsRowMove.keyValue = "[[100, 200], [100, 60]]"
-        m.itemGridMove.keyValue = "[[100, 260], [100, 120]]"
         m.emptyText.translation = "[0, 540]"
-        m.dropdownOptionGroup.translation = "[100, 60]"
-        m.chipsRow.translation = "[100, 200]"
         m.itemGrid.numRows = "3"
         m.selectedItemOverview.visible = false
         m.selectedItemName.visible = false
@@ -852,7 +876,7 @@ sub setSelectedOptions(options)
     ' Set selected view option
     for each o in options.views
         if o.Name = m.view
-            m.dropdownOptionGroup@.setText("viewButton", tr(o.LookupCI("title")))
+            if isValid(m.viewButton) then m.viewButton.text = tr(o.LookupCI("title"))
             o.Selected = true
         end if
     end for
@@ -860,7 +884,7 @@ sub setSelectedOptions(options)
     ' Set selected sort option
     for each o in options.sort
         if o.Name = m.sortField
-            m.dropdownOptionGroup@.setText("sortButton", tr(o.LookupCI("title")))
+            if isValid(m.sortButton) then if isValid(m.sortButton) then m.sortButton.text = tr(o.LookupCI("title"))
             o.Selected = true
         end if
     end for
@@ -871,7 +895,7 @@ sub setSelectedOptions(options)
 
         if o.Name = m.filter
             o.Selected = true
-            m.dropdownOptionGroup@.setText("filterButton", tr(o.LookupCI("title")))
+            if isValid(m.filterButton) then m.filterButton.text = tr(o.LookupCI("title"))
             m.options.filter = o.Name
 
             displayChip = false
@@ -926,8 +950,7 @@ sub setSelectedOptions(options)
     end for
 
     m.options.options = options
-    m.dropdownOptionGroup@.setOptionData(options)
-    m.dropdownOptionGroup@.setText("sortOrderButton", m.sortAscending ? tr("Ascending") : tr("Descending"))
+    if isValid(m.sortOrderButton) then m.sortOrderButton.text = m.sortAscending ? tr("Ascending") : tr("Descending")
 end sub
 
 '
@@ -1037,10 +1060,10 @@ sub ItemDataLoaded(msg)
             m.backdropImage@.clearImage()
             m.emptyText.text = tr("No items found. Try adjusting your selected filters.")
             m.emptyText.visible = true
-            m.global.sceneManager.observeFieldScoped("returnData", "onReturnData")
-            m.dropdownOptionGroup.canExitDown = false
-            m.dropdownOptionGroup@.setFocus("voiceBox", true)
-            m.dropdownOptionGroup@.setSearchBackground(SearchButtonState.ACTIVE)
+            if isValid(m.voiceBox) then m.voiceBox.setfocus(true)
+            setSearchBackground(SearchButtonState.ACTIVE)
+            group = m.global.sceneManager.callFunc("getActiveScene")
+            if isValid(m.voiceBox) then group.lastFocus = m.voiceBox
         end if
 
         return
@@ -1076,7 +1099,33 @@ sub ItemDataLoaded(msg)
 
     'If there are no items to display, show message
     if m.loadedItems = 0
-        showNoResultsText()
+        m.selectedItemOverview.visible = false
+        m.infoGroup.visible = false
+
+        m.itemLogo.visible = false
+        m.itemLogo.uri = string.EMPTY
+
+        m.selectedItemName.visible = false
+
+        SetName(string.EMPTY)
+        SetOverview(string.EMPTY)
+        SetOfficialRating(string.EMPTY)
+        SetProductionYear(string.EMPTY)
+        setFieldText("runtime", string.EMPTY)
+        setFieldText("communityRating", string.EMPTY)
+        setFieldText("criticRatingLabel", string.EMPTY)
+        m.criticRatingIcon.uri = string.EMPTY
+        m.star.uri = string.EMPTY
+
+        m.newBackdrop.opacity = 0
+        m.backdrop.opacity = 0
+
+        m.emptyText.text = tr("No items found. Try adjusting your selected filters.")
+        m.emptyText.visible = true
+        if isValid(m.voiceBox) then m.voiceBox.setfocus(true)
+        setSearchBackground(SearchButtonState.ACTIVE)
+        group = m.global.sceneManager.callFunc("getActiveScene")
+        if isValid(m.voiceBox) then group.lastFocus = m.voiceBox
     end if
 
     stopLoadingSpinner()
@@ -1153,16 +1202,16 @@ end sub
 
 
 
-sub toggleDropdownOptions(runInReverse = false as boolean)
-    m.dropdownOptionsFade.reverse = runInReverse
-    m.dropdownOptionsMove.reverse = runInReverse
-    m.chipsRowMove.reverse = runInReverse
-    m.itemGridMove.reverse = runInReverse
-    m.genreListMove.reverse = runInReverse
+sub toggleDropdownOptions(_runInReverse = false as boolean)
+    'Dropdown animations removed
+    ' m.dropdownOptionsFade.reverse = _runInReverse
+    ' m.dropdownOptionsMove.reverse = _runInReverse
+    ' m.itemGridMove.reverse = _runInReverse
+    ' m.genreListMove.reverse = _runInReverse
 
-    if not isStringEqual(m.toggleDropdownOptionsAnimation.state, AnimationState.RUNNING)
-        m.toggleDropdownOptionsAnimation.control = AnimationControl.START
-    end if
+    ' if not isStringEqual(m.toggleDropdownOptionsAnimation.state, AnimationState.RUNNING)
+    '     m.toggleDropdownOptionsAnimation.control = AnimationControl.START
+    ' end if
 end sub
 
 '
@@ -1170,17 +1219,18 @@ end sub
 sub onItemFocused()
     focusedRow = m.itemGrid.currFocusRow
 
-    if m.itemGrid.isinFocusChain() or m.dropdownOptionGroup.isinFocusChain()
-        if focusedRow = 0
-            if m.dropdownOptionGroup.opacity < 1
-                toggleDropdownOptions(true)
-            end if
-        else if focusedRow > 0
-            if m.dropdownOptionGroup.opacity > 0
-                toggleDropdownOptions(false)
-            end if
-        end if
-    end if
+    'Dropdown toggle logic removed
+    ' if m.itemGrid.isinFocusChain() or m.dropdownOptions.isinFocusChain()
+    '     if focusedRow = 0
+    '         if m.dropdownOptions.opacity < 1
+    '             toggleDropdownOptions(true)
+    '         end if
+    '     else if focusedRow > 0
+    '         if m.dropdownOptions.opacity > 0
+    '             toggleDropdownOptions(false)
+    '         end if
+    '     end if
+    ' end if
 
     itemInt = m.itemGrid.itemFocused
 
@@ -1269,14 +1319,26 @@ sub onItemFocused()
     m.loadLogoTask.observeField("content", "LogoImageLoaded")
     m.loadLogoTask.control = "RUN"
 
-    ' Set Background to item backdrop
-    if isStringEqual(m.view, "presentation")
-        if isValidAndNotEmpty(focusedItem.backdropUrl)
-            m.backdropImage@.changeImage(focusedItem.backdropUrl)
-        else if isValidAndNotEmpty(focusedItem.posterUrl)
-            ' We have a poster image URL, request a new one at a higher resolution
-            m.backdropImage@.changeImage(api.items.GetImageURL(focusedItem.id, "primary", 0, { "maxHeight": 700, "maxWidth": 1100, "quality": "90" }))
-        end if
+    ' Set Background to item backdrop with blur effect (like FavoritesScreen)
+    backdropUrl = ""
+
+    ' Try to get backdrop with blur from json
+    if isValid(itemData.BackdropImageTags) and itemData.BackdropImageTags.Count() > 0
+        imgParams = { "maxHeight": 1080, "maxWidth": 1920, "quality": 90, "blur": 10, "Tag": itemData.BackdropImageTags[0] }
+        backdropUrl = ImageURL(itemData.id, "Backdrop", imgParams)
+    else if isValid(itemData.ParentBackdropImageTags) and itemData.ParentBackdropImageTags.Count() > 0
+        imgParams = { "maxHeight": 1080, "maxWidth": 1920, "quality": 90, "blur": 10, "Tag": itemData.ParentBackdropImageTags[0] }
+        backdropUrl = ImageURL(itemData.ParentBackdropItemId, "Backdrop", imgParams)
+    else if isValidAndNotEmpty(focusedItem.backdropUrl)
+        ' Fallback to existing backdrop URL
+        backdropUrl = focusedItem.backdropUrl
+    else if isValidAndNotEmpty(focusedItem.posterUrl)
+        ' Fallback to poster image with blur
+        backdropUrl = ImageURL(itemData.id, "Primary", { "maxHeight": 1080, "maxWidth": 1920, "quality": 90, "blur": 10 })
+    end if
+
+    if isValidAndNotEmpty(backdropUrl)
+        SetBackground(backdropUrl)
     end if
 end sub
 
@@ -1380,9 +1442,9 @@ sub processDropdownState(searchTerm as string)
 end sub
 
 sub setDropdownDisabledState(disabledState = false as boolean)
-    m.dropdownOptionGroup@.setDisabled("sortButton", disabledState)
-    m.dropdownOptionGroup@.setDisabled("sortOrderButton", disabledState)
-    m.dropdownOptionGroup@.setDisabled("filterButton", disabledState)
+    if isValid(m.sortButton) then m.sortButton.disabled = disabledState
+    if isValid(m.sortOrderButton) then m.sortOrderButton.disabled = disabledState
+    if isValid(m.filterButton) then m.filterButton.disabled = disabledState
 end sub
 
 sub resetDropdownsToDefaultState()
@@ -1518,6 +1580,55 @@ sub alphaSelectedChanged()
     loadInitialItems()
 end sub
 
+sub unfocusAllButtons()
+    setSearchBackground(SearchButtonState.INACTIVE)
+    if isValid(m.sortButton) then if isValid(m.sortButton) then m.sortButton.focus = false
+    if isValid(m.sortOrderButton) then m.sortOrderButton.focus = false
+    if isValid(m.filterButton) then m.filterButton.focus = false
+    if isValid(m.viewButton) then if isValid(m.viewButton) then m.viewButton.focus = false
+end sub
+
+sub onvoiceFilter()
+    if not isValidAndNotEmpty(m.voiceBox.text) then return
+
+    unfocusAllButtons()
+
+    if isStringEqual(m.voiceBox.text.trim(), "reset search") then m.voiceBox.text = string.EMPTY
+    if isStringEqual(m.voiceBox.text.trim(), "clear search") then m.voiceBox.text = string.EMPTY
+
+    m.voiceBox.hintText = m.voiceBox.text
+
+    ' If user searched for a letter, selected it from the alpha menu
+    if m.voiceBox.text.len() = 1
+        alphaMenu = m.top.findNode("alphaMenu")
+        intConversion = m.voiceBox.text.ToInt() ' non numeric input returns as 0
+
+        if m.voiceBox.text = "0" or (isValid(intConversion) and intConversion <> 0)
+            alphaMenu.jumpToItem = 0
+        else
+            ' loop through each option until we find a match
+            for i = 1 to alphaMenu.numRows - 1
+                alphaMenuOption = alphaMenu.content.getChild(i)
+                if isStringEqual(alphaMenuOption.TITLE, m.voiceBox.text)
+                    alphaMenu.jumpToItem = i
+                    exit for
+                end if
+            end for
+        end if
+
+        m.top.alphaSelected = m.voiceBox.text
+        return
+    end if
+
+    if m.searchButtonDisabled
+        m.itemGrid.setFocus(m.itemGrid.opacity = 1)
+        m.genreList.setFocus(m.genreList.opacity = 1)
+        return
+    end if
+
+    m.top.searchTerm = m.voiceBox.text.trim()
+end sub
+
 '
 'Check if options updated and any reloading required
 sub onOptionsVisibleChange()
@@ -1528,7 +1639,10 @@ sub onOptionsVisibleChange()
     ' Nothing changed
     if isStringEqual(m.options.filter, m.filter)
         if AssocArrayEqual(m.options.filterOptions, m.filterOptions)
-            m.dropdownOptionGroup@.setFocus("filterButton", true)
+            if isValid(m.filterButton)
+                m.filterButton.focus = true
+                m.filterButton.setfocus(true)
+            end if
             return
         end if
     end if
@@ -1559,7 +1673,7 @@ sub onOptionsVisibleChange()
         loadInitialItems()
     end if
 
-    m.dropdownOptionGroup@.setFocus("filterButton", false)
+    if isValid(m.filterButton) then m.filterButton.focus = false
 
     m.itemGrid.setFocus(m.itemGrid.opacity = 1)
     m.genreList.setFocus(m.genreList.opacity = 1)
@@ -1572,14 +1686,13 @@ sub onSortChange(sortChoice)
     if not isChainValid(sortChoice, "name") then return
     if isStringEqual(sortChoice.LookupCI("name"), m.sortField) then return
 
-    m.dropdownOptionGroup@.setFocus("sortButton", false)
-
+    if isValid(m.sortButton) then m.sortButton.focus = false
     m.itemGrid.setFocus(m.itemGrid.opacity = 1)
     m.genreList.setFocus(m.genreList.opacity = 1)
 
     m.sortField = sortChoice.LookupCI("name")
-    m.dropdownOptionGroup@.setText("sortButton", tr(sortChoice.LookupCI("title")))
-    m.dropdownOptionGroup@.setSortAscending(true)
+    if isValid(m.sortButton) then m.sortButton.text = tr(sortChoice.LookupCI("title"))
+
     m.sortAscending = true
 
     set_user_setting("display." + m.top.parentItem.Id + ".sortField", m.sortField)
@@ -1595,7 +1708,7 @@ sub onViewChange(viewChoice)
     if not isChainValid(viewChoice, "name") then return
     if isStringEqual(viewChoice.LookupCI("name"), m.view) then return
 
-    m.dropdownOptionGroup@.setFocus("viewButton", false)
+    if isValid(m.viewButton) then m.viewButton.focus = false
 
     ' If we're moving to or from the episodes view, we must recreate the item grid to change the itemComponentName property
     if inArray([m.view, viewChoice.LookupCI("name")], "Episodes")
@@ -1668,20 +1781,20 @@ sub createItemGrid(itemGridID = "itemGrid" as string)
 
     m.top.insertChild(m.itemGrid, 1)
 
-    m.itemGridMove.fieldToInterp = `${m.itemGrid.id}.translation`
+    'Animation removed
+    ' m.itemGridMove.fieldToInterp = `${m.itemGrid.id}.translation`
 end sub
 
 sub onSortOrderChange(sortOrderChoice)
     if not isChainValid(sortOrderChoice, "name") then return
     if m.sortAscending = isStringEqual(sortOrderChoice.LookupCI("name"), "ascending") then return
 
-    m.dropdownOptionGroup@.setFocus("sortOrderButton", false)
+    if isValid(m.sortOrderButton) then m.sortOrderButton.focus = false
     m.itemGrid.setFocus(m.itemGrid.opacity = 1)
     m.genreList.setFocus(m.genreList.opacity = 1)
 
     m.sortAscending = isStringEqual(sortOrderChoice.LookupCI("name"), "Ascending")
-    m.dropdownOptionGroup@.setSortAscending(m.sortAscending)
-    m.dropdownOptionGroup@.setText("sortOrderButton", tr(sortOrderChoice.LookupCI("title")))
+    if isValid(m.sortOrderButton) then m.sortOrderButton.text = tr(sortOrderChoice.LookupCI("title"))
 
     set_user_setting("display." + m.top.parentItem.Id + ".sortAscending", m.sortAscending.toStr())
 
@@ -1763,6 +1876,202 @@ function onKeyEvent(key as string, press as boolean) as boolean
         end if
     end if
 
+    if isStringEqual(key, KeyCode.OK)
+        if isValid(m.voiceBox) and m.voiceBox.isinFocusChain()
+            if m.searchButtonDisabled
+                m.global.sceneManager.callFunc("standardDialog", "Search Unavailable", { data: [`<p>${m.disabledReason}</p>`] })
+                return false
+            end if
+
+            buttonData = [
+                tr("Search")
+            ]
+
+            m.global.sceneManager.callFunc("keyboardDialog", "searchLibrary", tr("Search this library"), [""], buttonData, m.top.searchTerm, m.top.parentItem.Id)
+            return true
+        end if
+
+        if isValid(m.sortButton) and m.sortButton.isinFocusChain()
+            if m.sortButton.disabled then return false
+
+            sortData = {
+                data: m.options.options.sort
+            }
+
+            m.global.sceneManager.callFunc("radioDialog", tr("Sort By"), sortData)
+            m.global.sceneManager.observeFieldScoped("returnData", "onSortChange")
+            return true
+        end if
+
+        if isValid(m.sortOrderButton) and m.sortOrderButton.isinFocusChain()
+            if m.sortOrderButton.disabled then return false
+
+            sortOrderData = {
+                data: [
+                    { Title: tr("Ascending"), Name: "ascending", Track: { description: tr("Ascending") } },
+                    { Title: tr("Descending"), Name: "descending", Track: { description: tr("Descending") } },
+                ]
+            }
+
+            if m.sortAscending
+                sortOrderData.data[0].selected = true
+            else
+                sortOrderData.data[1].selected = true
+            end if
+
+            m.global.sceneManager.callFunc("radioDialog", tr("Sort Order"), sortOrderData)
+            m.global.sceneManager.observeFieldScoped("returnData", "onSortOrderChange")
+            return true
+        end if
+
+        if isValid(m.filterButton) and m.filterButton.isinFocusChain()
+            if m.filterButton.disabled then return false
+
+            m.options.visible = true
+            m.options.findNode("filterMenu").setFocus(true)
+            group = m.global.sceneManager.callFunc("getActiveScene")
+            group.lastFocus = m.options
+            return true
+        end if
+
+        if isValid(m.viewButton) and m.viewButton.isinFocusChain()
+            viewData = {
+                data: m.options.options.views
+            }
+
+            m.global.sceneManager.callFunc("radioDialog", tr("TAB_VIEW"), viewData)
+            m.global.sceneManager.observeFieldScoped("returnData", "onViewChange")
+            return true
+        end if
+    end if
+
+    if isValid(m.dropdownOptions) and m.dropdownOptions.isinFocusChain()
+        if isStringEqual(key, KeyCode.LEFT)
+            alphaDisplayed = m.alpha.callFunc("getDisplay")
+
+            if isValid(m.voiceBox) and m.voiceBox.isinFocusChain()
+                setSearchBackground(SearchButtonState.INACTIVE)
+                if isValid(m.sortButton) then m.sortButton.focus = false
+                if isValid(m.sortOrderButton) then m.sortOrderButton.focus = false
+                if isValid(m.viewButton) then m.viewButton.focus = false
+                if isValid(m.filterButton) then m.filterButton.focus = false
+
+                if alphaDisplayed
+                    m.top.alphaActive = true
+                    m.alphaMenu.setFocus(true)
+                    group = m.global.sceneManager.callFunc("getActiveScene")
+                    group.lastFocus = m.alphaMenu
+                else
+                    m.librarySettings.setFocus(true)
+                    m.librarySettings.highlighted = true
+                    group = m.global.sceneManager.callFunc("getActiveScene")
+                    group.lastFocus = m.librarySettings
+                end if
+                return true
+            end if
+
+            if isValid(m.sortButton) and m.sortButton.isinFocusChain()
+                if isValid(m.voiceBox) then m.voiceBox.setFocus(true)
+                setSearchBackground(SearchButtonState.ACTIVE)
+                if isValid(m.sortButton) then m.sortButton.focus = false
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                group.lastFocus = m.voiceBox
+                return true
+            end if
+
+            if isValid(m.sortOrderButton) and m.sortOrderButton.isinFocusChain()
+                if isValid(m.sortButton) then m.sortButton.focus = true
+                if isValid(m.sortButton) then m.sortButton.setFocus(true)
+                if isValid(m.sortOrderButton) then m.sortOrderButton.focus = false
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                group.lastFocus = m.sortButton
+                return true
+            end if
+
+            if isValid(m.filterButton) and m.filterButton.isinFocusChain()
+                if isValid(m.filterButton) then m.filterButton.focus = false
+                if isValid(m.sortOrderButton) then m.sortOrderButton.focus = true
+                if isValid(m.sortOrderButton) then m.sortOrderButton.setFocus(true)
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                group.lastFocus = m.sortOrderButton
+                return true
+            end if
+
+            if isValid(m.viewButton) and m.viewButton.isinFocusChain()
+                if isValid(m.viewButton) then m.viewButton.focus = false
+                if isValid(m.filterButton) then m.filterButton.focus = true
+                if isValid(m.filterButton) then m.filterButton.setFocus(true)
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                group.lastFocus = m.filterButton
+                return true
+            end if
+        end if
+
+        if isStringEqual(key, KeyCode.Right)
+            if isValid(m.voiceBox) and m.voiceBox.isinFocusChain()
+                setSearchBackground(SearchButtonState.INACTIVE)
+                if isValid(m.sortButton) then m.sortButton.focus = true
+                if isValid(m.sortButton) then m.sortButton.setFocus(true)
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                group.lastFocus = m.sortButton
+                return true
+            end if
+
+            if isValid(m.sortButton) and m.sortButton.isinFocusChain()
+                if isValid(m.sortButton) then m.sortButton.focus = false
+                if isValid(m.sortOrderButton) then m.sortOrderButton.focus = true
+                if isValid(m.sortOrderButton) then m.sortOrderButton.setFocus(true)
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                group.lastFocus = m.sortOrderButton
+                return true
+            end if
+
+            if isValid(m.sortOrderButton) and m.sortOrderButton.isinFocusChain()
+                if isValid(m.sortOrderButton) then m.sortOrderButton.focus = false
+                if isValid(m.filterButton) then m.filterButton.focus = true
+                if isValid(m.filterButton) then m.filterButton.setFocus(true)
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                group.lastFocus = m.filterButton
+                return true
+            end if
+
+            if isValid(m.filterButton) and m.filterButton.isinFocusChain()
+                if isValid(m.filterButton) then m.filterButton.focus = false
+                if isValid(m.viewButton) then m.viewButton.focus = true
+                if isValid(m.viewButton) then m.viewButton.setFocus(true)
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                group.lastFocus = m.viewButton
+                return true
+            end if
+        end if
+
+        if isStringEqual(key, KeyCode.DOWN)
+            if m.loadedItems = 0 then return false
+
+            setSearchBackground(SearchButtonState.INACTIVE)
+            if isValid(m.sortButton) then m.sortButton.focus = false
+            if isValid(m.sortOrderButton) then m.sortOrderButton.focus = false
+            if isValid(m.viewButton) then m.viewButton.focus = false
+            if isValid(m.filterButton) then m.filterButton.focus = false
+
+            m.itemGrid.setFocus(m.itemGrid.opacity = 1)
+            m.genreList.setFocus(m.genreList.opacity = 1)
+
+            group = m.global.sceneManager.callFunc("getActiveScene")
+            group.lastFocus = m.itemGrid
+            return true
+        end if
+    end if
+
+    if isStringEqual(key, KeyCode.LEFT) and isValid(m.voiceBox) and m.voiceBox.isinFocusChain()
+        m.itemGrid.setFocus(m.itemGrid.opacity = 1)
+        m.genreList.setFocus(m.genreList.opacity = 1)
+        if isValid(m.voiceBox) then m.voiceBox.setFocus(false)
+        setSearchBackground(SearchButtonState.INACTIVE)
+        group = m.global.sceneManager.callFunc("getActiveScene")
+        group.lastFocus = m.itemGrid.opacity = 1 ? m.itemGrid : m.genreList
+    end if
+
     if isStringEqual(key, KeyCode.BACK)
         ' If user pressed back whole scrolled down the grid, reset to item 1
         if m.itemGrid.isinFocusChain() or m.genreList.isinFocusChain()
@@ -1834,9 +2143,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
             m.alphaMenu.setFocus(false)
 
             if m.loadedItems = 0
-                m.global.sceneManager.observeFieldScoped("returnData", "onReturnData")
-                m.dropdownOptionGroup@.setFocus("voiceBox", true)
-                m.dropdownOptionGroup@.setSearchBackground(SearchButtonState.ACTIVE)
+                if isValid(m.sortButton) then m.sortButton.focus = true
+                if isValid(m.sortButton) then m.sortButton.setfocus(true)
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                if isValid(m.sortButton) then group.lastFocus = m.sortButton
             else
                 m.itemGrid.setFocus(m.itemGrid.opacity = 1)
                 m.genreList.setFocus(m.genreList.opacity = 1)
@@ -1893,7 +2203,7 @@ sub onMyListLoaded()
         if focusedItem.watched
             dialogData.push(tr("Mark As Unplayed"))
         else
-            dialogData.push(tr("Mark As Played"))
+            dialogData.push(tr("Watched"))
         end if
     end if
 
@@ -1916,6 +2226,45 @@ sub reclaimResources()
 
     m.genreData = CreateObject("roSGNode", "ContentNode")
     m.genreList.content = m.genreData
+end sub
 
-    m.global.sceneManager.unobserveFieldScoped("returnData")
+sub setSearchBackground(state)
+    ' Search box removed - skip background updates
+    if not isValid(m.voiceBox) or not isValid(m.voiceBoxBackground) then return
+
+    if state = SearchButtonState.ACTIVE
+        if m.searchButtonDisabled
+            m.voiceBox.textColor = ColorPalette.MIDGREY
+            m.voiceBox.hintTextColor = ColorPalette.MIDGREY
+            m.voiceBoxBackground.blendColor = ColorPalette.DARKGREY
+            return
+        end if
+
+        m.voiceBox.textColor = ColorPalette.WHITE
+        m.voiceBox.hintTextColor = ColorPalette.WHITE
+        m.voiceBoxBackground.blendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
+        return
+    end if
+
+    if state = SearchButtonState.DISABLED
+        m.voiceBox.textColor = ColorPalette.DARKGREY
+        m.voiceBox.hintTextColor = ColorPalette.DARKGREY
+        m.voiceBoxBackground.blendColor = ColorPalette.MIDGREY
+        return
+    end if
+
+    m.voiceBox.textColor = ColorPalette.MIDGREY
+    m.voiceBox.hintTextColor = ColorPalette.MIDGREY
+    m.voiceBoxBackground.blendColor = ColorPalette.WHITE
+end sub
+
+sub disableSearch(disabledReason as string)
+    ' Search box removed - skip disable
+    if not isValid(m.voiceBox) then return
+
+    m.disabledReason = disabledReason
+    m.searchButtonDisabled = true
+    m.voiceBox.voiceEnabled = false
+    m.voiceBox.hintText = "Search Unavailable"
+    setSearchBackground(SearchButtonState.DISABLED)
 end sub

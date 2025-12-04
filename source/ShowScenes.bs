@@ -131,7 +131,7 @@ function LoginFlow()
                         return true
                     end if
                 else
-                    print "No auth token found in registry for selected user"
+                    ' No auth token found
                 end if
                 'Try to login without password. If the token is valid, we're done
                 userData = get_token(userSelected, "")
@@ -140,7 +140,7 @@ function LoginFlow()
                     LoadUserAbilities()
                     return true
                 else
-                    print "Auth failed. Password required"
+                    ' Auth failed
                 end if
             end if
         else
@@ -177,8 +177,7 @@ function LoginFlow()
                     LoadUserAbilities()
                     return true
                 else
-                    print "Auth failed. Password required"
-                    print "delete token and restart login flow"
+                    ' Auth failed
                     unset_user_setting("token")
                     unset_user_setting("username")
                     goto start_login
@@ -187,7 +186,7 @@ function LoginFlow()
                 session.user.Login(currentUser, true)
             end if
         else
-            print "No auth token found in registry"
+            ' No auth token found in registry
         end if
     end if
 
@@ -600,6 +599,7 @@ function CreateHomeGroup()
 
     group.observeFieldScoped("selectedItem", m.port)
     group.observeField("quickPlayNode", m.port)
+    group.observeField("shuffleSelectedItem", m.port)
 
     sidepanel = group.findNode("options")
     sidepanel.observeField("closeSidePanel", m.port)
@@ -647,17 +647,36 @@ function CreateMovieDetailsGroup(movie as object) as dynamic
         stopLoadingSpinner()
         return invalid
     end if
-    ' start building MovieDetails view
-    group = CreateObject("roSGNode", "MovieDetails")
+
+    ' Use EpisodeDetails for episodes, MovieDetails for movies
+    if LCase(movieMetaData.json.type) = "episode"
+        group = CreateObject("roSGNode", "EpisodeDetails")
+    else
+        group = CreateObject("roSGNode", "MovieDetails")
+    end if
     group.observeField("quickPlayNode", m.port)
-    group.overhangTitle = movie.title
+
+    ' Don't show overhang title for episodes (title is already in the content area)
+    if LCase(movieMetaData.json.type) <> "episode"
+        group.overhangTitle = movie.title
+    end if
+
     group.optionsAvailable = false
     ' Fetch dynamic button data before showing screen
     trailerData = api.items.GetLocalTrailers(movie.id, { userId: m.global.session.user.id })
     partsData = api.videos.GetAdditionalParts(movie.id)
     m.global.sceneManager.callFunc("pushScene", group)
     group.itemContent = movieMetaData
-    group.observeField("refreshMovieDetailsData", m.port)
+
+    ' Observe the appropriate refresh field based on component type
+    if LCase(movieMetaData.json.type) = "episode"
+        group.observeField("refreshEpisodeDetailsData", m.port)
+    else
+        group.observeField("refreshMovieDetailsData", m.port)
+    end if
+
+    ' local trailers
+    trailerData = api.users.GetLocalTrailers(m.global.session.user.id, movie.id)
     group.trailerAvailable = isValidAndNotEmpty(trailerData)
     group.additionalParts = {
         masterID: movie.id,
@@ -1132,8 +1151,7 @@ function CreateSearchPage()
     ' Search + Results Page
     group = CreateObject("roSGNode", "searchResults")
     group.observeField("quickPlayNode", m.port)
-    options = group.findNode("searchRow")
-    options.observeField("itemSelected", m.port)
+    group.observeFieldScoped("selectedItem", m.port)
 
     return group
 end function
@@ -1158,17 +1176,26 @@ function CreatePersonView(personData as object) as dynamic
     person.setFocus(true)
     ' watch for button presses
     person.observeFieldScoped("selectedItem", m.port)
-    person.observeField("buttonSelected", m.port)
     ' finished building Person View
     stopLoadingSpinner()
     return person
+end function
+
+function CreateFavoritesScreen() as object
+    ' Create the Favorites screen
+    group = CreateObject("roSGNode", "FavoritesScreen")
+
+    group.observeFieldScoped("selectedItem", m.port)
+    group.observeField("quickPlayNode", m.port)
+
+    return group
 end function
 
 'Opens dialog asking user if they want to resume video or start playback over only on the home screen
 sub playbackOptionDialog(time as longinteger, meta as object)
 
     resumeData = [
-        tr("Resume playing at ") + ticksToHuman(time) + ".",
+        tr("Resume from ") + ticksToHuman(time) + ".",
         tr("Start over from the beginning.")
     ]
 

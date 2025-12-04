@@ -11,7 +11,6 @@ end sub
 ' Saves the response information
 sub postItems()
     if m.top.apiUrl = ""
-        print "ERROR in PostTask. Invalid API URL provided"
         return
     end if
 
@@ -27,7 +26,6 @@ sub postItems()
         httpResponse = asyncPost(req, m.top.stringData)
         m.top.responseCode = httpResponse
     else
-        print "ERROR processing data for PostTask", m.top.apiUrl
     end if
 end sub
 

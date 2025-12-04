@@ -386,7 +386,7 @@ function isHTTPStream() as boolean
     return true
 end function
 
-sub addVideoContentURL(video, mediaSourceId, audio_stream_idx)
+sub addVideoContentURL(video, mediaSourceId, audio_stream_idx, _fully_external)
     protocol = LCase(m.playbackInfo.MediaSources[0].Protocol)
     if protocol <> "file"
         uri = ParsedUrl(m.playbackInfo.MediaSources[0].Path)
