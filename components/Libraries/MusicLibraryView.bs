@@ -766,6 +766,16 @@ sub SetGenres(artistGenres)
 end sub
 
 '
+'Set Background Image
+sub SetBackground(backgroundUri as string)
+    if backgroundUri = ""
+        m.backdrop.opacity = 0
+    end if
+
+    setBackgroundWithQueue(backgroundUri, m.newBackdrop, m.swapAnimation)
+end sub
+
+'
 'Handle new item being focused
 sub onItemFocused()
     focusedRow = m.itemGrid.currFocusRow
