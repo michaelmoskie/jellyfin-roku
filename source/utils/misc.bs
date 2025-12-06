@@ -839,43 +839,27 @@ function getDefaultAudioTrackIndex(streams as dynamic)
     return -1
 end function
 
-function serverVersionMeetsMinimumRequirements(systemVersion as string, targetVersion as roArray) as boolean
-    version = systemVersion.split(".")
-    if version.Count() < 3
-        for i = version.Count() to 3 step 1
-            version.push("0")
-        end for
-    end if
+' Sets the lastFocus property on the active scene to the provided component
+' This is a common pattern when setting focus to ensure the scene manager
+' knows where to restore focus when returning to this scene
+sub setLastFocus(component as object)
+    group = m.global.sceneManager.callFunc("getActiveScene")
+    group.lastFocus = component
+end sub
 
-    ' Check Major version
-    if targetVersion[0] < version[0].ToInt() then return true
-    if targetVersion[0] > version[0].ToInt() then return false
-
-    ' Check Minor version
-    if targetVersion[1] < version[1].ToInt() then return true
-    if targetVersion[1] > version[1].ToInt() then return false
-
-    ' Check Patch version
-    if targetVersion[2] < version[2].ToInt() then return true
-    if targetVersion[2] > version[2].ToInt() then return false
-
-    ' Server is the exact version needed
-    return true
+' Gets the active scene and sets its lastFocus property to the provided component
+' Returns the active scene group for additional operations if needed
+function getActiveSceneAndSetFocus(component as object) as object
+    group = m.global.sceneManager.callFunc("getActiveScene")
+    group.lastFocus = component
+    return group
 end function
 
-' MaskGroup sizes are not automatically scaled by SceneGraph on HD devices
-' when using an FHD design resolution. Apply HD_SCALE_FACTOR to keep
-' masks aligned correctly. Callers should use asset/maskSize values divisible
-' by 3 (e.g. 66, not 64) to avoid truncation error from Int().
-' isHDDevice is cached on m.global.device at startup (see SaveDeviceToGlobal
-' in globals.bs) to avoid repeated roDeviceInfo lookups as more MaskGroup
-' usages are added.
-const HD_SCALE_FACTOR = 2.0 / 3.0
+' Preserves the focus state of the home rows before navigation
+' This is used when navigating away from the home screen to ensure
+' the user returns to the same position they left from
+sub preserveHomeRowsFocus()
+    group = m.global.sceneManager.callFunc("getActiveScene")
+    group.lastFocus = group.homeRows
+end sub
 
-function scaleMaskSize(size as integer) as integer
-    if chainLookupReturn(m.global.device, "isHDDevice", false)
-        return Int(size * HD_SCALE_FACTOR)
-    end if
-
-    return size
-end function

@@ -249,8 +249,7 @@ sub OnScreenShown()
         m.top.lastFocus.setFocus(true)
     else
         m.top.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.top
+        setLastFocus(m.top)
     end if
 end sub
 
@@ -700,8 +699,7 @@ sub ItemDataLoaded(msg)
     ' keep focus on alpha menu if it's active
     if m.top.alphaActive
         m.alphaMenu.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.alphaMenu
+        setLastFocus(m.alphaMenu)
     else
         m.itemGrid.opacity = "1"
         m.genreList.opacity = "0"
@@ -709,8 +707,7 @@ sub ItemDataLoaded(msg)
         m.alphaMenu.setFocus(false)
         m.itemGrid.setFocus(true)
         m.genreList.setFocus(false)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.itemGrid
+        setLastFocus(m.itemGrid)
     end if
 
     m.data.appendChildren(itemData)
@@ -1096,6 +1093,14 @@ end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
+
+    if key = KeyCode.LEFT and m.voiceBox.isinFocusChain()
+        m.itemGrid.setFocus(m.itemGrid.opacity = 1)
+        m.genreList.setFocus(m.genreList.opacity = 1)
+        m.voiceBox.setFocus(false)
+        setSearchBackground(SearchButtonState.INACTIVE)
+        setLastFocus(m.itemGrid.opacity = 1 ? m.itemGrid : m.genreList)
+    end if
 
     if isStringEqual(key, KeyCode.UP)
         if m.itemGrid.isinFocusChain() or m.genreList.isinFocusChain()

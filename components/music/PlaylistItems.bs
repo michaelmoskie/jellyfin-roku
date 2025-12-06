@@ -3,8 +3,8 @@ import "pkg:/source/enums/ResumePopupAction.bs"
 import "pkg:/source/utils/misc.bs"
 
 sub init()
-    group = m.global.sceneManager.callFunc("getActiveScene")
-    group.lastFocus = m.top
+    m.top.setfocus(true)
+    setLastFocus(m.top)
 end sub
 
 sub getData()
