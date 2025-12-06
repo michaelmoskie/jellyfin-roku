@@ -191,8 +191,8 @@ end sub
 sub ItemDataLoaded(msg)
     itemData = msg.GetData()
 
-    if not isValidAndNotEmpty(itemData)
-        stopLoadingSpinner()
+    if not isValid(itemData)
+        stopLoadingOperation()
         return
     end if
 
@@ -214,7 +214,7 @@ sub ItemDataLoaded(msg)
         m.emptyText.visible = true
     end if
 
-    stopLoadingSpinner()
+    stopLoadingOperation()
 end sub
 
 'Set Background Image

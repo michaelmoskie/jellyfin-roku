@@ -265,8 +265,8 @@ end sub
 sub ItemDataLoaded(msg)
     itemData = msg.GetData()
 
-    if not isValidAndNotEmpty(itemData)
-        stopLoadingSpinner()
+    if not isValid(itemData)
+        stopLoadingOperation()
         return
     end if
 

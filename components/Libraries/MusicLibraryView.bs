@@ -661,10 +661,8 @@ end sub
 sub ItemDataLoaded(msg)
     itemData = msg.GetData()
 
-    m.chipsRow@.setTotalCount(`${m.loadItemsTask.totalRecordCount} items`)
-
-    if not isValidAndNotEmpty(itemData)
-        stopLoadingSpinner()
+    if itemData = invalid
+        stopLoadingOperation()
         return
     end if
 
@@ -692,7 +690,7 @@ sub ItemDataLoaded(msg)
             m.dropdownOptionGroup@.setSearchBackground(SearchButtonState.ACTIVE)
         end if
 
-        stopLoadingSpinner()
+        stopLoadingOperation()
         return
     end if
 
@@ -731,7 +729,7 @@ sub ItemDataLoaded(msg)
         m.dropdownOptionGroup@.setSearchBackground(SearchButtonState.ACTIVE)
     end if
 
-    stopLoadingSpinner()
+    stopLoadingOperation()
 end sub
 
 '

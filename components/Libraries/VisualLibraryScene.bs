@@ -1048,7 +1048,7 @@ sub ItemDataLoaded(msg)
         group = m.global.sceneManager.callFunc("getActiveScene")
         group.lastFocus = m.genreList
 
-        stopLoadingSpinner()
+        stopLoadingOperation()
 
         ' Return focus to options menu if it was opened while library was loading
         if m.options.visible
