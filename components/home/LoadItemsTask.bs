@@ -33,7 +33,7 @@ function loadLibraries() as object
     end if
 
     for each item in data.LookupCI("items")
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
         tmp.json = {
             id: item.LookupCI("Id"),
             name: item.LookupCI("name"),
@@ -72,7 +72,7 @@ function loadLatestMedia() as object
 
     for each item in data
         if not isStringEqual(item.Type, ItemType.BOOK)
-            tmp = CreateObject("roSGNode", "HomeData")
+            tmp = createSGNode("HomeData")
 
             tmp.json = {
                 id: item.LookupCI("Id"),
@@ -133,7 +133,7 @@ function loadContinueWatching() as object
 
 
     for each item in data.Items
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
         tmp.Id = item.LookupCI("Id")
         tmp.name = item.LookupCI("name")
         tmp.type = item.LookupCI("Type")
@@ -214,7 +214,7 @@ function loadMergedContinueWatching() as object
     ' Add Continue Watching items first
     if isChainValid(resumeData, "Items")
         for each item in resumeData.Items
-            tmp = CreateObject("roSGNode", "HomeData")
+            tmp = createSGNode("HomeData")
             tmp.Id = item.LookupCI("Id")
             tmp.name = item.LookupCI("name")
             tmp.type = item.LookupCI("Type")
@@ -254,7 +254,7 @@ function loadMergedContinueWatching() as object
             itemId = item.LookupCI("Id")
             ' Only add if not already in resume items
             if not resumeItemIds.DoesExist(itemId)
-                tmp = CreateObject("roSGNode", "HomeData")
+                tmp = createSGNode("HomeData")
                 tmp.json = item
                 results.push(tmp)
             end if
@@ -313,7 +313,7 @@ function loadContinueListening() as object
     if not isChainValid(data, "Items") then return results
 
     for each item in data.Items
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
         tmp.Id = item.LookupCI("Id")
         tmp.name = item.LookupCI("name")
         tmp.type = item.LookupCI("Type")
@@ -467,7 +467,7 @@ function loadSeasons() as object
     if not isChainValid(data, "Items") then return results
 
     for each season in data.Items
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
         tmp.json = {
             id: season.LookupCI("Id"),
             name: season.LookupCI("Name"),
@@ -522,12 +522,7 @@ function loadLiveTVOnNow() as object
     if not isChainValid(data, "Items") then return results
 
     for each item in data.Items
-        tmp = CreateObject("roSGNode", "HomeData")
-        imageTags = item.LookupCI("ImageTags")
-        isThumbImage = isValidAndNotEmpty(chainLookup(imageTags, ImageType.THUMB))
-
-        tmp.addField("FHDItemWidth", "float", false)
-        tmp.FHDItemWidth = calculateOnNowItemWidth(item.LookupCI("PrimaryImageAspectRatio"), isThumbImage)
+        tmp = createSGNode("HomeData")
         tmp.json = {
             id: item.LookupCI("Id"),
             name: item.LookupCI("name"),
@@ -582,7 +577,7 @@ function loadNextUpForShow() as object
 
     if isChainValid(data, "Items")
         for each item in data.Items
-            tmp = CreateObject("roSGNode", "HomeData")
+            tmp = createSGNode("HomeData")
             tmp.json = item
 
             ' Override imageWidth to 502 for wide episode display
@@ -637,7 +632,7 @@ function loadNextUp() as object
 
     if isChainValid(data, "Items")
         for each item in data.Items
-            tmp = CreateObject("roSGNode", "HomeData")
+            tmp = createSGNode("HomeData")
             tmp.json = item
             results.push(tmp)
             count++
@@ -649,7 +644,7 @@ function loadNextUp() as object
     end if
 
     if addViewAll
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
         tmp.type = ItemType.COLLECTIONFOLDER
         tmp.usePoster = false
         tmp.json = {
@@ -790,8 +785,7 @@ function createFavoriteHomeItems(data as object, favoriteRow as object, sortFiel
             exit for
         end if
 
-        count++
-    end for
+        tmp = createSGNode("HomeData")
 
     if addViewAll
         results.push(createFavoriteViewAllHomeData(favoriteRow, sortField, sortOrder))
@@ -889,7 +883,7 @@ function loadMyList() as object
     for each item in myListData.Items
         if inArray([ItemType.BOOK, ItemType.AUDIO], item.type) then continue for
 
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
 
         params = {
             Tags: item.PrimaryImageTag,
@@ -926,7 +920,7 @@ function loadMyList() as object
     end for
 
     if myListData.Items.count() > 3
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
         tmp.id = playlistID
         tmp.type = ItemType.COLLECTIONFOLDER
         tmp.usePoster = false
