@@ -773,7 +773,7 @@ sub onMyListLoaded()
         paramData.AlbumId = focusedItem.LookupCI("id")
     end if
 
-    m.global.sceneManager.callFunc("optionDialog", "libraryitem", focusedItem.LookupCI("title") ?? tr("Options"), [], dialogData, paramData)
+    m.global.sceneManager.callFunc("optionDialog", "libraryitem", focusedItem.LookupCI("title"), [], dialogData, paramData)
 end sub
 
 sub setLastFocus(lastFocusElement)
