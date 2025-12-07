@@ -939,9 +939,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
 end function
 
 sub createFullDscrDlg()
-    albumTitle = m.top.findNode("albumTitle")
-    if isAllValid([albumTitle.text, m.overview.text])
-        m.global.sceneManager.callFunc("standardDialog", albumTitle.text, { data: ["<p>" + m.overview.text + "</p>"] })
+    if isAllValid([m.top.itemContent.json.name, m.dscr.text])
+        m.global.sceneManager.callFunc("standardDialog", m.top.itemContent.json.name, { data: ["<p>" + m.dscr.text + "</p>"] })
     end if
 end sub
 
