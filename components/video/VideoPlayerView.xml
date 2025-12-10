@@ -36,22 +36,13 @@
   </interface>
 
   <children>
-    <LayoutGroup id="bufferingVideoInfo" layoutDirection="vert" translation="[103,61]">
-      <ScrollingText id="bufferingItemTitle" font="font:LargeBoldSystemFont" maxWidth="1400" />
-      <LayoutGroup id="bufferingVideoInfo" layoutDirection="horiz" translation="[103,61]">
-        <Text id="bufferingItemSeason" font="font:MediumSystemFont" color="0xffffffFF" />
-        <Text id="bufferingItemEpisode" font="font:MediumSystemFont" color="0xffffffFF" />
-        <Text id="bufferingItemEpisodeEnd" font="font:MediumSystemFont" color="0xffffffFF" />
-      </LayoutGroup>
-    </LayoutGroup>
-
+    <Rectangle id="pauseOverlay" width="1920" height="1080" color="0x000000AA" visible="false" />
     <Group id="captionGroup" translation="[0,0]" />
     <timer id="playbackTimer" repeat="true" duration="30" />
     <timer id="playbackCheckTimer" repeat="false" duration="1" />
     <timer id="bufferStuckTimer" repeat="true" duration="3" />
     <timer id="bufferCheckTimer" repeat="true" />
-    <OSD id="osd" visible="false" />
-    <PlaybackCastPopup id="castPopup" visible="false" />
+    <OSD id="osd" visible="false" inactiveTimeout="0" />
 
     <Rectangle id="chapterList" visible="false" color="0x00000098" width="400" height="380" translation="[103,210]">
       <LabelList id="chapterMenu" itemSpacing="[0,20]" numRows="5" font="font:SmallSystemFont" itemSize="[315,40]" translation="[40,20]">
