@@ -6,6 +6,7 @@
     </LayoutGroup>
 
     <LayoutGroup id="overlayRightGroup" layoutDirection="horiz" itemSpacings="15" translation="[1766, 53]" horizAlignment="right">
+      <Text id="memoryDisplay" font="font:SmallSystemFont" width="200" horizAlign="right" vertAlign="center" height="64" />
       <Text id="overlayCurrentUser" font="font:MediumSystemFont" width="300" horizAlign="right" vertAlign="center" height="64" />
       <MaskGroup id="backgroundMask" maskUri="pkg:/images/icons/circle64.png" maskSize="[64,64]">
         <Poster uri="pkg:/images/icons/circle.png" id="overlayCurrentUserProfileImage" width="64" height="64" loadDisplayMode="scaleToZoom" />
@@ -26,6 +27,7 @@
   <interface>
     <function name="highlightUser" />
     <function name="dehighlightUser" />
+    <function name="setupMemoryUpdateTimer" />
     <field id="id" type="string" />
     <field id="currentUserProfileImage" type="string" onChange="updateUserProfileImage" />
     <field id="currentUser" type="string" onChange="updateUser" />

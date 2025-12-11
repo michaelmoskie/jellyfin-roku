@@ -2,6 +2,7 @@ import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/enums/KeyCode.bs"
 import "pkg:/source/enums/PosterLoadStatus.bs"
 import "pkg:/source/utils/config.bs"
+import "pkg:/source/utils/memoryUtils.bs"
 
 sub init()
     m.top.id = "overhang"
@@ -13,6 +14,7 @@ sub init()
     ' save node references
     m.title = m.top.findNode("overlayTitle")
     m.overlayRightGroup = m.top.findNode("overlayRightGroup")
+    m.memoryDisplay = m.top.findNode("memoryDisplay")
     m.slideDownAnimation = m.top.findNode("slideDown")
     m.slideUpAnimation = m.top.findNode("slideUp")
 
@@ -26,6 +28,12 @@ sub init()
     m.overlayCurrentUserSelection = m.top.findNode("overlayCurrentUserSelection")
     if isValid(m.overlayCurrentUserSelection)
         m.overlayCurrentUserSelection.blendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
+    end if
+
+    ' Set initial memory display and update color
+    updateMemoryDisplay()
+    if isValid(m.memoryDisplay)
+        m.memoryDisplay.color = chainLookupReturn(m.global.session, "user.settings.colorHomeUsername", ColorPalette.WHITE)
     end if
 end sub
 
@@ -66,6 +74,14 @@ sub updateUser()
     end if
 end sub
 
+sub updateMemoryDisplay()
+    if isValid(m.memoryDisplay)
+        stats = GetMemoryStats()
+        memoryText = Substitute("{0}MB / {1}MB", stats.freeMemoryMB, stats.totalMemoryMB)
+        m.memoryDisplay.text = memoryText
+    end if
+end sub
+
 sub updateUserProfileImage()
     m.profileImage.observeField("loadStatus", "onPosterLoadStatusChanged")
     if isValid(m.profileImage)
@@ -87,6 +103,24 @@ end sub
 
 sub updateOptions()
 
+end sub
+
+sub setupMemoryUpdateTimer()
+    ' Set up periodic memory updates every 5 seconds
+    m.memoryUpdateTimer = m.top.findNode("memoryUpdateTimer")
+    if not isValid(m.memoryUpdateTimer)
+        m.memoryUpdateTimer = CreateObject("roSGNode", "Timer")
+        m.memoryUpdateTimer.id = "memoryUpdateTimer"
+        m.memoryUpdateTimer.duration = 5
+        m.memoryUpdateTimer.repeat = true
+        m.top.appendChild(m.memoryUpdateTimer)
+        m.memoryUpdateTimer.observeField("fire", "onMemoryUpdateTimer")
+    end if
+    m.memoryUpdateTimer.control = "start"
+end sub
+
+sub onMemoryUpdateTimer()
+    updateMemoryDisplay()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
