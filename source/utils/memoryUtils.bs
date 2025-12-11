@@ -1,0 +1,90 @@
+' Memory utilities for dynamic pagination based on system RAM capacity
+' Get the system's total RAM capacity in MB
+function GetSystemRAMCapacity() as integer
+    di = CreateObject("roDeviceInfo")
+    memoryInfo = di.GetMemoryInfo()
+
+    if isValid(memoryInfo) and isValid(memoryInfo.totalMemory)
+        ' totalMemory is in bytes, convert to MB
+        totalMemoryMB = memoryInfo.totalMemory / (1024 * 1024)
+        return Int(totalMemoryMB)
+    end if
+
+    ' Default to 256 MB if memory info is not available
+    return 256
+end function
+
+' Get free available RAM in MB
+function GetAvailableRAM() as integer
+    di = CreateObject("roDeviceInfo")
+    memoryInfo = di.GetMemoryInfo()
+
+    if isValid(memoryInfo) and isValid(memoryInfo.freeMemory)
+        ' freeMemory is in bytes, convert to MB
+        freeMemoryMB = memoryInfo.freeMemory / (1024 * 1024)
+        return Int(freeMemoryMB)
+    end if
+
+    return 0
+end function
+
+' Calculate dynamic pagination limit based on available system RAM
+' Lower RAM = fewer items per page, Higher RAM = more items per page
+function CalculateDynamicPageSize() as integer
+    ramCapacityMB = GetSystemRAMCapacity()
+
+    ' Define scaling tiers based on RAM capacity
+    ' These can be adjusted based on testing and performance requirements
+    if ramCapacityMB < 256
+        ' Very low memory (< 256 MB): conservative pagination
+        pageSize = 25
+    else if ramCapacityMB < 512
+        ' Low memory (256-512 MB): modest pagination
+        pageSize = 35
+    else if ramCapacityMB < 1024
+        ' Medium memory (512 MB - 1 GB): moderate pagination
+        pageSize = 50
+    else if ramCapacityMB < 2048
+        ' Higher memory (1 GB - 2 GB): standard pagination
+        pageSize = 60
+    else if ramCapacityMB < 4096
+        ' High memory (2 GB - 4 GB): generous pagination
+        pageSize = 75
+    else
+        ' Very high memory (>= 4 GB): maximum pagination
+        pageSize = 100
+    end if
+
+    return pageSize
+end function
+
+' Get memory usage information as a formatted object
+function GetMemoryStats() as object
+    di = CreateObject("roDeviceInfo")
+    memoryInfo = di.GetMemoryInfo()
+
+    stats = {
+        totalMemoryMB: 0,
+        freeMemoryMB: 0,
+        usedMemoryMB: 0,
+        usagePercentage: 0,
+        pageSize: 60
+    }
+
+    if isValid(memoryInfo)
+        if isValid(memoryInfo.totalMemory)
+            stats.totalMemoryMB = Int(memoryInfo.totalMemory / (1024 * 1024))
+        end if
+        if isValid(memoryInfo.freeMemory)
+            stats.freeMemoryMB = Int(memoryInfo.freeMemory / (1024 * 1024))
+        end if
+        stats.usedMemoryMB = stats.totalMemoryMB - stats.freeMemoryMB
+        if stats.totalMemoryMB > 0
+            stats.usagePercentage = Int((stats.usedMemoryMB / stats.totalMemoryMB) * 100)
+        end if
+    end if
+
+    stats.pageSize = CalculateDynamicPageSize()
+
+    return stats
+end function

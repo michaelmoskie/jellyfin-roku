@@ -1,3 +1,5 @@
+import "pkg:/source/utils/memoryUtils.bs"
+
 ' Set global constants
 sub setConstants()
     globals = m.screen.getGlobalNode()
@@ -126,7 +128,12 @@ sub SaveDeviceToGlobal()
             videoHeight: videoHeight,
             videoWidth: videoWidth,
             videoRefresh: StrToI(refreshRate),
-            videoBitDepth: bitDepth
+            videoBitDepth: bitDepth,
+
+            ' Memory information for dynamic pagination
+            ramCapacityMB: GetSystemRAMCapacity(),
+            availableRAMMB: GetAvailableRAM(),
+            dynamicPageSize: CalculateDynamicPageSize()
         }
     })
 end sub

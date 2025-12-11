@@ -5,6 +5,7 @@ import "pkg:/source/api/sdk.bs"
 import "pkg:/source/enums/ImageType.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/deviceCapabilities.bs"
+import "pkg:/source/utils/memoryUtils.bs"
 import "pkg:/source/utils/misc.bs"
 
 sub init()
@@ -12,7 +13,8 @@ sub init()
     m.top.sortField = "SortName"
     m.top.functionName = "loadItems"
 
-    m.top.limit = 60
+    ' Set dynamic page size based on available system RAM
+    m.top.limit = m.global.device.dynamicPageSize
 end sub
 
 sub loadItems()
