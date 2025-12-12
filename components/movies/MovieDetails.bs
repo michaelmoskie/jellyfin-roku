@@ -75,11 +75,7 @@ end sub
 
 ' OnScreenShown: Callback function when view is presented on screen
 '
-sub OnScreenShown()
-    ' Reset startingPoint to avoid other buttons inheriting playback position
-    if isValid(m.top.itemContent)
-        m.top.itemContent.startingPoint = -1
-    end if
+sub OnScreenShown(_isReturning = false as boolean)
     ' set focus to button group
     if m.extrasGrid <> invalid and m.extrasGrid.isInFocusChain()
         m.top.lastFocus.setFocus(true)
