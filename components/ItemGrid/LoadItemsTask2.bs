@@ -162,10 +162,16 @@ sub init()
     m.top.sortField = "SortName"
     m.top.functionName = "loadItems"
 
-    m.top.limit = chainLookupReturn(m.global.session, "user.settings.`ui.library.loadItemsLimit`", 60)
+    m.top.limit = 10000 ' Load all items at once - no lazy loading
 end sub
 
 sub loadItems()
+    ' Prevent duplicate executions caused by automatic task retriggering
+    if m.top.hasExecuted = true
+        return
+    end if
+
+    m.top.hasExecuted = true
     results = []
 
     sort_field = m.top.sortField
@@ -538,7 +544,6 @@ sub loadItems()
                     tmp.type = "Folder"
                     tmp.posterUrl = api.items.GetImageURL(item.id, "primary", 0, { "maxHeight": 270, "maxWidth": 270, "quality": "90" })
                 else
-                    ' print `Unknown Type ${item.Type}`
                 end if
             end if
 
@@ -556,5 +561,6 @@ sub loadItems()
             end if
         end for
     end if
+
     m.top.content = results
 end sub

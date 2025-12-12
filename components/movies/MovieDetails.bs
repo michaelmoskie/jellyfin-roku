@@ -584,7 +584,6 @@ sub itemContentChanged()
         end if
         if isValid(m.endsRow)
             m.endsRow.visible = false
-            m.endsRow.height = 0
         end if
     end if
 
@@ -720,6 +719,11 @@ sub itemContentChanged()
 
     SetUpVideoOptions(itemData.mediaSources)
     SetUpAudioOptions(itemData)
+
+    ' Load extras grid data (cast, similar items, etc.)
+    if isValid(m.extrasGrid)
+        m.extrasGrid.callFunc("loadParts", itemData)
+    end if
 
     ' Show buttons
     if m.buttonRow <> invalid
