@@ -243,7 +243,13 @@ sub ItemDataLoaded(msg)
     itemData = msg.GetData()
 
     if not isValid(itemData)
-        stopLoadingOperation()
+        ' Check if this is initial load or pagination
+        if m.loadedItems = 0
+            ' Initial load failed - show error message
+            m.emptyText.text = tr("Error loading channels. Please check your connection and try again.")
+            m.emptyText.visible = true
+        end if
+        stopLoadingSpinner()
         return
     end if
 
@@ -291,9 +297,9 @@ sub onItemFocused()
 
     m.selectedFavoriteItem = getItemGridFocusedItem(m.itemGrid)
 
-    ' Load more data if focus is within last 5 rows, and there are more items to load
-    if m.loadItemsTask.totalRecordCount > 14
-        if focusedRow >= m.loadedRows - m.itemGrid.numRows and m.loadeditems < m.loadItemsTask.totalRecordCount
+    ' Load more data if focus is within last 3 rows, and there are more items to load
+    if m.loadItemsTask.totalRecordCount > m.loadedItems
+        if focusedRow >= m.loadedRows - 3
             loadMoreData()
         end if
     end if
@@ -301,7 +307,9 @@ end sub
 
 'Load next set of items
 sub loadMoreData()
-    if isStringEqual(m.loadItemsTask.state, TaskControl.RUN) then return
+    if m.Loading = true then return
+    ' Stop if we've already loaded all items
+    if m.loadedItems >= m.loadItemsTask.totalRecordCount then return
 
     startLoadingSpinner(false)
     m.loadItemsTask.startIndex = m.loadedItems

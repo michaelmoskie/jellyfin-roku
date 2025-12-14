@@ -162,12 +162,13 @@ sub init()
     m.top.sortField = "SortName"
     m.top.functionName = "loadItems"
 
-    m.top.limit = 10000 ' Load all items at once - no lazy loading
+    m.top.limit = 100 ' Load 100 items at a time for performance
 end sub
 
 sub loadItems()
-    ' Prevent duplicate executions caused by automatic task retriggering
-    if m.top.hasExecuted = true
+    ' Allow pagination by resetting hasExecuted for each batch
+    ' Note: startIndex changes trigger new execution
+    if m.top.hasExecuted = true and m.top.startIndex = 0
         return
     end if
 
@@ -365,16 +366,33 @@ sub loadItems()
         url = "Items"
     end if
 
-
+    ' Make API request with timeout handling
     resp = APIRequest(url, params)
+
+    ' Add timeout by checking if request is valid
+    if not isValid(resp)
+        ' Request setup failed
+        m.top.content = []
+        m.top.hasExecuted = false
+        return
+    end if
+
     data = getJson(resp)
 
-        ' If user has filtered by #, include special characters sorted after Z as well
-        if isValid(params.NameLessThan)
-            if LCase(params.NameLessThan) = "a"
-                ' Use same params except for name filter param
-                params.NameLessThan = ""
-                params.NameStartsWithOrGreater = "z"
+    ' Check if API call timed out or failed
+    if not isValid(data)
+        ' API request failed or timed out
+        m.top.content = []
+        m.top.hasExecuted = false
+        return
+    end if
+
+    ' If user has filtered by #, include special characters sorted after Z as well
+    if isValid(params.NameLessThan)
+        if LCase(params.NameLessThan) = "a"
+            ' Use same params except for name filter param
+            params.NameLessThan = ""
+            params.NameStartsWithOrGreater = "z"
 
                 ' Perform 2nd API lookup for items starting with Z or greater
                 startsWithZAndGreaterResp = APIRequest(url, params)
@@ -562,5 +580,12 @@ sub loadItems()
         end for
     end if
 
+    ' Store total record count for pagination if available
+    if isValid(data) and isValid(data.TotalRecordCount)
+        m.top.totalRecordCount = data.TotalRecordCount
+    end if
+
     m.top.content = results
+    ' Reset hasExecuted for next pagination batch
+    m.top.hasExecuted = false
 end sub
