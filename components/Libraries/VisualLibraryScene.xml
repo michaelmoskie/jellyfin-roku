@@ -56,6 +56,8 @@
     <Text translation="[0,540]" id="emptyText" font="font:LargeSystemFont" width="1910" horizAlign="center" vertAlign="center" height="64" visible="false" />
     <LibraryFilterDialog id="options" visible="false" />
 
+    <Alpha id="alpha" wrap="false" />
+    <SlideOutButton id="librarySettings" translation="[32, 50]" background="0x00000000" highlightBackground="#555555" padding="20" icon="pkg:/images/icons/settings.png" text="Library Settings" height="50" width="60" />
   </children>
   <interface>
     <function name="getItemFocused" />
@@ -65,7 +67,9 @@
     <field id="selectedItem" type="node" alwaysNotify="true" />
     <field id="quickPlayNode" type="node" alwaysNotify="true" />
     <field id="imageDisplayMode" type="string" value="" />
+    <field id="alphaSelected" type="string" alias="alpha.letterSelected" onChange="alphaSelectedChanged" alwaysNotify="true" />
     <field id="searchTerm" type="string" onChange="onSearchTermChanged" alwaysNotify="true" />
+    <field id="alphaActive" type="boolean" value="false" />
     <field id="showItemTitles" type="string" value="" />
   </interface>
 </component>
