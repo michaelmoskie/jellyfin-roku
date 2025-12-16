@@ -307,14 +307,16 @@ sub loadItems()
             Fields: "Genres"
         })
         params.IncludeItemTypes = "MusicAlbum,Audio"
-    else if m.top.ItemType = "MusicAlbum"
-        url = "Items"
-        params.append({ ImageTypeLimit: 1, UserId: m.global.session.user.id })
-        ' Request Primary artwork (album cover) and Backdrop as fallback
-        params.append({ EnableImageTypes: "Primary,Backdrop" })
-        ' Remove heavy fields that bloat the JSON response
-        ' Overview (long text) and RecursiveItemCount (not used in grid)
-        params.delete("Fields")
+    else if m.top.ItemType = "MusicAlbum" or m.top.ItemType = "Audio" or m.top.ItemType.Instr("MusicAlbum,") >= 0
+        ' Handle single music types and AllMusic view (MusicAlbum,MusicArtist,Audio)
+        url = Substitute("Users/{0}/Items/", m.global.session.user.id)
+        params.append({ ImageTypeLimit: 1 })
+        params.append({ EnableImageTypes: "Primary,Backdrop,Banner,Thumb" })
+
+        ' For AllMusic view or songs, enable recursive search
+        if m.top.recursive = true or m.top.ItemType = "Audio" or m.top.ItemType.Instr("Audio") >= 0
+            params.recursive = true
+        end if
     else if m.top.ItemType = "audiobooks"
         params.append({ mediaTypes: "Audio", UserId: m.global.session.user.id })
         params.append({ Filters: "IsNotFolder" })
@@ -543,8 +545,12 @@ sub loadItems()
                 else if item.Type = "MusicAlbum"
                     tmp = CreateObject("roSGNode", "MusicAlbumData")
                     tmp.type = "MusicAlbum"
-                    if isChainValid(item, "ImageTags.Primary")
-                        tmp.posterURL = ImageURL(item.id, "Primary")
+                    if api.items.HeadImageURLByName(item.id, "primary")
+                        tmp.posterUrl = ImageURL(item.id, "Primary")
+                    else if api.items.HeadImageURLByName(item.id, "backdrop")
+                        tmp.posterUrl = ImageURL(item.id, "backdrop")
+                    else
+                        tmp.posterUrl = "pkg:/images/icons/audio_track.png"
                     end if
                 else if item.Type = "MusicArtist"
                     tmp = CreateObject("roSGNode", "MusicArtistData")
@@ -552,8 +558,13 @@ sub loadItems()
                     tmp = CreateObject("roSGNode", "PersonData")
                 else if item.Type = "Audio"
                     tmp = CreateObject("roSGNode", "MusicSongData")
-                    tmp.type = "Audio"
-                    tmp.image = api.items.GetImageURL(item.id, "primary", 0, { "maxHeight": 280, "maxWidth": 280, "quality": "90" })
+                    tmp.type = "audio"
+                    songImageURL = api.items.GetImageURL(item.id, "primary", 0, { "maxHeight": 280, "maxWidth": 280, "quality": "90" })
+                    if isValid(songImageURL) and songImageURL <> ""
+                        tmp.posterUrl = songImageURL
+                    else
+                        tmp.posterUrl = "pkg:/images/icons/audio_track.png"
+                    end if
                 else if item.Type = "MusicGenre"
                     tmp = CreateObject("roSGNode", "FolderData")
                     tmp.title = item.name
