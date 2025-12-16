@@ -176,8 +176,6 @@ sub onViewChange(viewChoice)
     set_user_setting("display." + m.settingID + ".filter", m.filter)
     set_user_setting("display." + m.settingID + ".filterOptions", FormatJson(m.filterOptions))
 
-    m.getFiltersTask.control = "RUN"
-
     m.loadedRows = 0
     m.loadedItems = 0
     m.data = createSGNode("ContentNode")
