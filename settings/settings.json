@@ -156,6 +156,13 @@
         "description": "Customize the featured media carousel.",
         "children": [
           {
+            "title": "Enable Media Bar",
+            "description": "Display a featured content slideshow at the top of the home screen. Moonfin will need to be closed and reopened for change to take effect.",
+            "settingName": "ui.home.mediaBarEnabled",
+            "type": "bool",
+            "default": "true"
+          },
+          {
             "title": "Items Count",
             "description": "Number of items to display in the Featured Media carousel.",
             "settingName": "ui.home.featuredMediaItems",
@@ -1124,7 +1131,7 @@
             "description": "Select what to show in section 1. Moonfin will need to be closed and reopened for change to take effect.",
             "settingName": "homeScreenSection0",
             "type": "radio",
-            "default": "featuredmedia",
+            "default": "resume",
             "options": [
               {
                 "title": "Continue Listening",
@@ -1193,10 +1200,6 @@
                 "id": "favorites"
               },
               {
-                "title": "Featured Media",
-                "id": "featuredmedia"
-              },
-              {
                 "title": "Live TV",
                 "id": "livetv"
               },
@@ -1245,10 +1248,6 @@
               {
                 "title": "Favorites",
                 "id": "favorites"
-              },
-              {
-                "title": "Featured Media",
-                "id": "featuredmedia"
               },
               {
                 "title": "Live TV",
@@ -1305,10 +1304,6 @@
                 "id": "featuredmedia"
               },
               {
-                "title": "Live TV",
-                "id": "livetv"
-              },
-              {
                 "title": "My List",
                 "id": "mylist"
               },
@@ -1357,10 +1352,6 @@
               {
                 "title": "Featured Media",
                 "id": "featuredmedia"
-              },
-              {
-                "title": "Live TV",
-                "id": "livetv"
               },
               {
                 "title": "My List",
@@ -1417,10 +1408,6 @@
                 "id": "livetv"
               },
               {
-                "title": "My List",
-                "id": "mylist"
-              },
-              {
                 "title": "My Media",
                 "id": "smalllibrarytiles"
               },
@@ -1475,10 +1462,6 @@
                 "id": "mylist"
               },
               {
-                "title": "My Media",
-                "id": "smalllibrarytiles"
-              },
-              {
                 "title": "Next Up",
                 "id": "nextup"
               },
@@ -1527,10 +1510,6 @@
               {
                 "title": "My List",
                 "id": "mylist"
-              },
-              {
-                "title": "My Media",
-                "id": "smalllibrarytiles"
               },
               {
                 "title": "Next Up",
