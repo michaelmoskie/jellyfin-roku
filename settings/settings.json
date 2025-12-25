@@ -144,7 +144,7 @@
           },
           {
             "title": "Multi-Server Libraries",
-            "description": "Aggregate content from all logged-in servers. When enabled, Continue Watching, Next Up, and Latest rows will show items from every server you're logged into. WARNING: This overrides manual home row configuration (sections 1-8). Requires restart to take effect.",
+            "description": "Aggregate content from all logged-in servers. When enabled, Continue Watching, Next Up, and Latest rows will show items from every server you're logged into. Requires restart to take effect.",
             "settingName": "ui.home.enableMultiServer",
             "type": "bool",
             "default": "false"
@@ -1172,6 +1172,10 @@
               {
                 "title": "Recently Added Media",
                 "id": "latestmedia"
+              },
+              {
+                "title": "Recently Released",
+                "id": "recentlyreleased"
               }
             ]
           },
@@ -1181,7 +1185,7 @@
             "description": "Select what to show in section 2. Moonfin will need to be closed and reopened for change to take effect.",
             "settingName": "homeScreenSection1",
             "type": "radio",
-            "default": "resume",
+            "default": "recentlyreleased",
             "options": [
               {
                 "title": "Continue Listening",
@@ -1222,6 +1226,10 @@
               {
                 "title": "Recently Added Media",
                 "id": "latestmedia"
+              },
+              {
+                "title": "Recently Released",
+                "id": "recentlyreleased"
               }
             ]
           },
@@ -1272,6 +1280,10 @@
               {
                 "title": "Recently Added Media",
                 "id": "latestmedia"
+              },
+              {
+                "title": "Recently Released",
+                "id": "recentlyreleased"
               }
             ]
           },
@@ -1322,6 +1334,10 @@
               {
                 "title": "Recently Added Media",
                 "id": "latestmedia"
+              },
+              {
+                "title": "Recently Released",
+                "id": "recentlyreleased"
               }
             ]
           },
@@ -1368,6 +1384,10 @@
               {
                 "title": "Recently Added Media",
                 "id": "latestmedia"
+              },
+              {
+                "title": "Recently Released",
+                "id": "recentlyreleased"
               }
             ]
           },
@@ -1414,6 +1434,10 @@
               {
                 "title": "Recently Added Media",
                 "id": "latestmedia"
+              },
+              {
+                "title": "Recently Released",
+                "id": "recentlyreleased"
               }
             ]
           },
@@ -1460,6 +1484,10 @@
               {
                 "title": "Recently Added Media",
                 "id": "latestmedia"
+              },
+              {
+                "title": "Recently Released",
+                "id": "recentlyreleased"
               }
             ]
           },
@@ -1506,6 +1534,10 @@
               {
                 "title": "Recently Added Media",
                 "id": "latestmedia"
+              },
+              {
+                "title": "Recently Released",
+                "id": "recentlyreleased"
               }
             ]
           },
