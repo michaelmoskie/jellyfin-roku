@@ -220,24 +220,18 @@ namespace MainAction
         movie = chainLookup(activeScene, "itemContent")
         if not isChainValid(movie, "favorite") or not isValid(movie.id) then return
 
-        isFavorite = not movie.favorite
-        isWatched = chainLookup(movie, "watched")
-
-        if isFavorite
-            api.users.MarkFavorite(movie.id, { userId: m.global.session.user.id })
+        ' Use task to avoid blocking the UI
+        favoriteTask = createObject("roSGNode", "FavoriteItemsTask")
+        favoriteTask.itemId = movie.id
+        if movie.favorite
+            favoriteTask.favTask = "unfavorite"
         else
-            api.users.UnmarkFavorite(movie.id, { userId: m.global.session.user.id })
+            favoriteTask.favTask = "favorite"
         end if
+        favoriteTask.control = "RUN"
 
-        if isChainValid(movie, "json.UserData")
-            movieData = movie.json
-            movieData.UserData.AddReplace("IsFavorite", isFavorite)
-            movieData.UserData.AddReplace("Played", isWatched)
-            movie.json = movieData
-        end if
-
-        movie.favorite = isFavorite
-        movie.watched = isWatched
+        ' Update local state immediately for UI responsiveness
+        movie.favorite = not movie.favorite
     end sub
 
     sub onEditSubtitlesButtonClicked(activeScene as object)
@@ -344,7 +338,11 @@ namespace MainAction
     end sub
 
     sub addItemToFavorites(itemID as string)
-        api.users.MarkFavorite(itemID, { userId: m.global.session.user.id })
+        ' Use task to avoid blocking the UI
+        favoriteTask = createObject("roSGNode", "FavoriteItemsTask")
+        favoriteTask.itemId = itemID
+        favoriteTask.favTask = "favorite"
+        favoriteTask.control = "RUN"
 
         group = m.global.sceneManager.callFunc("getActiveScene")
         if isValid(group)
@@ -359,7 +357,11 @@ namespace MainAction
     end sub
 
     sub removeItemFromFavorites(itemID as string)
-        api.users.UnmarkFavorite(itemID, { userId: m.global.session.user.id })
+        ' Use task to avoid blocking the UI
+        favoriteTask = createObject("roSGNode", "FavoriteItemsTask")
+        favoriteTask.itemId = itemID
+        favoriteTask.favTask = "unfavorite"
+        favoriteTask.control = "RUN"
 
         group = m.global.sceneManager.callFunc("getActiveScene")
         if isValid(group)
