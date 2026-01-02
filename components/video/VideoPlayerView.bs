@@ -160,35 +160,7 @@ sub init()
     m.top.retrievingBar.filledBarBlendColor = ColorPalette.TRIADBLUE
     m.top.bufferingBar.filledBarBlendColor = ColorPalette.TRIADBLUE
     m.top.trickPlayBar.filledBarBlendColor = ColorPalette.TRIADBLUE
-
-    m.previewPos = 0 ' Track the seeking position in the video when the user starts seeking
-    m.seekSpeedIndex = 0 ' Index to track the current seek speed level
-    m.seekSpeeds = [-180, -60, -30, -10, 10, 30, 60, 180] ' seconds per press for the different seek speed levels
-
-    m.scrubber = m.osd.findNode("scrubber")
-    m.scrubberOldPosition = m.osd.findNode("scrubberOldPosition")
-
-    m.fastForwardRewindIcons = m.osd.findNode("fastForwardRewindIcons")
-    m.fastForwardOrRewindTimer = m.top.findNode("fastForwardOrRewindTimer")
-    m.fastForwardOrRewindTimer.observeField("fire", "onFastforwardOrRewindTick")
-
-    m.liveTvRewindLimitExceeded = m.osd.findNode("liveTVRewindLimitExceeded")
-
-    m.leftTenSecondSkipTimer = m.top.findNode("leftTenSecondSkipTimer")
-    m.leftTenSecondSkipTimer.observeField("fire", "onLeftTenSecondSkipTimerTick")
-    m.rightTenSecondSkipTimer = m.top.findNode("rightTenSecondSkipTimer")
-    m.rightTenSecondSkipTimer.observeField("fire", "onRightTenSecondSkipTimerTick")
-
-    m.bufferingVideoInfo = m.top.findNode("bufferingVideoInfo")
-    m.bufferingItemTitle = m.top.findNode("bufferingItemTitle")
-    m.bufferingItemSeason = m.top.findNode("bufferingItemSeason")
-    m.bufferingItemEpisode = m.top.findNode("bufferingItemEpisode")
-    m.bufferingItemEpisodeEnd = m.top.findNode("bufferingItemEpisodeEnd")
-    m.bufferingVideoInfo.visible = false
-
-    m.top.observeField("pauseBufferChanged", "onPauseBufferChangedChange")
-    startSpinnerWithPercent(0)
-    m.top.setFocus(true)
+    m.top.enableTrickPlay = false
 end sub
 
 sub onAvailableAudioTracksChanged()
@@ -857,12 +829,9 @@ sub onVideoContentLoaded()
 
     populateChapterMenu()
 
-    if m.LoadMetaDataTask.isIntro
-        ' Disable trackplay bar for intro videos
-        m.top.enableTrickPlay = false
-    else
-        ' Allow custom captions for non intro videos unless the video is being transcoded and burn subtitles are enabled
-        m.top.allowCaptions = not subtitlesBurnedIn
+    ' Allow custom captions for non intro videos unless the video is being transcoded and burn subtitles are enabled
+    if not m.LoadMetaDataTask.isIntro
+        m.top.allowCaptions = not (m.isTranscoded and burnInSubtitles)
     end if
 
     ' Allow default subtitles
@@ -2064,8 +2033,36 @@ function onKeyEvent(key as string, press as boolean) as boolean
         end if
     end if
 
-    ' Handle keypresses for video seeking
-    if key = KeyCode.RIGHT or key = KeyCode.LEFT or key = KeyCode.FASTFORWRD or key = KeyCode.REWIND or (m.osd.isSeeking and (key = Keycode.BACK or key = Keycode.OK or key = Keycode.PLAY))
+    if not press then return false
+
+    ' Handle LEFT/RIGHT for seeking when OSD is hidden
+    if key = KeyCode.LEFT or key = KeyCode.RIGHT
+        if not m.osd.visible and not m.top.trickPlayBar.visible
+            if not stateAllowsOSD() then return true
+
+            seekAmount = 10
+            if key = KeyCode.LEFT then seekAmount = -10
+
+            newPosition = m.top.position + seekAmount
+            if newPosition < 0 then newPosition = 0
+
+            totalTime = m.top.duration
+            if newPosition > totalTime then newPosition = totalTime
+
+            m.top.seek = newPosition
+
+            setSiblingData()
+            if m.skipSegmentButton.visible
+                hideSegmentSkipButton()
+            end if
+            refreshLiveOSDContent()
+            showOSD()
+
+            return true
+        end if
+    end if
+
+    if key = KeyCode.DOWN and not m.top.trickPlayBar.visible
         if not m.LoadMetaDataTask.isIntro
             ' Don't allow user to open menu prior to video loading
             if not stateAllowsOSD() then return true
