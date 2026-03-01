@@ -39,10 +39,8 @@ sub init()
     m.LoadProgramDetailsTask = createObject("roSGNode", "LoadProgramDetailsTask")
     m.LoadProgramDetailsTask.observeField("programDetails", "onProgramDetailsLoaded")
 
-    m.LoadRecordingTimerTask = createObject("roSGNode", "LoadRecordingTimerTask")
-
-    ' Hide the overhang on init to prevent showing 2 clocks
-    m.top.getScene().findNode("overhang").visible = false
+    activeNav = getActiveNav(m.top.getScene())
+    if isValid(activeNav) then activeNav.visible = false
     currentItem = m.global.queueManager.callFunc("getCurrentItem")
     m.top.id = currentItem.id
 
