@@ -1321,10 +1321,6 @@
                 "id": "favorites"
               },
               {
-                "title": "Featured Media",
-                "id": "featuredmedia"
-              },
-              {
                 "title": "My List",
                 "id": "mylist"
               },
