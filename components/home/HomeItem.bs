@@ -112,6 +112,11 @@ sub itemContentChanged()
     m.itemPoster.height = ITEM_IMAGE_HEIGHT
     m.itemPoster.loadDisplayMode = "scaleToZoom"
 
+    ' Reposition played indicator to top-right corner of poster
+    if isValid(m.playedIndicator)
+        m.playedIndicator.translation = [itemData.imageWidth - 42, 3]
+    end if
+
     m.itemText.maxWidth = itemData.imageWidth
     m.itemText.height = 34
     m.itemText.font.size = 25

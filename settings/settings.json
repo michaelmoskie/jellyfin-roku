@@ -165,6 +165,13 @@
             "settingName": "ui.home.enableMultiServer",
             "type": "bool",
             "default": "false"
+          },
+          {
+            "title": "Prefer Thumbnails",
+            "description": "Use wide thumbnail images instead of portrait posters for Continue Watching and similar rows.",
+            "settingName": "ui.home.preferThumbnails",
+            "type": "bool",
+            "default": "false"
           }
         ]
       },
@@ -1083,25 +1090,75 @@
             "default": "true"
           },
           {
-            "title": "Episode Images Next Up",
-            "description": "What type of images to use for Episodes shown in the 'Next Up' and 'Continue Watching' sections.",
-            "settingName": "ui-general-episodeimagesnextup",
-            "type": "radio",
-            "default": "webclient",
-            "options": [
+            "title": "Favorites Row",
+            "description": "Settings relating to the favorites row on the home screen.",
+            "children": [
               {
-                "title": "Use Episode Image",
-                "id": "episode"
+                "title": "Sort By Field",
+                "description": "Field to sort the row by.",
+                "settingName": "ui.home.favoritesSortField",
+                "type": "radio",
+                "default": "random",
+                "options": [
+                  {
+                    "title": "Date Created",
+                    "id": "DateCreated"
+                  },
+                  {
+                    "title": "Date Played",
+                    "id": "DatePlayed"
+                  },
+                  {
+                    "title": "Is Unplayed",
+                    "id": "IsUnplayed"
+                  },
+                  {
+                    "title": "Name",
+                    "id": "SortName"
+                  },
+                  {
+                    "title": "Play Count",
+                    "id": "PlayCount"
+                  },
+                  {
+                    "title": "Release Date",
+                    "id": "PremiereDate"
+                  },
+                  {
+                    "title": "Random",
+                    "id": "random"
+                  },
+                  {
+                    "title": "Runtime",
+                    "id": "Runtime"
+                  }
+                ]
               },
               {
-                "title": "Use Show Image",
-                "id": "show"
-              },
-              {
-                "title": "Use Web Client Setting",
-                "id": "webclient"
+                "title": "Sort Order",
+                "description": "Sort Order for the row - Ascending,Descending.",
+                "settingName": "ui.home.favoritesSortOrder",
+                "type": "radio",
+                "default": "Ascending",
+                "options": [
+                  {
+                    "title": "Ascending",
+                    "id": "Ascending"
+                  },
+                  {
+                    "title": "Descending",
+                    "id": "Descending"
+                  }
+                ]
               }
             ]
+          },
+          {
+            "title": "Hide Clock",
+            "description": "Hide all clocks in Jellyfin. Jellyfin will need to be closed and reopened for changes to take effect.",
+            "settingName": "ui.design.hideclock",
+            "type": "bool",
+            "default": "false"
           },
           {
             "title": "Max Days Next Up",
@@ -1321,6 +1378,10 @@
                 "id": "favorites"
               },
               {
+                "title": "Live TV",
+                "id": "livetv"
+              },
+              {
                 "title": "My List",
                 "id": "mylist"
               },
@@ -1369,6 +1430,10 @@
               {
                 "title": "Favorites",
                 "id": "favorites"
+              },
+              {
+                "title": "Live TV",
+                "id": "livetv"
               },
               {
                 "title": "My List",
@@ -1425,6 +1490,10 @@
                 "id": "livetv"
               },
               {
+                "title": "My List",
+                "id": "mylist"
+              },
+              {
                 "title": "My Media",
                 "id": "smalllibrarytiles"
               },
@@ -1479,6 +1548,10 @@
                 "id": "mylist"
               },
               {
+                "title": "My Media",
+                "id": "smalllibrarytiles"
+              },
+              {
                 "title": "Next Up",
                 "id": "nextup"
               },
@@ -1527,6 +1600,10 @@
               {
                 "title": "My List",
                 "id": "mylist"
+              },
+              {
+                "title": "My Media",
+                "id": "smalllibrarytiles"
               },
               {
                 "title": "Next Up",
