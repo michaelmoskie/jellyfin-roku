@@ -743,9 +743,8 @@ function getFavoriteRowDefinitions() as object
     ]
 end function
 
-function getFavoriteHomeRowLimit() as integer
-    return 25
-end function
+    sortField = m.global.session.user.settings["ui.home.favoritesSortField"] ?? "random"
+    sortOrder = m.global.session.user.settings["ui.home.favoritesSortOrder"] ?? "Ascending"
 
 function getFavoriteQueryParams(sortField as string, sortOrder as string) as object
     return {
