@@ -145,7 +145,7 @@ sub init()
     m.skipSegmentButton.focusColor = ColorPalette.WHITE
 
     'Play Next Episode button
-    m.nextupbuttonseconds = m.global.session.user.settings["playback.nextupbuttonseconds"].ToInt()
+    m.nextupbuttonseconds = (m.global.session.user.settings["playback.nextupbuttonseconds"] ?? "30").ToInt()
 
     ' Skip segment tracking
     m.mediaSegmentDismissed = {}
@@ -1610,6 +1610,50 @@ function getRemainingTime(videoSeekPosition = invalid as dynamic)
 
     return m.osd.progressDuration - seekTime
 end function
+
+sub onTrickPlayBarTextChange()
+    if not m.top.trickPlayBar.visible then return
+
+    m.nextupbuttonseconds = (m.global.session.user.settings["playback.nextupbuttonseconds"] ?? "30").ToInt()
+    m.currentSegmentType = invalid
+    m.mediaSegmentDismissed = {}
+
+    setVideoEndingTime(0)
+
+    ' If Roku has pulled thumbnailtiles from the video stream, use them instead
+    if not m.global.session.user.settings["playback.trickplay.forcecustom"]
+        if isValidAndNotEmpty(m.top.thumbnailTiles)
+            return
+        end if
+    end if
+
+    if not isValid(m.positionText)
+        displayTrickplayImage(m.top.position)
+        return
+    end if
+
+    seekTime = 0
+    seekPosition = m.positionText.text.split(":")
+
+    if seekPosition.count() = 3
+        ' hours -> seconds
+        seekTime += seekPosition[0].toint() * 3600
+        ' minutes -> seconds
+        seekTime += seekPosition[1].toint() * 60
+    end if
+
+    ' minutes -> seconds
+    if seekPosition.count() = 2
+        seekTime += seekPosition[0].toint() * 60
+    end if
+
+    ' add seconds
+    seekTime += seekPosition[seekPosition.count() - 1].toint()
+
+    seekTime = seekTime = 0 ? m.top.position : seekTime
+
+    displayTrickplayImage(seekTime)
+end sub
 
 '
 ' Report playback to server
