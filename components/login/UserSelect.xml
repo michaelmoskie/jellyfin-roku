@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <component name="UserSelect" extends="JFScreen">
   <children>
-    <!-- Background with Purple Haze gradient -->
     <Rectangle
       id="background"
       width="1920"
@@ -29,74 +28,58 @@
     </Rectangle>
 
     <Rectangle id="viewContent" translation="[0, 0]">
-      <!-- Logo -->
-      <Poster
-        id="logo"
-        uri="pkg:/images/logo.png"
-        width="860"
-        height="150"
-        loadDisplayMode="scaleToFit"
-        translation="[560, 80]" />
-
-      <!-- User Selection Container with Background -->
-      <Group id="userSelectionGroup" translation="[0, 0]">
+      <Group id="userSelectionGroup">
         <Poster
+          id="cardBg"
           uri="pkg:/images/user_selection_bg.png"
-          width="1650"
-          height="450"
-          translation="[100, 300]" />
+          width="1200"
+          height="580"
+          translation="[360, 140]"
+          loadDisplayMode="scaleToFill" />
 
-        <!-- User Row Container -->
-        <UserRow id="userRow" rowFocusAnimationStyle="fixedFocusWrap" translation="[130, 320]" />
+        <Label id="serverName"
+          horizAlign="center"
+          width="1200"
+          height="35"
+          font="font:SmallSystemFont"
+          color="0x9CA3AFFF"
+          translation="[360, 180]" />
 
-        <!-- Manual Login Button -->
+        <Label id="whoWatching"
+          text="Who's watching?"
+          horizAlign="center"
+          width="1200"
+          height="55"
+          font="font:LargeBoldSystemFont"
+          color="0xFFFFFFFF"
+          translation="[360, 210]" />
+
+        <Group id="userRowContainer" translation="[400, 300]" clippingRect="[0, 0, 1120, 240]">
+          <UserRow id="userRow" translation="[0, 0]" />
+        </Group>
+
         <StandardButton
-          id="manualLogin"
-          text="Manual Login"
-          height="60"
-          width="280"
-          translation="[555, 640]" />
-
-        <!-- Change Server Button -->
-        <StandardButton
-          id="changeServer"
-          text="Change Server"
-          height="60"
-          width="280"
-          translation="[1045, 640]" />
+          id="editButton"
+          text="Edit"
+          height="50"
+          width="200"
+          translation="[860, 590]" />
       </Group>
 
-      <!-- Manage Hidden Users Link -->
-      <Text
-        id="manageHiddenUsers"
-        text="Manage Hidden Users"
-        horizAlign="center"
-        font="font:MediumSystemFont"
-        color="0xFFFFFF80"
-        height="60"
-        width="350"
-        translation="[785, 940]" />
+      <StandardButton
+        id="manualLogin"
+        text="Manual Login"
+        height="50"
+        width="260"
+        translation="[570, 780]" />
 
-      <!-- Helper Text Footer -->
-      <LayoutGroup
-        layoutDirection="vert"
-        translation="[0, 850]"
-        itemSpacings="[5]">
-        <Text
-          text="Need help? Make sure your Jellyfin server is running and accessible on your network."
-          horizAlign="center"
-          font="font:SmallSystemFont"
-          color="0xFFFFFF60"
-          height="30"
-          width="1920" />
-        <Text
-          text="Use the remote to navigate and press OK to select."
-          horizAlign="center"
-          font="font:SmallSystemFont"
-          color="0xFFFFFF60"
-          height="30"
-          width="1920" />
-      </LayoutGroup>
+      <StandardButton
+        id="changeServer"
+        text="Change Server"
+        height="50"
+        width="260"
+        translation="[1090, 780]" />
+
     </Rectangle>
 
     <Animation id="hiddenUserAnimation" duration="0.5" repeat="false" easeFunction="linear">
@@ -109,7 +92,6 @@
     <field id="hideUser" type="node" alwaysNotify="true" />
     <field id="forgetUser" type="string" alwaysNotify="true" />
     <field id="changeServer" type="boolean" alwaysNotify="true" />
-    <field id="itemSelected" type="string" alwaysNotify="true" />
     <field id="itemContent" type="array" onChange="itemContentChanged" />
     <field id="hiddenUserList" type="array" onChange="onHiddenUserListChanged" />
   </interface>

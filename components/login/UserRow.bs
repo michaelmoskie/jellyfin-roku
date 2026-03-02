@@ -1,56 +1,82 @@
-import "pkg:/source/enums/ColorPalette.bs"
+import "pkg:/source/enums/KeyCode.bs"
 import "pkg:/source/utils/misc.bs"
 
 sub init()
-    m.top.itemComponentName = "UserItem"
-    m.top.content = SetData()
-    m.top.observeField("itemSelected", "SetUser")
-    m.top.showRowLabel = [false]
-    updateSize()
-    m.top.setFocus(true)
+    m.itemLayout = m.top.findNode("itemLayout")
+    m.items = []
+    m.top.observeField("focusedChild", "onFocusedChildChange")
 end sub
 
-sub updateSize()
-    itemWidth = 240
-    itemHeight = 290
-
-    m.top.visible = true
-
-    ' Size of the individual rows
-    m.top.itemSize = [1660, itemHeight]
-    ' Spacing between Rows
-    m.top.itemSpacing = [0, 40]
-
-    ' Size of items in the row (this is the focus rectangle size)
-    m.top.rowItemSize = [itemWidth, itemHeight]
-    ' Spacing between items in the row
-    m.top.rowItemSpacing = [40, 0]
+sub onFocusedChildChange()
+    if m.top.isInFocusChain()
+        if m.top.hasFocus() then updateFocus()
+    else
+        for each item in m.items
+            item.itemHasFocus = false
+        end for
+    end if
 end sub
 
+sub setData()
+    userData = m.top.itemContent
 
-function setData()
-    if m.top.itemContent = invalid
-        data = CreateObject("roSGNode", "ContentNode")
-        return data
+    m.itemLayout.removeChildrenIndex(m.itemLayout.getChildCount(), 0)
+    m.items = []
+
+    if not isValid(userData) or userData.count() = 0 then return
+
+    for each item in userData
+        userItem = m.itemLayout.createChild("UserItem")
+        userItem.itemContent = item
+        m.items.push(userItem)
+    end for
+
+    m.top.itemFocused = 0
+    updateFocus()
+end sub
+
+sub updateFocus()
+    if m.items.count() = 0 then return
+
+    focusedIndex = m.top.itemFocused
+
+    for i = 0 to m.items.count() - 1
+        m.items[i].itemHasFocus = (i = focusedIndex)
+    end for
+
+    if focusedIndex >= 0 and focusedIndex < m.items.count()
+        m.items[focusedIndex].setFocus(true)
+    end if
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+
+    if key = KeyCode.RIGHT
+        if m.top.itemFocused < m.items.count() - 1
+            m.top.itemFocused++
+            updateFocus()
+            return true
+        end if
+        return false
     end if
 
-    userData = m.top.itemContent
-    data = CreateObject("roSGNode", "ContentNode")
-    row = data.CreateChild("ContentNode")
-    for each item in userData
-        row.appendChild(item)
-    end for
-    m.top.content = data
-    updateSize()
-    return data
-end function
+    if key = KeyCode.LEFT
+        if m.top.itemFocused > 0
+            m.top.itemFocused--
+            updateFocus()
+            return true
+        end if
+        return false
+    end if
 
-sub setUser()
-    m.top.userSelected = m.top.itemContent[m.top.rowItemFocused[1]].Name
-end sub
-
-function onKeyEvent(press as boolean) as boolean
-    if not press then return false
+    if key = KeyCode.OK
+        userData = m.top.itemContent
+        if isValid(userData) and m.top.itemFocused < userData.count()
+            m.top.userSelected = userData[m.top.itemFocused].Name
+        end if
+        return true
+    end if
 
     return false
 end function

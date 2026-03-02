@@ -1,48 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <component name="UserItem" extends="Group">
   <children>
-    <Group id="scaleGroup">
-      <LayoutGroup layoutDirection="vert" translation="[20, 12]" itemSpacings="[6]">
-        <!-- Avatar -->
-        <Poster
-          id="profileImage"
-          width="200"
-          height="180"
-          loadDisplayMode="scaleToZoom" />
+    <LayoutGroup layoutDirection="vert" horizAlignment="center" translation="[10, 10]" itemSpacings="[12]">
+      <Group id="avatarContainer">
+        <Poster id="avatarRing"
+          width="164"
+          height="164"
+          uri="pkg:/images/icons/circle64.png"
+          loadDisplayMode="scaleToFit"
+          blendColor="0x6B728099" />
 
-        <!-- User Name -->
-        <Text
-          id="profileName"
-          horizAlign="center"
-          vertAlign="center"
-          font="font:MediumBoldSystemFont"
-          color="0xFFFFFFFF"
-          height="38"
-          width="200" />
+        <Poster id="avatarBg"
+          width="150"
+          height="150"
+          translation="[7, 7]"
+          uri="pkg:/images/icons/circle64.png"
+          loadDisplayMode="scaleToFit"
+          blendColor="0x1F2937FF" />
 
-        <!-- Profile Type-->
-        <Text
-          id="profileType"
-          horizAlign="center"
-          vertAlign="top"
-          font="font:SmallSystemFont"
-          color="0xFFFFFF99"
-          height="28"
-          width="200" />
-      </LayoutGroup>
+        <MaskGroup maskUri="pkg:/images/icons/circle64.png" maskSize="[150, 150]" translation="[7, 7]">
+          <Poster id="profileImage"
+            width="150"
+            height="150"
+            loadDisplayMode="scaleToZoom" />
+        </MaskGroup>
+      </Group>
 
-      <Poster
-        id="forgetUserIcon"
-        visible="false"
-        width="30"
+      <Label id="profileName"
+        horizAlign="center"
+        vertAlign="center"
+        font="font:SmallBoldSystemFont"
+        color="0xD1D5DBFF"
         height="30"
-        uri="pkg:/images/icons/cancel.png"
-        translation="[215, 5]" />
-    </Group>
+        width="180" />
+    </LayoutGroup>
   </children>
   <interface>
     <field id="itemHasFocus" type="boolean" onChange="onFocusChanged" alwaysNotify="true" />
     <field id="itemContent" type="node" onChange="itemContentChanged" />
-    <field id="drawFocusFeedback" type="boolean" value="true" />
   </interface>
 </component>

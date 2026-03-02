@@ -1,4 +1,3 @@
-import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/enums/PosterLoadStatus.bs"
 import "pkg:/source/utils/misc.bs"
 
@@ -6,8 +5,8 @@ sub init()
     m.profileImage = m.top.findNode("profileImage")
     m.profileImage.observeField("loadStatus", "onPosterLoadStatusChanged")
 
-    m.profileType = m.top.findNode("profileType")
-    m.scaleGroup = m.top.findNode("scaleGroup")
+    m.avatarRing = m.top.findNode("avatarRing")
+    m.profileName = m.top.findNode("profileName")
 end sub
 
 sub onPosterLoadStatusChanged()
@@ -21,18 +20,14 @@ sub onPosterLoadStatusChanged()
 end sub
 
 sub onFocusChanged()
-    itemData = m.top.itemContent
-    if not isValid(itemData) then return
-
-    ' Hide forget user icon for cleaner design
-    m.top.findNode("forgetUserIcon").visible = false
+    if not isValid(m.top.itemContent) then return
 
     if m.top.itemHasFocus
-        ' Update text color
-        m.profileType.color = "0xFFFFFFFF" ' Full white
+        m.avatarRing.blendColor = "0xFFFFFFFF"
+        m.profileName.color = "0xFFFFFFFF"
     else
-        ' Update text color
-        m.profileType.color = "0xFFFFFF99" ' Semi-transparent
+        m.avatarRing.blendColor = "0x6B728099"
+        m.profileName.color = "0xD1D5DBFF"
     end if
 end sub
 
@@ -40,15 +35,11 @@ sub itemContentChanged()
     itemData = m.top.itemContent
     if not isValid(itemData) then return
 
-    profileName = m.top.findNode("profileName")
-
-    m.top.findNode("profileType").text = itemData.isPublic ? tr("Public Profile") : tr("Saved Profile")
+    m.profileName.text = itemData.name
 
     if itemData.imageURL = ""
         m.profileImage.uri = "pkg:/images/baseline_person_white_48dp.png"
     else
         m.profileImage.uri = itemData.imageURL
     end if
-
-    profileName.text = itemData.name
 end sub
