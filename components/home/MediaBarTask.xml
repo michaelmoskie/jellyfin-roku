@@ -2,6 +2,7 @@
 <component name="MediaBarTask" extends="Task">
     <interface>
         <field id="userId" type="string" />
+        <field id="contentType" type="string" value="both" />
         <field id="mediaBarData" type="assocarray" />
     </interface>
 </component>

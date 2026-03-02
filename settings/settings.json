@@ -93,6 +93,27 @@
             "default": "true"
           },
           {
+            "title": "Content Type",
+            "description": "Choose which types of content appear in the Featured Media carousel.",
+            "settingName": "ui.home.mediaBarContentType",
+            "type": "radio",
+            "default": "both",
+            "options": [
+              {
+                "title": "Movies & TV Shows",
+                "id": "both"
+              },
+              {
+                "title": "Movies Only",
+                "id": "movies"
+              },
+              {
+                "title": "TV Shows Only",
+                "id": "tvshows"
+              }
+            ]
+          },
+          {
             "title": "Items Count",
             "description": "Number of items to display in the Featured Media carousel.",
             "settingName": "ui.home.featuredMediaItems",

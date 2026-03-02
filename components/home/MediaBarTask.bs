@@ -1,18 +1,70 @@
 import "pkg:/source/api/sdk.bs"
-import "pkg:/source/utils/config.bs"
+import "pkg:/source/utils/misc.bs"
 
 sub init()
     m.top.functionName = "getMediaBarData"
 end sub
 
 sub getMediaBarData()
-    m.top.mediaBarData = api.items.Get({
-        userId: m.top.userId,
-        includeItemTypes: "Movie,Series",
-        recursive: true,
-        sortBy: "Random",
-        limit: 50,
-        filters: "IsNotFolder",
-        fields: "Overview,Genres,CommunityRating,OfficialRating,ProductionYear,RunTimeTicks,ProviderIds"
-    })
+    contentType = m.top.contentType
+    if contentType = "movies"
+        allowedCollectionTypes = ["movies"]
+    else if contentType = "tvshows"
+        allowedCollectionTypes = ["tvshows"]
+    else
+        allowedCollectionTypes = ["movies", "tvshows"]
+    end if
+
+    libraryIds = getLibraryIds(allowedCollectionTypes)
+    if libraryIds.count() = 0
+        m.top.mediaBarData = { items: [] }
+        return
+    end if
+
+    allItems = []
+    for each libId in libraryIds
+        includeTypes = getIncludeTypesForLibrary(libId)
+        data = api.items.Get({
+            userId: m.top.userId,
+            parentId: libId,
+            includeItemTypes: includeTypes,
+            recursive: true,
+            sortBy: "Random",
+            hasBackdrop: true,
+            limit: 50,
+            fields: "Overview,Genres,CommunityRating,OfficialRating,ProductionYear,RunTimeTicks,ProviderIds"
+        })
+
+        items = isChainValid(data, "items") ? data.items : []
+        allItems.append(items)
+    end for
+
+    m.top.mediaBarData = { items: allItems }
 end sub
+
+function getLibraryIds(allowedTypes as object) as object
+    ids = []
+    m.libraryTypeMap = {}
+    views = api.GetUserViews({ userId: m.top.userId })
+    if not isChainValid(views, "items") then return ids
+
+    for each lib in views.items
+        collectionType = LCase(lib.LookupCI("CollectionType") ?? "")
+        if inArray(allowedTypes, collectionType)
+            ids.push(lib.id)
+            m.libraryTypeMap[lib.id] = collectionType
+        end if
+    end for
+
+    return ids
+end function
+
+function getIncludeTypesForLibrary(libId as string) as string
+    collectionType = m.libraryTypeMap[libId] ?? ""
+    if collectionType = "movies"
+        return "Movie"
+    else if collectionType = "tvshows"
+        return "Series"
+    end if
+    return "Movie,Series"
+end function
