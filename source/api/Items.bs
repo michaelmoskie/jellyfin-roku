@@ -117,7 +117,6 @@ end function
 ' Search across all libraries
 function searchMedia(query as string)
     if query <> ""
-        ' Everything except Live TV shows (but including TV Channels)
         data = api.items.Get({
             "userid": m.global.session.user.id,
             "searchTerm": query,
@@ -138,14 +137,11 @@ function searchMedia(query as string)
         })
 
         if isValid(data) and isValid(people)
-            ' we've got both regular stuff and people
             data.Items.Append(people.Items)
         else if isValid(people)
-            ' we only have people
             data = people
         end if
 
-        ' Separate query so that we can get all programs just like the Web Client
         liveTv = api.items.Get({
             "userid": m.global.session.user.id,
             "searchTerm": query,
@@ -162,32 +158,18 @@ function searchMedia(query as string)
         })
 
         if isValid(data) and isValid(liveTv)
-            ' we've got both regular stuff and live tv
             data.Items.Append(liveTv.Items)
         else if isValid(liveTv)
-            ' we only have live tv
             data = liveTv
         else if not isValid(data)
-            ' we have neither
-            return []
+            return { Items: [], TotalRecordCount: 0 }
         end if
 
         results = []
         for each item in data.Items
             tmp = CreateObject("roSGNode", "SearchData")
 
-            ' Set appropriate image based on item type
-            itemType = LCase(item.LookupCI("type"))
-            if itemType = "series"
-                ' For TV shows, use portrait poster
-                tmp.image = PosterImage(item.id)
-            else if itemType = "episode"
-                ' For episodes, use primary image (screenshot)
-                tmp.image = PosterImage(item.id)
-            else
-                ' For other items, use default poster image
-                tmp.image = PosterImage(item.id)
-            end if
+            tmp.image = PosterImage(item.id)
 
             tmp.id = item.LookupCI("id")
             tmp.title = item.LookupCI("name")
@@ -210,7 +192,7 @@ function searchMedia(query as string)
         data.Items = results
         return data
     end if
-    return []
+    return { Items: [], TotalRecordCount: 0 }
 end function
 
 ' MetaData about an item

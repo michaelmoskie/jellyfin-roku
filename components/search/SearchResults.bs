@@ -14,75 +14,84 @@ sub init()
     m.searchRow = m.top.findnode("searchRow")
     m.searchRow.focusBitmapBlendColor = ColorPalette.WHITE
     m.searchTask = CreateObject("roSGNode", "SearchTask")
-
-    ' Store SearchBox reference
     m.searchBox = m.top.findNode("SearchBox")
 
-    'set label text
+    m.debounceTimer = m.top.findNode("debounceTimer")
+    m.debounceTimer.observeFieldScoped("fire", "onDebounceTimerFire")
+    m.pendingQuery = ""
+
     m.searchHelpText = m.top.findNode("SearchHelpText")
     m.searchHelpText.text = tr("You can search for Titles, People, Live TV Channels and more")
 
     m.loadStatus = ViewLoadStatus.INIT
-
-    ' Observe searchRow's selectedItem and forward it to our selectedItem field
-    m.searchRow.observeField("selectedItem", "onSearchRowItemSelected")
-    ' Observer set up on searchRow.selectedItem
+    m.searchRow.observeFieldScoped("selectedItem", "onSearchRowItemSelected")
 end sub
 
 sub onSearchRowItemSelected()
     selectedItem = m.searchRow.selectedItem
     if isValid(selectedItem)
-        ' Check if this is a Jellyseerr result
         if selectedItem.isJellyseerrResult <> invalid and selectedItem.isJellyseerrResult = true
-            ' Open Jellyseerr details screen instead of regular Jellyfin item
             ShowJellyseerrDetailsFromSearch(selectedItem)
         else
-            ' Regular Jellyfin item - forward to normal handler
             m.top.selectedItem = selectedItem
         end if
     end if
 end sub
 
 sub ShowJellyseerrDetailsFromSearch(item as object)
-    ' Show Jellyseerr details screen for search result
     detailsScreen = CreateObject("roSGNode", "JellyseerrDetailsScreen")
     detailsScreen.mediaItem = item
-    m.top.getScene().appendChild(detailsScreen)
-    detailsScreen.setFocus(true)
+    m.global.sceneManager.callFunc("pushScene", detailsScreen)
 end sub
 
 sub searchMedias()
     query = m.top.searchAlpha
-    'if user deletes the search string hide the spinner
+
     if query.len() = 0
+        m.debounceTimer.control = "stop"
+        m.searchTask.control = "stop"
+        m.pendingQuery = ""
         stopLoadingSpinner()
+        m.searchRow.itemData = invalid
+        m.searchRow.content = CreateObject("roSGNode", "ContentNode")
+        m.searchHelpText.visible = true
+        return
     end if
-    'if search task is running and user selectes another letter stop the search and load the next letter
+
+    m.pendingQuery = query
+    m.debounceTimer.control = "stop"
+    m.debounceTimer.control = "start"
+end sub
+
+sub onDebounceTimerFire()
+    query = m.pendingQuery
+    if query = "" then return
+
     m.searchTask.control = "stop"
-    if query <> invalid and query <> ""
-        startLoadingSpinner(false)
-    end if
-    m.searchTask.observeField("results", "loadResults")
+    startLoadingSpinner(false)
+    m.searchTask.observeFieldScoped("results", "loadResults")
     m.searchTask.query = query
     m.searchTask.control = "RUN"
-
 end sub
 
 sub loadResults()
     m.searchTask.unobserveField("results")
-
     stopLoadingSpinner()
 
-    m.searchRow.itemData = m.searchTask.results
+    results = m.searchTask.results
+    if not isValid(results) then return
+
+    m.searchRow.itemData = results
     m.searchHelpText.visible = false
-    if m.searchTask.results.TotalRecordCount = 0
-        ' make sure focus is on the keyboard
+
+    if not isValidAndNotEmpty(chainLookup(results, "items"))
         if m.searchRow.isinFocusChain()
             m.searchBox.setFocus(true)
             m.top.lastFocus = m.searchBox
         end if
         return
     end if
+
     m.searchAlphabox = m.top.findnode("searchResults")
     m.searchAlphabox.translation = "[470, 85]"
 end sub
@@ -90,20 +99,15 @@ end sub
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
 
-    m.searchAlphabox = m.top.findNode("search_Key")
-    if m.searchAlphabox.textEditBox.hasFocus()
-        m.searchAlphabox.textEditBox.translation = "[0, -150]"
-    else
-        m.searchAlphabox.textEditBox.translation = "[0, 0]"
-    end if
+    hasSearchResults = isValid(m.searchRow.content) and m.searchRow.content.getChildCount() > 0
 
     ' Navigate to overhang with UP key when searchBox has focus
     if key = "up" and m.searchBox.isinFocusChain()
         return FocusOverhang(m.top)
     end if
 
+    ' Move focus from search results back to keyboard
     if (key = "left" or key = "up") and m.searchRow.isinFocusChain()
-        ' Set focus on the keyboard within the searchBox, not just the searchBox container
         keyboard = m.searchBox.findNode("search_Key")
         if isValid(keyboard)
             keyboard.setFocus(true)
@@ -113,28 +117,24 @@ function onKeyEvent(key as string, press as boolean) as boolean
             m.top.lastFocus = m.searchBox
         end if
         return true
-    else if (key = "right" or key = "down") and m.searchBox.isinFocusChain() and m.searchRow.content <> invalid and m.searchRow.content.getChildCount() > 0
+    end if
+
+    ' Move focus from keyboard to search results
+    if (key = "right" or key = "down") and m.searchBox.isinFocusChain() and hasSearchResults
         m.searchRow.setFocus(true)
         m.top.lastFocus = m.searchRow
         return true
-    else if key = "right" and m.searchRow.content <> invalid and m.searchRow.content.getChildCount() > 0
-        m.searchRow.setFocus(true)
-        m.top.lastFocus = m.searchRow
-        return true
-    else if key = "play" and m.searchRow.isinFocusChain() and m.searchRow.rowItemFocused.count() > 0
-        if m.searchRow.rowItemFocused <> invalid
-            selectedContent = m.searchRow.content.getChild(m.searchRow.rowItemFocused[0])
-            if selectedContent <> invalid
-                selectedItem = selectedContent.getChild(m.searchRow.rowItemFocused[1])
-                if selectedItem <> invalid
-                    m.top.quickPlayNode = selectedItem
-                    return true
-                end if
-            end if
+    end if
+
+    if key = "play" and m.searchRow.isinFocusChain() and isValidAndNotEmpty(m.searchRow.rowItemFocused)
+        focusedItem = getItemFocused()
+        if isValid(focusedItem)
+            m.top.quickPlayNode = focusedItem
+            return true
         end if
     end if
-    return false
 
+    return false
 end function
 
 function getItemFocused() as object
@@ -148,13 +148,11 @@ function getItemFocused() as object
 end function
 
 sub OnScreenShown(_isReturning = false as boolean)
-    ' Temporarily unobserve selectedItem to prevent triggering navigation when restoring focus
-    m.searchRow.unobserveField("selectedItem")
+    m.searchRow.unobserveFieldScoped("selectedItem")
 
     if isValid(m.top.lastFocus)
         m.top.lastFocus.setFocus(true)
     else
-        ' Default to focusing the SearchBox keyboard
         if isValid(m.searchBox)
             m.searchBox.visible = true
             keyboard = m.searchBox.findNode("search_Key")
@@ -171,10 +169,7 @@ sub OnScreenShown(_isReturning = false as boolean)
         end if
     end if
 
-    ' Re-observe selectedItem after focus is restored
-    m.searchRow.observeField("selectedItem", "onSearchRowItemSelected")
-
-    ' Clear selectedItem after re-observing to prevent triggering navigation
+    m.searchRow.observeFieldScoped("selectedItem", "onSearchRowItemSelected")
     m.top.selectedItem = invalid
 
     if isStringEqual(m.loadStatus, ViewLoadStatus.INIT)
@@ -182,24 +177,21 @@ sub OnScreenShown(_isReturning = false as boolean)
         return
     end if
 
-    ' Skip metadata loading when returning from detail screens
     if _isReturning then return
 
     focusedItem = getItemFocused()
 
     if not isValid(focusedItem) then return
 
-    ' Only refresh meta data for specific item types
     if not inArray([ItemType.EPISODE, ItemType.MOVIE, ItemType.SEASON, ItemType.SERIES, ItemType.VIDEO, ItemType.MUSICVIDEO, ItemType.RECORDING, ItemType.BOXSET], focusedItem.LookupCI("type")) then return
 
     m.loadItemsTask1.itemId = focusedItem.LookupCI("id")
-    m.loadItemsTask1.observeField("content", "onItemDataLoaded")
+    m.loadItemsTask1.observeFieldScoped("content", "onItemDataLoaded")
     m.loadItemsTask1.itemsToLoad = "metaData"
     m.loadItemsTask1.control = TaskControl.RUN
 end sub
 
 sub OnScreenHidden()
-    ' Save the currently focused element before leaving
     if m.searchRow.hasFocus() or m.searchRow.isinFocusChain()
         m.top.lastFocus = m.searchRow
     else if m.searchBox.hasFocus() or m.searchBox.isinFocusChain()
@@ -210,7 +202,6 @@ sub OnScreenHidden()
             m.top.lastFocus = m.searchBox
         end if
     else
-        ' Save whatever currently has focus
         scene = m.top.getScene()
         if isValid(scene) and isValid(scene.focusedChild)
             m.top.lastFocus = scene.focusedChild

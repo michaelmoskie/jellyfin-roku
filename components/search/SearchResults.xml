@@ -18,13 +18,13 @@
         drawFocusFeedback="true"
         focusBitmapUri="pkg:/images/hd_focus.9.png"
         numRows="2"
-        rowSize="3"
         showRowLabel="[true]"
         showRowCounter="[true]"
         rowLabelOffset="[[0, 10]]"
         focusable="true" />
     </LayoutGroup>
     <OptionsSlider id="options" />
+    <Timer id="debounceTimer" duration="0.35" repeat="false" />
   </children>
   <interface>
     <field id="query" type="string" alwaysNotify="true" />

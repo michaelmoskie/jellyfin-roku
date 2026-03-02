@@ -3,5 +3,6 @@
   <interface>
     <field id="itemData" type="assocarray" onChange="getData" />
     <field id="selectedItem" type="node" alwaysNotify="true" />
+    <field id="showItemTitles" type="string" value="showalways" />
   </interface>
 </component>

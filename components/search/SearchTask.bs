@@ -15,31 +15,20 @@ sub search()
         return
     end if
 
-    ' Get all server sessions if multi-server is enabled
     allSessions = []
 
     if m.top.enableMultiServer and isMultiServerEnabled()
         allSessions = getAllServerSessions()
     end if
 
-    ' If no sessions found or multi-server disabled, fall back to single server search
     if allSessions.Count() = 0
         results = searchMedia(m.top.query)
 
-        ' Try to get Jellyseerr results if enabled
-        config = GetJellyseerrConfig()
-        if config <> invalid and config.enabled = true
-            jellyseerrResults = SearchJellyseerr(m.top.query)
-            if jellyseerrResults <> invalid and jellyseerrResults.Count() > 0
-                if results = invalid or results.Items = invalid
-                    results = { Items: [], TotalRecordCount: 0 }
-                end if
-                for each jellyseerrItem in jellyseerrResults
-                    results.Items.push(jellyseerrItem)
-                end for
-            end if
+        if not isValid(results) or type(results) = "roArray"
+            results = { Items: [], TotalRecordCount: 0 }
         end if
 
+        appendJellyseerrResults(results, m.top.query)
         m.top.results = results
         return
     end if
@@ -51,14 +40,12 @@ sub search()
     totalCount = 0
 
     for each userSession in allSessions
-        ' Items request
         itemsInfo = startSearchRequest(userSession, port, "items")
         if isValid(itemsInfo)
             activeRequests[itemsInfo.id] = { session: userSession, type: "items" }
             requestObjects[itemsInfo.id] = itemsInfo.request
         end if
 
-        ' Persons request
         personsInfo = startSearchRequest(userSession, port, "persons")
         if isValid(personsInfo)
             activeRequests[personsInfo.id] = { session: userSession, type: "persons" }
@@ -71,7 +58,6 @@ sub search()
     while activeRequests.Count() > 0
         msg = wait(500, port)
 
-        ' Check timeout
         currentTime = CreateObject("roDateTime").AsSeconds()
         if currentTime - startTime > 10
             exit while
@@ -95,7 +81,6 @@ sub search()
                     data = ParseJson(responseBody)
 
                     if isValid(data) and isChainValid(data, "Items")
-                        ' Transform items to SearchData nodes
                         for each item in data.Items
                             searchNode = transformToSearchData(item, userSession)
                             if isValid(searchNode)
@@ -109,20 +94,25 @@ sub search()
         end if
     end while
 
-    config = GetJellyseerrConfig()
-    if config <> invalid and config.enabled = true
-        jellyseerrResults = SearchJellyseerr(m.top.query)
-        if jellyseerrResults <> invalid and jellyseerrResults.Count() > 0
-            for each jellyseerrItem in jellyseerrResults
-                allItems.push(jellyseerrItem)
-            end for
-        end if
-    end if
-
-    m.top.results = {
+    results = {
         Items: allItems,
         TotalRecordCount: totalCount
     }
+
+    appendJellyseerrResults(results, m.top.query)
+    m.top.results = results
+end sub
+
+sub appendJellyseerrResults(results as object, query as string)
+    config = GetJellyseerrConfig()
+    if config = invalid or config.enabled <> true then return
+
+    jellyseerrResults = SearchJellyseerr(query)
+    if not isValidAndNotEmpty(jellyseerrResults) then return
+
+    for each jellyseerrItem in jellyseerrResults
+        results.Items.push(jellyseerrItem)
+    end for
 end sub
 
 function startSearchRequest(userSession as object, port as object, searchType as string) as object
@@ -181,7 +171,6 @@ function transformToSearchData(item as object, userSession as object) as object
     item._authToken = userSession.authToken
     item._serverName = userSession.serverName
 
-    ' Build image node for multi-server items
     if isValidAndNotEmpty(item.Id) and isValidAndNotEmpty(userSession.serverUrl)
         imgParams = { maxWidth: 300, quality: 90 }
         if isValid(item.ImageTags) and isValidAndNotEmpty(item.ImageTags.Primary)
