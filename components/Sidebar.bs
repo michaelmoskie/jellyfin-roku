@@ -616,7 +616,7 @@ sub applyOverlaySettings()
         opacitySetting = m.global.session.user.settings["ui.overlayOpacity"]
         if isValid(opacitySetting)
             opacity = opacitySetting.toFloat()
-            if opacity < 0.5 then opacity = 0.5
+            if opacity < 0.6 then opacity = 0.6
         end if
     end if
 

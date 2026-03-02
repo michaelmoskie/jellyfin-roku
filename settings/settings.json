@@ -196,7 +196,7 @@
             "description": "Set the opacity for all UI overlays (media bar, navigation bar, sidebar).",
             "settingName": "ui.overlayOpacity",
             "type": "radio",
-            "default": "0.5",
+            "default": "0.7",
             "options": [
               {
                 "title": "10%",
