@@ -324,9 +324,12 @@ sub handleHideAction(resume as boolean)
     m.previewPos = m.top.position
 end sub
 
-' handleChapterListAction: Handles action to show chapter list
-'
 sub handleChapterListAction()
+    if not isValidAndNotEmpty(m.chapters)
+        m.osd.showChapterList = false
+        return
+    end if
+
     m.chapterList.visible = m.osd.showChapterList
 
     if not m.chapterList.visible then return

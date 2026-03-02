@@ -97,11 +97,7 @@
         width="100" />
     </Rectangle>
 
-    <Timer id="fastForwardOrRewindTimer" repeat="true" duration="0.3" />
-    <Timer id="spinnerPercentTimer" repeat="true" duration="0.15" />
-    <Timer id="leftTenSecondSkipTimer" repeat="true" duration="0.5" />
-    <Timer id="rightTenSecondSkipTimer" repeat="true" duration="0.5" />
-
-    <Label id="spinnerPercent" text="0%" visible="false" horizAlign="center" vertAlign="center" height="100" width="100" font="font:SmallBoldSystemFont" />
+    <AudioSelector id="audioSelector" visible="false" />
+    <SubtitleSelector id="subtitleSelector" visible="false" />
   </children>
 </component>
