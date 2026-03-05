@@ -376,15 +376,13 @@ sub handleVideoPlayPauseAction()
     m.top.control = VideoControl.PAUSE
 end sub
 
-' handleShowSubtitleMenuAction: Handles action to show subtitle selection menu
-'
 sub handleShowSubtitleMenuAction()
+    handleHideAction(false)
     m.top.selectSubtitlePressed = true
 end sub
 
-' handleShowAudioMenuAction: Handles action to show audio selection menu
-'
 sub handleShowAudioMenuAction()
+    handleHideAction(false)
     m.top.selectAudioPressed = true
 end sub
 
