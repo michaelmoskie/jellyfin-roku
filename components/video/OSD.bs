@@ -253,10 +253,9 @@ sub onNextItemTitleTextChanged()
     m.nextItem.text = m.top.nextItemTitleText
 end sub
 
-' resetFocusToDefaultButton: Reset focus back to the default button
+' clearAllButtonFocus: Remove focus from all button groups
 '
-sub resetFocusToDefaultButton()
-    ' Remove focus from all buttons
+sub clearAllButtonFocus()
     for each child in m.videoControls.getChildren(-1, 0)
         if isValid(child.focus)
             child.focus = false
@@ -269,14 +268,37 @@ sub resetFocusToDefaultButton()
         end if
     end for
 
-    ' Set focus to seekbar
     m.videoControls.setFocus(false)
     m.optionControls.setFocus(false)
+    m.seekbarGroup.setFocus(false)
+    m.isSeeking = false
+end sub
+
+sub focusOnSeekbar()
+    clearAllButtonFocus()
     m.currentButtonGroup = "seekbar"
     m.focusedButtonIndex = 0
     m.seekbarGroup.setFocus(true)
-    m.progressIndicator.blendColor = "0xFFFFFFFF"
-    m.isSeeking = false
+end sub
+
+sub focusOnVideoControls()
+    clearAllButtonFocus()
+    m.currentButtonGroup = "video"
+    m.focusedButtonIndex = m.defaultButtonIndex
+    m.videoControls.buttonFocused = m.focusedButtonIndex
+    focusedButton = m.videoControls.getChild(m.focusedButtonIndex)
+    if isValid(focusedButton) and isValid(focusedButton.focus)
+        focusedButton.focus = true
+    end if
+    m.videoControls.setFocus(true)
+end sub
+
+sub resetFocusToDefaultButton()
+    if m.top.focusTarget = "video"
+        focusOnVideoControls()
+    else
+        focusOnSeekbar()
+    end if
 end sub
 
 ' onVisibleChanged: Handler for changes to the visibility of this menu.
@@ -304,9 +326,7 @@ sub onFocusChanged()
         else if m.currentButtonGroup = "video"
             m.videoControls.setFocus(true)
         else
-            ' Default to seekbar
             m.seekbarGroup.setFocus(true)
-            m.progressIndicator.blendColor = "0xFFFFFFFF"
         end if
     end if
 end sub

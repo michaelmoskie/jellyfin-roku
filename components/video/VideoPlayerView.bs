@@ -1834,12 +1834,16 @@ sub onProgramDetailsLoaded()
     m.overview = m.LoadProgramDetailsTask.programDetails.json.CurrentProgram.Overview
 end sub
 
-' showOSD: Show the OSD and set focus to the appropriate element based on whichfocus parameter
-'
-' @param {string} whichfocus - indicates which element should be focused when showing the OSD. Accepts "videoControls" or "progressBar"
-sub showOSD(whichfocus as string)
-    hideNextItem() ' Hide next up info display when OSD is visible
-    setVideoEndingTime()
+sub prepareOSD()
+    setSiblingData()
+    if m.skipSegmentButton.visible
+        hideSegmentSkipButton()
+    end if
+    refreshLiveOSDContent()
+end sub
+
+sub showOSD(focusTarget = "seekbar" as string)
+    m.osd.focusTarget = focusTarget
     m.osd.visible = true
     m.osd.hasFocus = true
     if whichfocus = "videoControls"
@@ -1857,7 +1861,6 @@ sub showOSD(whichfocus as string)
     m.skipSegmentButton.focus = false
     m.scrubberOldPosition.visible = true
     m.osd.setFocus(true)
-    ' Show dark overlay when OSD is visible
     m.pauseOverlay.visible = true
 end sub
 
@@ -2065,7 +2068,21 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if not press then return false
 
-    ' Handle LEFT/RIGHT for seeking when OSD is hidden
+    ' Handle rewind/fast forward/replay remote buttons
+    if key = KeyCode.REWIND or key = KeyCode.FASTFORWRD or key = KeyCode.REPLAY
+        if not m.top.trickPlayBar.visible
+            if not stateAllowsOSD() then return true
+
+            if key = KeyCode.FASTFORWRD
+                handleFastForwardAction()
+            else
+                handleRewindAction()
+            end if
+
+            return true
+        end if
+    end if
+
     if key = KeyCode.LEFT or key = KeyCode.RIGHT
         if not m.osd.visible and not m.top.trickPlayBar.visible
             if not stateAllowsOSD() then return true
@@ -2080,13 +2097,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
             if newPosition > totalTime then newPosition = totalTime
 
             m.top.seek = newPosition
-
-            setSiblingData()
-            if m.skipSegmentButton.visible
-                hideSegmentSkipButton()
-            end if
-            refreshLiveOSDContent()
-            showOSD()
+            prepareOSD()
+            showOSD("seekbar")
 
             return true
         end if
@@ -2094,96 +2106,56 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if key = KeyCode.DOWN and not m.top.trickPlayBar.visible
         if not m.LoadMetaDataTask.isIntro
-            ' Don't allow user to open menu prior to video loading
             if not stateAllowsOSD() then return true
-            if not m.osd.visible
-                showOSD("progressBar")
-            else
-                m.osd.callFunc("setOsdStatus", "progressBarGroup")
-            end if
-            handleSeekKey(key)
-        end if
-        return true
-    end if
 
-    ' Skip back 10 seconds on replay key press, but only if not currently seeking as it would interfere with seek controls
-    if key = KeyCode.REPLAY
-        if not m.osd.isSeeking
-            m.top.seek = m.top.position - 10
-        end if
-        return true
-    end if
-
-    ' Handle remaining keypresses for when we are not currently seeking.
-    if not m.osd.isSeeking
-        if key = KeyCode.DOWN or key = KeyCode.UP
-            if not m.LoadMetaDataTask.isIntro
-                ' Don't allow user to open menu prior to video loading
-                if not stateAllowsOSD() then return true
-
-                setSiblingData()
-                refreshLiveOSDContent()
-                showOSD("videoControls")
-                return true
-            end if
-
-        else if key = KeyCode.OK
-            if not m.LoadMetaDataTask.isIntro
-                ' Don't allow user to open menu prior to video loading
-                if not stateAllowsOSD() then return true
-
-                ' Show OSD, but don't pause video
-                setSiblingData()
-                if m.skipSegmentButton.visible
-                    hideSegmentSkipButton()
-                end if
-                refreshLiveOSDContent()
-                showOSD("videoControls")
-                return true
-            end if
-
-            return false
+            prepareOSD()
+            showOSD("seekbar")
+            return true
         end if
 
-        ' Disable OSD for intro videos
+    else if key = KeyCode.UP and not m.top.trickPlayBar.visible
         if not m.LoadMetaDataTask.isIntro
-            if key = KeyCode.PLAY
+            if not stateAllowsOSD() then return true
 
-                ' Don't allow user to open menu prior to video loading
-                if not stateAllowsOSD() then return true
+            prepareOSD()
+            showOSD("video")
+            return true
+        end if
 
-                ' If video is paused, resume it and don't show OSD
-                if m.top.state = "paused"
-                    m.top.control = VideoControl.RESUME
-                    return true
-                end if
+    else if key = KeyCode.OK and not m.top.trickPlayBar.visible
+        if not m.LoadMetaDataTask.isIntro
+            if not stateAllowsOSD() then return true
 
-                ' Pause video and show OSD
-                m.top.control = VideoControl.PAUSE
-                setSiblingData()
-                if m.skipSegmentButton.visible
-                    hideSegmentSkipButton()
-                end if
-                refreshLiveOSDContent()
-                showOSD("videoControls")
+            prepareOSD()
+            showOSD()
+            return true
+        end if
+
+        return false
+    end if
+
+    if not m.LoadMetaDataTask.isIntro
+        if key = KeyCode.PLAY and not m.top.trickPlayBar.visible
+            if not stateAllowsOSD() then return true
+
+            if m.top.state = "paused"
+                m.top.control = VideoControl.RESUME
                 return true
             end if
+
+            m.top.control = VideoControl.PAUSE
+            prepareOSD()
+            showOSD()
+            return true
         end if
     end if
 
-    if key = KeyCode.BACK and m.osd.visible
-        handleHideAction(true)
-        return true
-    end if
-
-    if key = KeyCode.BACK and not m.osd.isSeeking
-        ' If user presses back when any segment skip button is showing and the OSD is hidden, then hide button and disable it so it doesn't show again
-        if m.skipSegmentButton.visible and not m.osd.visible
+    if key = KeyCode.BACK
+        if m.skipSegmentButton.visible
             if isValid(m.currentSegmentType)
                 m.mediaSegmentDismissed[m.currentSegmentType] = true
             end if
             hideSegmentSkipButton()
-            return true
         end if
 
         m.PreloadTrickplayImagesTask.method = "REMOVE"
