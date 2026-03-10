@@ -402,6 +402,7 @@ sub onUpdateAvailableEvent(msg as object)
         dialog.observeField("wasClosed", m.port)
 
         m.scene.appendChild(dialog)
+        dialog.findNode("buttonList").setFocus(true)
         m.updateDialog = dialog
     end if
 end sub
