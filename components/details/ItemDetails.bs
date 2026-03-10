@@ -1058,8 +1058,8 @@ sub layoutContainer()
     ' 3.5. MDBList ratings row (plugin)
     ratingsRow = m.top.findNode("ratingsRow")
     if isValid(ratingsRow) and ratingsRow.visible
-        ratingsRow.translation = [0, yPos]
-        yPos += 30 + vertSpacing
+        ratingsRow.translation = [0, yPos - 5]
+        yPos += 25 + vertSpacing
     end if
 
     ' 4. Tagline

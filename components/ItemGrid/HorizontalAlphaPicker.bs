@@ -1,13 +1,9 @@
-import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/enums/KeyCode.bs"
 import "pkg:/source/utils/misc.bs"
 
 sub init()
     m.alphaGrid = m.top.findNode("alphaGrid")
     m.alphaContent = m.top.findNode("alphaContent")
-
-    m.alphaGrid.focusBitmapBlendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
-    m.alphaGrid.focusFootprintBlendColor = ColorPalette.TRANSPARENT
 
     m.alphaGrid.observeField("itemSelected", "onItemSelected")
 end sub

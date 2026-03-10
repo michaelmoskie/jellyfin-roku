@@ -294,8 +294,11 @@ sub loadInitialItems()
             m.view = "presentation"
         end if
     end if
-    if not isValid(m.sortAscending) then m.sortAscending = true
-    if not isStringEqual(type(m.sortAscending), "roBoolean") then m.sortAscending = true
+    if not isValid(m.sortAscending)
+        m.sortAscending = true
+    else if not isStringEqual(type(m.sortAscending), "roBoolean")
+        m.sortAscending = isStringEqual(m.sortAscending, "true")
+    end if
 
     ' If we're in genre browse mode, force view to presentation (never "Genres")
     if isValid(m.top.genreFilter)
@@ -746,7 +749,7 @@ function setPhotoOptions() as object
 
     options.filter = [
         { "Title": tr("All"), "Name": "All" },
-        { "Title": tr("Favorites"), "Name": "Favorites" }
+        { "Title": tr("Favorites"), "Name": "Favorites" },
         { "Title": tr("Item Type"), "Name": "includeItemTypes", "Options": ["Photo", "Photo Album", "Video"], "Delimiter": ",", "CheckedState": [] }
     ]
 
@@ -908,6 +911,8 @@ sub setSelectedOptions(options)
 
         end if
     end for
+
+    options.sortAscending = m.sortAscending
 
     m.options.options = options
 end sub
@@ -1408,10 +1413,16 @@ sub onOptionsVisibleChange()
     end if
 
     ' Check if sort changed
-    if isValidAndNotEmpty(m.options.selectedSort) and not isStringEqual(m.options.selectedSort, m.sortField)
-        m.sortField = m.options.selectedSort
-        m.sortAscending = true
-        set_user_setting("display." + m.top.parentItem.Id + ".sortField", m.sortField)
+    sortChanged = isValidAndNotEmpty(m.options.selectedSort) and not isStringEqual(m.options.selectedSort, m.sortField)
+    ascendingChanged = m.options.sortAscending <> m.sortAscending
+
+    if sortChanged or ascendingChanged
+        if sortChanged
+            m.sortField = m.options.selectedSort
+            set_user_setting("display." + m.top.parentItem.Id + ".sortField", m.sortField)
+        end if
+        m.sortAscending = m.options.sortAscending
+        set_user_setting("display." + m.top.parentItem.Id + ".sortAscending", m.sortAscending ? "true" : "false")
         reload = true
     end if
 
@@ -1696,6 +1707,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
         end if
 
         if isStringEqual(key, KeyCode.BACK)
+            gridComponent = m.itemGrid.isinFocusChain() ? m.itemGrid : m.genreGrid
+            if gridComponent.itemFocused >= gridComponent.numColumns
+                gridComponent.jumpToItem = 0
+                return true
+            end if
             reclaimResources()
             m.global.sceneManager.callfunc("popScene")
             return true

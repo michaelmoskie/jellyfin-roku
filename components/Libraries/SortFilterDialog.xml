@@ -44,12 +44,24 @@
                 focusFootprintBitmapUri=""
                 itemSize="[440, 56]"
                 itemSpacing="[0, 6]" />
+
+            <!-- Sub-filter options (replaces filter list for multi-select filters) -->
+            <Text id="subFilterLabel" text="" translation="[1060, 140]"
+                font="font:SmallBoldSystemFont" color="#888888" visible="false" />
+            <CheckList id="subFilterMenu"
+                translation="[1060, 180]"
+                numRows="10"
+                focusFootprintBitmapUri=""
+                itemSize="[440, 56]"
+                itemSpacing="[0, 6]"
+                visible="false" />
         </Group>
     </children>
     <interface>
         <field id="options" type="assocarray" onChange="optionsSet" />
         <field id="selectedView" type="string" value="" />
         <field id="selectedSort" type="string" value="" />
+        <field id="sortAscending" type="boolean" value="true" />
         <field id="filter" type="string" value="" />
         <field id="filterOptions" type="assocarray" value="{}" />
     </interface>

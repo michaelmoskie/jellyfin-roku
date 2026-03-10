@@ -7,9 +7,9 @@
             numRows="1"
             numColumns="28"
             itemSize="[40, 30]"
-            itemSpacing="[2, 0]"
+            itemSpacing="[10, 0]"
             drawFocusFeedback="true"
-            focusBitmapUri="pkg:/images/white.png"
+            focusBitmapUri="pkg:/images/hd_focus.9.png"
             focusFootprintBitmapUri=""
             vertFocusAnimationStyle="fixed"
         >

@@ -44,7 +44,7 @@
       background="0x00000000" focusBackground="#555555" />
 
     <!-- Horizontal alpha picker on the right -->
-    <HorizontalAlphaPicker id="alphaPicker" translation="[660, 137]" />
+    <HorizontalAlphaPicker id="alphaPicker" translation="[280, 137]" />
 
     <!-- Main item grid -->
     <MarkupGrid
