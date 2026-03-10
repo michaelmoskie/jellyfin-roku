@@ -209,18 +209,12 @@ sub redrawItems()
         posterOrientation = chainLookupReturn(m.global, "session.user.settings.libraryPosterOrientation", ImageLayout.DEFAULT)
     end if
 
-    if isStringEqual(posterOrientation, ImageLayout.DEFAULT)
-        if inArray([ItemType.PHOTO, ItemType.PHOTOALBUM, ItemType.MUSICVIDEO, ItemType.MYLIST, ItemType.FOLDER], m.top.mediaType)
-            setColumnSizes(ImageLayout.LANDSCAPE)
-        else if isStringEqual(m.view, "Episodes")
-            setColumnSizes(ImageLayout.LANDSCAPE)
-        else if isStringEqual(m.view, "Albums") or isStringEqual(m.top.mediaType, ItemType.PLAYLIST)
-            setColumnSizes(ImageLayout.SQUARE)
-        else
-            setColumnSizes(ImageLayout.PORTRAIT)
-        end if
+    if inArray([ItemType.PHOTO, ItemType.PHOTOALBUM, ItemType.MUSICVIDEO, ItemType.MYLIST, ItemType.FOLDER], m.top.mediaType) or isStringEqual(m.view, "Episodes")
+        setColumnSizes(ImageLayout.LANDSCAPE)
     else if isStringEqual(m.view, "Albums") or isStringEqual(m.top.mediaType, ItemType.PLAYLIST)
         setColumnSizes(ImageLayout.SQUARE)
+    else if isStringEqual(posterOrientation, ImageLayout.DEFAULT)
+        setColumnSizes(ImageLayout.PORTRAIT)
     else
         setColumnSizes(posterOrientation)
     end if
@@ -513,19 +507,12 @@ sub loadInitialItems()
         posterOrientation = chainLookupReturn(m.global, "session.user.settings.libraryPosterOrientation", ImageLayout.DEFAULT)
     end if
 
-    if isStringEqual(posterOrientation, ImageLayout.DEFAULT)
-        if inArray([ItemType.PHOTO, ItemType.PHOTOALBUM, ItemType.MUSICVIDEO, ItemType.MYLIST, ItemType.FOLDER], m.top.mediaType)
-            setColumnSizes(ImageLayout.LANDSCAPE)
-        else if isStringEqual(m.view, "Episodes")
-            setColumnSizes(ImageLayout.LANDSCAPE)
-        else if isStringEqual(m.view, "Albums") or isStringEqual(m.top.mediaType, ItemType.PLAYLIST)
-            setColumnSizes(ImageLayout.SQUARE)
-        else
-            setColumnSizes(ImageLayout.PORTRAIT)
-        end if
+    if inArray([ItemType.PHOTO, ItemType.PHOTOALBUM, ItemType.MUSICVIDEO, ItemType.MYLIST, ItemType.FOLDER], m.top.mediaType) or isStringEqual(m.view, "Episodes")
+        setColumnSizes(ImageLayout.LANDSCAPE)
     else if isStringEqual(m.view, "Albums") or isStringEqual(m.top.mediaType, ItemType.PLAYLIST)
-        ' Albums and playlists always use square layout regardless of user orientation setting
         setColumnSizes(ImageLayout.SQUARE)
+    else if isStringEqual(posterOrientation, ImageLayout.DEFAULT)
+        setColumnSizes(ImageLayout.PORTRAIT)
     else
         setColumnSizes(posterOrientation)
     end if
