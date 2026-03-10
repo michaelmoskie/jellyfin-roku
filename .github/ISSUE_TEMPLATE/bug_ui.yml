@@ -1,0 +1,62 @@
+name: "Bug: UI"
+description: Report a UI/UX issue (navigation, screens, layout, focus, etc.)
+title: "[UI] "
+labels: ["bug", "ui"]
+body:
+  - type: input
+    id: app_version
+    attributes:
+      label: Moonfin version
+      description: The app version / release tag (e.g., v1.4.0)
+      placeholder: v1.4.0
+    validations:
+      required: true
+
+  - type: input
+    id: roku_model
+    attributes:
+      label: Roku device model
+      description: "Example: Roku Ultra 4802, TCL 55S535, Hisense R6 Series"
+      placeholder: e.g. Roku Ultra 4802
+    validations:
+      required: true
+
+  - type: input
+    id: roku_version
+    attributes:
+      label: Roku OS version
+      description: "Found in Settings > System > About (e.g., 12.5.0)"
+      placeholder: e.g. 12.5.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: screen
+    attributes:
+      label: Where does it happen?
+      options:
+        - Login
+        - Home
+        - Details page
+        - Settings
+        - Search
+        - Jellyseerr
+        - Player UI (controls/OSD)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / photos (optional)
+      description: Attach a photo of the TV screen if it helps.
+    validations:
+      required: false
