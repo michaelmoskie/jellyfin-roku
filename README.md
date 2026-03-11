@@ -4,7 +4,7 @@
 ---
 
 <p align="center">
-   <img width="4305" height="2659" alt="splash-background" src="https://github.com/user-attachments/assets/8618363e-d982-4828-8274-a2c3c7623ddb" />
+   <img width="4305" height="2659" alt="splash-background" src="https://github.com/user-attachments/assets/c30a3464-6b56-4eef-b1fc-bcc9ca8caddd" />
 </p>
 
 [![License](https://img.shields.io/github/license/Moonfin-Client/Roku)](LICENSE)

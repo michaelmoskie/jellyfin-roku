@@ -1,0 +1,34 @@
+[
+    {
+        "description": "Fixed OSD controls: fast forward, rewind, left/right seeking, and remaining time display",
+        "author": ""
+    },
+    {
+        "description": "Fixed subtitle and audio selectors locking the screen during playback",
+        "author": ""
+    },
+    {
+        "description": "Fixed pre-playback subtitle selection not being applied",
+        "author": ""
+    },
+    {
+        "description": "Fixed genre filtering not navigating to filtered library view",
+        "author": ""
+    },
+    {
+        "description": "Fixed sidebar getting stuck when pressing up on the home screen",
+        "author": ""
+    },
+    {
+        "description": "Fixed folder navigation and genre sub-folders in mixed-content libraries",
+        "author": ""
+    },
+    {
+        "description": "Fixed library grid column sizing issues",
+        "author": ""
+    },
+    {
+        "description": "Fixed sort/filter dialog and alpha picker focus handling",
+        "author": "\n\n @RadicalMuffinMan on GitHub"
+    }
+]
