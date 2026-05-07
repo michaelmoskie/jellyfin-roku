@@ -69,9 +69,7 @@ sub onQuickPlayEvent(msg)
     end if
 
     if isStringEqual(selectedItemType, ItemType.AUDIO)
-        print "[MainEventHandlers] Playing audio item"
         quickplay.audio(itemNode)
-        print "[MainEventHandlers] Calling playQueue"
         m.global.queueManager.callFunc("playQueue")
         return
     end if
@@ -658,10 +656,7 @@ sub onRefreshSeasonDetailsDataEvent()
         seasonID = chainLookupReturn(currentScene, "seasonData.id", invalid)
         if isAllValid([seasonID, seriesID])
             ' Determine if the resume button needs to be shown
-            displayResumeButton = hasResummableEpisode(seasonID)
-            if not displayResumeButton
-                displayResumeButton = hasUnplayedEpisode(seasonID)
-            end if
+            displayResumeButton = hasSeasonEpisodeToResume(seriesID, seasonID)
             currentScene.displayResumeButton = displayResumeButton
 
             episodeList = currentScene.findNode("episodeList")
@@ -1078,7 +1073,6 @@ sub onSelectedItemEvent(msg)
             end if
         else
 
-            ' TODO - switch on more node types
             stopLoadingSpinner()
             message_dialog("This type is not yet supported: " + selectedItemType)
         end if
