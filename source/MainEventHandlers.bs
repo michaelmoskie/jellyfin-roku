@@ -1390,6 +1390,14 @@ sub onSubtitleSearchButtonSelectedEvent()
     end if
 end sub
 
+sub onEditSubtitlesItemIdEvent(msg)
+    itemId = msg.getData()
+    if not isValidAndNotEmpty(itemId) then return
+
+    MainAction.onEditSubtitlesForItemId(itemId)
+    m.global.editSubtitlesItemId = ""
+end sub
+
 sub onSubtitleLanguageButtonSelectedEvent()
     languageData = {
         data: []
