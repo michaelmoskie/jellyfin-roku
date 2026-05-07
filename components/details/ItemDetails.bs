@@ -100,9 +100,15 @@ sub onShuffleEpisodeDataLoaded()
 end sub
 
 sub OnScreenShown(_isReturning = false as boolean)
-    if m.extrasGrid <> invalid and m.extrasGrid.isInFocusChain()
+    if _isReturning and isValid(m.top.lastFocus)
         m.top.lastFocus.setFocus(true)
         setLastFocus(m.top.lastFocus)
+
+        if isValid(m.extrasGrid) and m.top.lastFocus.isSameNode(m.extrasGrid)
+            scrollContentTo(-500)
+        else
+            scrollContentTo(0)
+        end if
     else
         focusFirstVisibleButton()
     end if
