@@ -1160,7 +1160,7 @@
             "description": "Select what to show in section 3. Moonfin will need to be closed and reopened for change to take effect.",
             "settingName": "homeScreenSection2",
             "type": "radio",
-            "default": "latestmedia",
+            "default": "nextup",
             "options": [
               {
                 "title": "Continue Listening",
@@ -1214,7 +1214,7 @@
             "description": "Select what to show in section 4. Moonfin will need to be closed and reopened for change to take effect.",
             "settingName": "homeScreenSection3",
             "type": "radio",
-            "default": "none",
+            "default": "latestmedia",
             "options": [
               {
                 "title": "Continue Listening",
