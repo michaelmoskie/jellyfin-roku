@@ -381,6 +381,13 @@
         "default": "false"
       },
       {
+        "title": "KefinTweaks",
+        "description": "Show rows from the KefinTweaks Jellyfin plugin.",
+        "settingName": "plugin.kefintweaks.enabled",
+        "type": "bool",
+        "default": "false"
+      },
+      {
         "title": "MDBList Ratings",
         "description": "Enable additional ratings from configured sources.",
         "children": [
@@ -1108,6 +1115,10 @@
               {
                 "title": "Home Screen Sections Plugin",
                 "id": "hss_all"
+              },
+              {
+                "title": "KefinTweaks Rows",
+                "id": "kt_all"
               }
             ]
           },
@@ -1166,6 +1177,10 @@
               {
                 "title": "Home Screen Sections Plugin",
                 "id": "hss_all"
+              },
+              {
+                "title": "KefinTweaks Rows",
+                "id": "kt_all"
               }
             ]
           },
@@ -1224,6 +1239,10 @@
               {
                 "title": "Home Screen Sections Plugin",
                 "id": "hss_all"
+              },
+              {
+                "title": "KefinTweaks Rows",
+                "id": "kt_all"
               }
             ]
           },
@@ -1282,6 +1301,10 @@
               {
                 "title": "Home Screen Sections Plugin",
                 "id": "hss_all"
+              },
+              {
+                "title": "KefinTweaks Rows",
+                "id": "kt_all"
               }
             ]
           },
@@ -1340,6 +1363,10 @@
               {
                 "title": "Home Screen Sections Plugin",
                 "id": "hss_all"
+              },
+              {
+                "title": "KefinTweaks Rows",
+                "id": "kt_all"
               }
             ]
           },
@@ -1398,6 +1425,10 @@
               {
                 "title": "Home Screen Sections Plugin",
                 "id": "hss_all"
+              },
+              {
+                "title": "KefinTweaks Rows",
+                "id": "kt_all"
               }
             ]
           },
@@ -1456,6 +1487,10 @@
               {
                 "title": "Home Screen Sections Plugin",
                 "id": "hss_all"
+              },
+              {
+                "title": "KefinTweaks Rows",
+                "id": "kt_all"
               }
             ]
           },
@@ -1514,6 +1549,10 @@
               {
                 "title": "Home Screen Sections Plugin",
                 "id": "hss_all"
+              },
+              {
+                "title": "KefinTweaks Rows",
+                "id": "kt_all"
               }
             ]
           },
