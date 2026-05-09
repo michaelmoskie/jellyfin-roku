@@ -688,9 +688,16 @@ sub OnScreenShown(_isReturning = false as boolean)
         m.mediaBar.observeField("itemSelected", "onMediaBarItemSelected")
     end if
 
-    ' Skip refresh when returning from another screen to prevent reloading data
-    if not _isReturning and not m.isFirstRun
-        refresh()
+    if not m.isFirstRun
+        needsPlaybackRefresh = chainLookupReturn(m.global, "homeNeedsRefresh", false)
+
+        if not _isReturning or needsPlaybackRefresh
+            refresh()
+        end if
+
+        if needsPlaybackRefresh
+            m.global.homeNeedsRefresh = false
+        end if
     end if
 
     ' post the device profile the first time this screen is loaded

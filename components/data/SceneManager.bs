@@ -130,6 +130,10 @@ end sub
 sub popScene()
     group = m.groups.pop()
     if isValid(group)
+        if group.isSubType("VideoPlayerView")
+            m.global.homeNeedsRefresh = true
+        end if
+
         group.visible = false
 
         if group.isSubType("JFScreen")
