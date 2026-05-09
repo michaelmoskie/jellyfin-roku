@@ -114,6 +114,69 @@
             ]
           },
           {
+            "title": "Media Bar Source",
+            "description": "Choose whether Media Bar items come from libraries or collections/playlists.",
+            "settingName": "ui.home.mediaBarSourceType",
+            "type": "radio",
+            "default": "library",
+            "options": [
+              {
+                "title": "Libraries",
+                "id": "library"
+              },
+              {
+                "title": "Collections & Playlists",
+                "id": "collection"
+              }
+            ]
+          },
+          {
+            "title": "Library Selection",
+            "description": "Choose which libraries are used when source is Libraries. Empty selection uses all libraries.",
+            "settingName": "ui.home.mediaBarLibraryIds",
+            "type": "string",
+            "default": "[]"
+          },
+          {
+            "title": "Collection / Playlist Selection",
+            "description": "Choose which collections/playlists are used when source is Collections & Playlists. Empty selection uses all collections/playlists.",
+            "settingName": "ui.home.mediaBarCollectionIds",
+            "type": "string",
+            "default": "[]"
+          },
+          {
+            "title": "Excluded Genres",
+            "description": "Exclude selected genres from Media Bar results.",
+            "settingName": "ui.home.mediaBarExcludedGenres",
+            "type": "string",
+            "default": "[]"
+          },
+          {
+            "title": "Auto-Advance Interval",
+            "description": "Time between automatic Media Bar slide changes.",
+            "settingName": "ui.home.mediaBarIntervalMs",
+            "type": "radio",
+            "default": "7000",
+            "options": [
+              {
+                "title": "3 Seconds",
+                "id": "3000"
+              },
+              {
+                "title": "5 Seconds",
+                "id": "5000"
+              },
+              {
+                "title": "7 Seconds",
+                "id": "7000"
+              },
+              {
+                "title": "10 Seconds",
+                "id": "10000"
+              }
+            ]
+          },
+          {
             "title": "Items Count",
             "description": "Number of items to display in the Featured Media carousel.",
             "settingName": "ui.home.featuredMediaItems",
@@ -131,6 +194,14 @@
               {
                 "title": "15 Items",
                 "id": "15"
+              },
+              {
+                "title": "25 Items",
+                "id": "25"
+              },
+              {
+                "title": "50 Items",
+                "id": "50"
               }
             ]
           },

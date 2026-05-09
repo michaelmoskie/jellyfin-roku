@@ -22,7 +22,6 @@ sub init()
     m.settingsMenu = m.top.findNode("settingsMenu")
     'm.settingsMenu.focusBitmapBlendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
     m.settingsMenu.focusFootprintBlendColor = ColorPalette.TRANSPARENT
-    m.settingsMenu.focusedColor = ColorPalette.WHITE
 
     m.settingDesc = m.top.findNode("settingDesc")
     m.path = m.top.findNode("path")
@@ -75,6 +74,10 @@ sub init()
 
     m.currentStringSetting = invalid
     m.stringInputDialog = invalid
+    m.mediaBarSelectorSettingName = invalid
+    m.mediaBarSelectorDialogOptions = []
+    m.mediaBarPickerTask = invalid
+    m.pendingMediaBarSettingItem = invalid
     m.hssDetected = invalid
     m.hssProbeTask = invalid
     m.ktDetected = invalid
@@ -128,6 +131,201 @@ function dynamicToDisplayString(value as dynamic) as string
     return value.ToStr()
 end function
 
+function isMediaBarMultiSelectSetting(settingName as dynamic) as boolean
+    if not isValid(settingName) then return false
+    if isStringEqual(settingName, "ui.home.mediaBarLibraryIds") then return true
+    if isStringEqual(settingName, "ui.home.mediaBarCollectionIds") then return true
+    if isStringEqual(settingName, "ui.home.mediaBarExcludedGenres") then return true
+    return false
+end function
+
+function parseStringArraySetting(value as dynamic) as object
+    if not isValid(value) then return []
+
+    valueType = type(value)
+    if valueType = "roArray" or valueType = "Array"
+        result = []
+        for each item in value
+            if isValid(item)
+                result.push(item.toStr())
+            end if
+        end for
+        return result
+    end if
+
+    parsed = ParseJson(value.toStr())
+    if type(parsed) = "roArray" or type(parsed) = "Array"
+        result = []
+        for each item in parsed
+            if isValid(item)
+                result.push(item.toStr())
+            end if
+        end for
+        return result
+    end if
+
+    return []
+end function
+
+function isStringInArray(value as string, values as object) as boolean
+    if not isValid(values) then return false
+    for each item in values
+        if isStringEqual(item.toStr(), value)
+            return true
+        end if
+    end for
+    return false
+end function
+
+function getMediaBarSelectorSummary(settingName as string, currentValue as dynamic) as string
+    selectedIds = parseStringArraySetting(currentValue)
+    selectedCount = selectedIds.Count()
+
+    if isStringEqual(settingName, "ui.home.mediaBarLibraryIds")
+        if selectedCount = 0 then return tr("All Libraries")
+        return `${selectedCount.toStr()} ${tr("selected")}`
+    end if
+
+    if isStringEqual(settingName, "ui.home.mediaBarCollectionIds")
+        if selectedCount = 0 then return tr("All Collections/Playlists")
+        return `${selectedCount.toStr()} ${tr("selected")}`
+    end if
+
+    if selectedCount = 0 then return tr("None")
+    return `${selectedCount.toStr()} ${tr("excluded")}`
+end function
+
+sub loadMediaBarPickerOptions(settingItem as object)
+    if not isValid(settingItem) then return
+
+    if isValid(m.mediaBarPickerTask)
+        m.mediaBarPickerTask.unobserveFieldScoped("options")
+        m.mediaBarPickerTask.unobserveFieldScoped("errorMessage")
+    end if
+
+    contentType = get_user_setting("ui.home.mediaBarContentType")
+    if not isValidAndNotEmpty(contentType)
+        contentType = "both"
+    end if
+
+    m.pendingMediaBarSettingItem = settingItem
+    m.mediaBarPickerTask = createObject("roSGNode", "MediaBarPickerOptionsTask")
+    m.mediaBarPickerTask.userId = m.global.session.user.id
+    m.mediaBarPickerTask.settingName = settingItem.settingName
+    m.mediaBarPickerTask.contentType = contentType
+    m.mediaBarPickerTask.observeFieldScoped("options", "onMediaBarPickerOptionsLoaded")
+    m.mediaBarPickerTask.observeFieldScoped("errorMessage", "onMediaBarPickerOptionsError")
+    m.mediaBarPickerTask.control = "RUN"
+end sub
+
+sub onMediaBarPickerOptionsLoaded(event as object)
+    options = event.getData()
+
+    if not isValid(m.pendingMediaBarSettingItem)
+        clearMediaBarPickerTask()
+        return
+    end if
+
+    showMediaBarSelectorDialog(m.pendingMediaBarSettingItem, options)
+    clearMediaBarPickerTask()
+end sub
+
+sub onMediaBarPickerOptionsError(event as object)
+    err = dynamicToDisplayString(event.getData())
+    if isValidAndNotEmpty(err)
+        ShowToast(err, "error")
+        m.settingsMenu.setFocus(true)
+    end if
+    clearMediaBarPickerTask()
+end sub
+
+sub clearMediaBarPickerTask(clearPending = true as boolean)
+    if isValid(m.mediaBarPickerTask)
+        m.mediaBarPickerTask.unobserveFieldScoped("options")
+        m.mediaBarPickerTask.unobserveFieldScoped("errorMessage")
+    end if
+
+    m.mediaBarPickerTask = invalid
+    if clearPending
+        m.pendingMediaBarSettingItem = invalid
+    end if
+end sub
+
+sub showMediaBarSelectorDialog(settingItem as object, options as object)
+    if not isValidAndNotEmpty(options)
+        ShowToast("No options available for this setting right now.", "error")
+        m.settingsMenu.setFocus(true)
+        return
+    end if
+
+    storedValue = get_user_setting(settingItem.settingName)
+    if not isValid(storedValue)
+        storedValue = chainLookupReturn(m.global.session, `user.settings.${settingItem.settingName}`, "[]")
+    end if
+    selectedIds = parseStringArraySetting(storedValue)
+
+    dialog = createObject("roSGNode", "MediaBarChecklistDialog")
+    dlgPalette = createObject("roSGNode", "RSGPalette")
+    dlgPalette.colors = {
+        DialogBackgroundColor: chainLookupReturn(m.global.session, "user.settings.colorDialogBackground", ColorPalette.ELEMENTBACKGROUND),
+        DialogFocusColor: chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT),
+        DialogFocusItemColor: chainLookupReturn(m.global.session, "user.settings.colorDialogSelectedText", ColorPalette.WHITE),
+        DialogTextColor: chainLookupReturn(m.global.session, "user.settings.colorDialogText", ColorPalette.WHITE)
+    }
+    dialog.palette = dlgPalette
+    dialog.title = tr(settingItem.title)
+    dialog.buttons = [tr("Save"), tr("Cancel")]
+    dialog.observeField("buttonSelected", "onMediaBarSelectorDialogButton")
+
+    checklist = dialog.findNode("checklist")
+    checklistContent = createObject("roSGNode", "ContentNode")
+    checkedState = []
+
+    for each option in options
+        listItem = checklistContent.CreateChild("ContentNode")
+        listItem.title = option.title
+        checkedState.push(isStringInArray(option.id, selectedIds))
+    end for
+
+    checklist.content = checklistContent
+    checklist.checkedState = checkedState
+
+    m.mediaBarSelectorSettingName = settingItem.settingName
+    m.mediaBarSelectorDialogOptions = options
+    m.top.getScene().dialog = dialog
+end sub
+
+sub onMediaBarSelectorDialogButton(event as object)
+    dialog = event.getRoSGNode()
+    buttonIndex = dialog.buttonSelected
+
+    if buttonIndex = 0 and isValidAndNotEmpty(m.mediaBarSelectorSettingName)
+        checklist = dialog.findNode("checklist")
+        checkedState = []
+        if isValid(checklist)
+            checkedState = checklist.checkedState
+        end if
+
+        selectedIds = []
+        for i = 0 to m.mediaBarSelectorDialogOptions.Count() - 1
+            if i < checkedState.Count() and checkedState[i]
+                selectedIds.push(m.mediaBarSelectorDialogOptions[i].id)
+            end if
+        end for
+
+        serialized = FormatJson(selectedIds)
+        set_user_setting(m.mediaBarSelectorSettingName, serialized)
+        syncSettingToServer(m.mediaBarSelectorSettingName, serialized)
+        refreshCurrentItemValue()
+    end if
+
+    dialog.close = true
+    m.mediaBarSelectorSettingName = invalid
+    m.mediaBarSelectorDialogOptions = []
+    hideEditingControls()
+    m.settingsMenu.setFocus(true)
+end sub
+
 function getSettingCurrentValueLabel(settingItem as dynamic) as string
     if not isValid(settingItem) then return ""
     if not isValid(settingItem.type) then return ""
@@ -136,6 +334,10 @@ function getSettingCurrentValueLabel(settingItem as dynamic) as string
     currentValue = get_user_setting(settingItem.settingName)
     if not isValid(currentValue) and isValid(m.global.session.user.settings[settingItem.settingName])
         currentValue = m.global.session.user.settings[settingItem.settingName]
+    end if
+
+    if isMediaBarMultiSelectSetting(settingItem.settingName)
+        return getMediaBarSelectorSummary(settingItem.settingName, currentValue)
     end if
 
     if isStringEqual(settingItem.type, SettingType.BOOL)
@@ -1218,6 +1420,12 @@ sub settingSelected()
 
     if isValid(selectedItem.settingName) and selectedItem.settingName = "jellyseerr.testConnection"
         testJellyseerrConnection()
+        return
+    end if
+
+    if isValid(selectedItem.settingName) and isMediaBarMultiSelectSetting(selectedItem.settingName)
+        m.settingDesc.visible = false
+        loadMediaBarPickerOptions(selectedItem)
         return
     end if
 

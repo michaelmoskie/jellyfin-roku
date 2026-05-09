@@ -135,6 +135,10 @@ sub loadMediaBarItems()
     m.mediaBarTask = createObject("roSGNode", "MediaBarTask")
     m.mediaBarTask.userId = m.global.session.user.id
     m.mediaBarTask.contentType = m.global.session.user.settings["ui.home.mediaBarContentType"] ?? "both"
+    m.mediaBarTask.sourceType = m.global.session.user.settings["ui.home.mediaBarSourceType"] ?? "library"
+    m.mediaBarTask.selectedLibraryIds = m.global.session.user.settings["ui.home.mediaBarLibraryIds"] ?? "[]"
+    m.mediaBarTask.selectedCollectionIds = m.global.session.user.settings["ui.home.mediaBarCollectionIds"] ?? "[]"
+    m.mediaBarTask.excludedGenreIds = m.global.session.user.settings["ui.home.mediaBarExcludedGenres"] ?? "[]"
     m.mediaBarTask.observeFieldScoped("mediaBarData", "onMediaBarDataLoaded")
     m.mediaBarTask.control = "RUN"
 end sub
@@ -153,7 +157,7 @@ sub onMediaBarDataLoaded(event as object)
 
     allItems = isChainValid(data, "items") ? data.items : []
 
-    ' Client-side type filter — API may not reliably exclude collection types
+    ' Client-side type filter - API may not reliably exclude collection types
     itemsWithBackdrops = []
     seenMediaBarItems = {}
     for each item in allItems
@@ -579,11 +583,22 @@ sub startAutoAdvanceTimer()
     end if
 
     m.autoAdvanceTimer = createObject("roSGNode", "Timer")
-    m.autoAdvanceTimer.duration = 7
+    m.autoAdvanceTimer.duration = getMediaBarIntervalMs() / 1000.0
     m.autoAdvanceTimer.repeat = true
     m.autoAdvanceTimer.observeFieldScoped("fire", "onAutoAdvance")
     m.autoAdvanceTimer.control = "start"
 end sub
+
+function getMediaBarIntervalMs() as integer
+    defaultMs = 7000
+    settingValue = m.global.session.user.settings["ui.home.mediaBarIntervalMs"] ?? invalid
+    if not isValid(settingValue) then return defaultMs
+
+    intervalMs = settingValue.toInt()
+    if intervalMs < 1000 then return 1000
+    if intervalMs > 60000 then return 60000
+    return intervalMs
+end function
 
 ' Auto-advance handler
 sub onAutoAdvance()

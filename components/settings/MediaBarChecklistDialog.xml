@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="MediaBarChecklistDialog" extends="StandardMessageDialog" initialFocus="checklist">
+    <children>
+        <StdDlgContentArea>
+            <CheckList
+                id="checklist"
+                numRows="8"
+                vertFocusAnimationStyle="floatingFocus"
+                checkedIconUri="pkg:/images/icons/checkboxChecked.png"
+                focusedCheckedIconUri="pkg:/images/icons/checkboxChecked.png"
+                uncheckedIconUri="pkg:/images/icons/checkboxUnchecked.png"
+                focusedUncheckedIconUri="pkg:/images/icons/checkboxUnchecked.png"
+                drawFocusFeedback="true"
+            />
+        </StdDlgContentArea>
+    </children>
+</component>

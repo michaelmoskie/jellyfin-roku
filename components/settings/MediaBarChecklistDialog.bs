@@ -1,0 +1,24 @@
+import "pkg:/source/enums/KeyCode.bs"
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.top.id = "OKDialog"
+    m.top.height = 900
+
+    m.checklist = m.top.findNode("checklist")
+    m.checklist.font.size = 30
+    m.checklist.focusedFont.size = 30
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+
+    if isStringEqual(key, KeyCode.UP)
+        if not m.checklist.isInFocusChain()
+            m.checklist.setFocus(true)
+            return true
+        end if
+    end if
+
+    return false
+end function
