@@ -761,25 +761,51 @@ function shuffleArray(array as object) as object
     return array
 end function
 
-' Format overlay color setting to a valid color string, handling SceneGraph type coercion of "0x..." to integer.
-function formatOverlayColor(colorSetting as dynamic, defaultColor as string) as string
-    if not isValid(colorSetting) then return defaultColor
+function normalizeSceneGraphColorString(colorSetting as dynamic) as dynamic
+    if not isValid(colorSetting) then return invalid
+
+    colorValue = colorSetting.toStr().Trim()
+    if colorValue = "" then return invalid
+
+    if colorValue.left(1) = "#"
+        colorValue = colorValue.mid(1)
+    else if colorValue.left(2) = "0x" or colorValue.left(2) = "0X"
+        colorValue = colorValue.mid(2)
+    end if
+
+    colorValue = UCase(colorValue)
+
+    if Len(colorValue) = 6
+        return "0x" + colorValue + "FF"
+    else if Len(colorValue) = 8
+        return "0x" + colorValue
+    end if
+
+    return invalid
+end function
+
+function formatSceneGraphColor(colorSetting as dynamic, defaultColor as string) as string
+    normalizedDefault = normalizeSceneGraphColorString(defaultColor)
+    if not isValidAndNotEmpty(normalizedDefault)
+        normalizedDefault = "0xFFFFFFFF"
+    end if
 
     colorType = Type(colorSetting)
     if colorType <> "String" and colorType <> "roString"
-        return defaultColor
+        return normalizedDefault
     end if
 
-    if colorSetting = "" then return defaultColor
-
-    if (colorSetting.left(2) = "0x" or colorSetting.left(2) = "0X") and Len(colorSetting) >= 10
-        return colorSetting
-    end if
-    if colorSetting.left(1) = "#" and Len(colorSetting) >= 9
-        return colorSetting
+    normalizedColor = normalizeSceneGraphColorString(colorSetting)
+    if isValidAndNotEmpty(normalizedColor)
+        return normalizedColor
     end if
 
-    return colorSetting + "FF"
+    return normalizedDefault
+end function
+
+' Format overlay color setting to a valid SceneGraph color string.
+function formatOverlayColor(colorSetting as dynamic, defaultColor as string) as string
+    return formatSceneGraphColor(colorSetting, defaultColor)
 end function
 
 ' convert value to boolean and return value

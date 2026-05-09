@@ -96,6 +96,9 @@ sub init()
     m.ktRowTitleByKey = {}
     m.ktRowTitles = []
     m.pendingProbeCount = 0
+    m.loadedCachedHssProbeState = false
+    m.loadedCachedKtProbeState = false
+    m.initialHomeRowsStarted = false
 end sub
 
 sub loadLibraries()
@@ -187,6 +190,83 @@ end function
 function isKtEnabled() as boolean
     return normalizeBooleanValue(get_user_setting("plugin.kefintweaks.enabled"), false)
 end function
+
+function loadCachedHssProbeState() as boolean
+    m.hssSections = []
+    m.hssSuppressedBuiltins = {}
+
+    cachedValue = get_user_setting("plugin.hss.homeCache")
+    if not isValidAndNotEmpty(cachedValue)
+        return false
+    end if
+
+    parsed = ParseJson(cachedValue)
+    if not isValid(parsed)
+        return false
+    end if
+
+    if not normalizeBooleanValue(chainLookupReturn(parsed, "loaded", false), false)
+        return false
+    end if
+
+    if normalizeBooleanValue(chainLookupReturn(parsed, "enabled", false), false)
+        cachedSections = chainLookupReturn(parsed, "sections", [])
+        if isValid(cachedSections)
+            m.hssSections = cachedSections
+        end if
+
+        cachedSuppressedBuiltins = chainLookupReturn(parsed, "suppressedBuiltins", {})
+        if isValid(cachedSuppressedBuiltins)
+            m.hssSuppressedBuiltins = cachedSuppressedBuiltins
+        end if
+    end if
+
+    return true
+end function
+
+function loadCachedKtProbeState() as boolean
+    m.ktSections = []
+
+    cachedValue = get_user_setting("plugin.kt.homeCache")
+    if not isValidAndNotEmpty(cachedValue)
+        return false
+    end if
+
+    parsed = ParseJson(cachedValue)
+    if not isValid(parsed)
+        return false
+    end if
+
+    if not normalizeBooleanValue(chainLookupReturn(parsed, "loaded", false), false)
+        return false
+    end if
+
+    if normalizeBooleanValue(chainLookupReturn(parsed, "enabled", false), false)
+        cachedSections = chainLookupReturn(parsed, "sections", [])
+        if isValid(cachedSections)
+            m.ktSections = cachedSections
+        end if
+    end if
+
+    return true
+end function
+
+sub saveHssProbeCache(enabled as boolean)
+    set_user_setting("plugin.hss.homeCache", FormatJson({
+        loaded: true,
+        enabled: enabled,
+        sections: m.hssSections,
+        suppressedBuiltins: m.hssSuppressedBuiltins
+    }))
+end sub
+
+sub saveKtProbeCache(enabled as boolean)
+    set_user_setting("plugin.kt.homeCache", FormatJson({
+        loaded: true,
+        enabled: enabled,
+        sections: m.ktSections
+    }))
+end sub
 
 function getResolvedSectionNameForMode(index as integer, useServerConfig as boolean) as string
     if useServerConfig
@@ -389,6 +469,9 @@ sub startHomeRowsLoading()
     m.hssSuppressedBuiltins = {}
     m.ktSections = []
     m.pendingProbeCount = 0
+    m.loadedCachedHssProbeState = false
+    m.loadedCachedKtProbeState = false
+    m.initialHomeRowsStarted = false
 
     if isValid(m.hssProbeTask)
         m.hssProbeTask.unobserveField("result")
@@ -402,28 +485,43 @@ sub startHomeRowsLoading()
         m.ktProbeTask = invalid
     end if
 
-    if shouldLoadHss()
+    shouldProbeHss = shouldLoadHss()
+    shouldProbeKt = shouldLoadKt()
+
+    if shouldProbeHss
+        m.loadedCachedHssProbeState = loadCachedHssProbeState()
         m.hssProbeTask = CreateObject("roSGNode", "HSSProbeTask")
+        m.hssProbeTask.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
+        m.hssProbeTask.userId = chainLookupReturn(m.global, "session.user.id", "")
+        m.hssProbeTask.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
         m.hssProbeTask.observeField("result", "onHSSProbeComplete")
         m.pendingProbeCount++
         m.hssProbeTask.control = "RUN"
     end if
 
-    if shouldLoadKt()
+    if shouldProbeKt
+        m.loadedCachedKtProbeState = loadCachedKtProbeState()
         m.ktProbeTask = CreateObject("roSGNode", "KefinTweaksProbeTask")
+        m.ktProbeTask.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
+        m.ktProbeTask.userId = chainLookupReturn(m.global, "session.user.id", "")
+        m.ktProbeTask.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
         m.ktProbeTask.observeField("result", "onKTProbeComplete")
         m.pendingProbeCount++
         m.ktProbeTask.control = "RUN"
     end if
 
-    if m.pendingProbeCount > 0
+    requiresHssProbeBeforeStartup = shouldProbeHss and not m.loadedCachedHssProbeState
+    if requiresHssProbeBeforeStartup
         return
     end if
 
+    m.initialHomeRowsStarted = true
     processUserSections()
 end sub
 
 sub onHSSProbeComplete()
+    hssEnabled = false
+
     if isValid(m.hssProbeTask)
         result = m.hssProbeTask.result
 
@@ -434,6 +532,7 @@ sub onHSSProbeComplete()
         m.hssSuppressedBuiltins = {}
 
         if isValid(result) and normalizeBooleanValue(result.enabled, false)
+            hssEnabled = true
             sections = chainLookupReturn(result, "sections", [])
             if isValidAndNotEmpty(sections)
                 m.hssSections = sections
@@ -448,16 +547,21 @@ sub onHSSProbeComplete()
         end if
     end if
 
+    saveHssProbeCache(hssEnabled)
+
     if m.pendingProbeCount > 0
         m.pendingProbeCount = m.pendingProbeCount - 1
     end if
 
-    if m.pendingProbeCount = 0
+    if not m.initialHomeRowsStarted and m.pendingProbeCount = 0
+        m.initialHomeRowsStarted = true
         processUserSections()
     end if
 end sub
 
 sub onKTProbeComplete()
+    ktEnabled = false
+
     if isValid(m.ktProbeTask)
         result = m.ktProbeTask.result
 
@@ -467,6 +571,7 @@ sub onKTProbeComplete()
         m.ktSections = []
 
         if isValid(result) and normalizeBooleanValue(result.enabled, false)
+            ktEnabled = true
             sections = chainLookupReturn(result, "sections", [])
             if isValidAndNotEmpty(sections)
                 m.ktSections = sections
@@ -474,11 +579,25 @@ sub onKTProbeComplete()
         end if
     end if
 
+    saveKtProbeCache(ktEnabled)
+
     if m.pendingProbeCount > 0
         m.pendingProbeCount = m.pendingProbeCount - 1
     end if
 
+    if m.initialHomeRowsStarted
+        cleanupKtTasks()
+        removeTrackedKtRows()
+        resetKtRowTracking()
+
+        if shouldLoadKt()
+            createKtRows()
+        end if
+        return
+    end if
+
     if m.pendingProbeCount = 0
+        m.initialHomeRowsStarted = true
         processUserSections()
     end if
 end sub
@@ -846,6 +965,9 @@ sub createHssRows()
         task.additionalData = additionalData
         task.displayText = sectionTitle
         task.sectionKey = sectionKey
+        task.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
+        task.userId = chainLookupReturn(m.global, "session.user.id", "")
+        task.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
         task.observeField("content", "onHssSectionLoaded")
         m.hssSectionTasks[sectionKey] = task
         task.control = "RUN"
@@ -898,6 +1020,9 @@ sub createKtRows()
         task.spec = sectionSpec
         task.displayText = sectionTitle
         task.sectionKey = sectionKey
+        task.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
+        task.userId = chainLookupReturn(m.global, "session.user.id", "")
+        task.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
         task.observeField("content", "onKtSectionLoaded")
         m.ktSectionTasks[sectionKey] = task
         task.control = "RUN"

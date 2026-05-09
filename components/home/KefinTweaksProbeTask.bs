@@ -7,6 +7,14 @@ sub init()
     m.top.functionName = "probeKefinTweaks"
 end sub
 
+function targetAPIRequest(path as string, params = {} as object) as dynamic
+    if not isValidAndNotEmpty(m.top.serverUrl)
+        return invalid
+    end if
+
+    return APIRequestForServer(m.top.serverUrl, m.top.userId, m.top.authToken, path, params)
+end function
+
 sub probeKefinTweaks()
     result = {
         enabled: false,
@@ -55,7 +63,7 @@ function getKefinConfigSource() as string
     ]
 
     for each endpoint in endpoints
-        req = APIRequest(endpoint)
+        req = targetAPIRequest(endpoint)
         if not isValid(req)
             continue for
         end if

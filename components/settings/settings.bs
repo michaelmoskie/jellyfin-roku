@@ -1133,6 +1133,9 @@ sub refreshHssPluginDetection()
     end if
 
     m.hssProbeTask = createObject("roSGNode", "HSSProbeTask")
+    m.hssProbeTask.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
+    m.hssProbeTask.userId = chainLookupReturn(m.global, "session.user.id", "")
+    m.hssProbeTask.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
     m.hssProbeTask.observeField("result", "onHssPluginProbeComplete")
     m.hssProbeTask.control = "RUN"
 end sub
@@ -1159,6 +1162,9 @@ sub refreshKtPluginDetection()
     end if
 
     m.ktProbeTask = createObject("roSGNode", "KefinTweaksProbeTask")
+    m.ktProbeTask.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
+    m.ktProbeTask.userId = chainLookupReturn(m.global, "session.user.id", "")
+    m.ktProbeTask.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
     m.ktProbeTask.observeField("result", "onKtPluginProbeComplete")
     m.ktProbeTask.control = "RUN"
 end sub

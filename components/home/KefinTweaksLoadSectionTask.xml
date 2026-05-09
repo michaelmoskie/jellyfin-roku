@@ -6,5 +6,8 @@
         <field id="displayText" type="string" />
         <field id="sectionKey" type="string" />
         <field id="content" type="array" />
+        <field id="serverUrl" type="string" value="" />
+        <field id="userId" type="string" value="" />
+        <field id="authToken" type="string" value="" />
     </interface>
 </component>

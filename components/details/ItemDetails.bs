@@ -1712,7 +1712,10 @@ sub toggleWatched()
 
     watchedText = m.top.findNode("watchedButtonText")
     if isValid(watchedText)
-        watchedText.text = newWatchedState ? tr("Watched") : tr("Unwatched")
+        watchedText.text = tr("Unwatched")
+        if newWatchedState
+            watchedText.text = tr("Watched")
+        end if
     end if
 
     if m.buttonGroups.count() > 0 and m.currentButtonIndex >= 0 and m.currentButtonIndex < m.buttonGroups.count()
@@ -1761,7 +1764,10 @@ sub toggleFavorite()
 
     favoriteText = m.top.findNode("favoriteButtonText")
     if isValid(favoriteText)
-        favoriteText.text = newFavoriteState ? tr("Favorited") : tr("Favorite")
+        favoriteText.text = tr("Favorite")
+        if newFavoriteState
+            favoriteText.text = tr("Favorited")
+        end if
     end if
 
     if m.buttonGroups.count() > 0 and m.currentButtonIndex >= 0 and m.currentButtonIndex < m.buttonGroups.count()

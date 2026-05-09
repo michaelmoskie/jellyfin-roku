@@ -5,6 +5,14 @@ sub init()
     m.top.functionName = "loadHomeScreenSection"
 end sub
 
+function targetAPIRequest(path as string, params = {} as object) as dynamic
+    if not isValidAndNotEmpty(m.top.serverUrl)
+        return invalid
+    end if
+
+    return APIRequestForServer(m.top.serverUrl, m.top.userId, m.top.authToken, path, params)
+end function
+
 sub loadHomeScreenSection()
     results = []
 
@@ -14,7 +22,7 @@ sub loadHomeScreenSection()
         return
     end if
 
-    userId = chainLookupReturn(m.global, "session.user.id", "")
+    userId = m.top.userId
     if not isValidAndNotEmpty(userId)
         m.top.content = results
         return
@@ -28,7 +36,7 @@ sub loadHomeScreenSection()
         params.AddReplace("additionalData", additionalData)
     end if
 
-    request = APIRequest("/HomeScreen/Section/" + pathSection, params)
+    request = targetAPIRequest("/HomeScreen/Section/" + pathSection, params)
     if not isValid(request)
         m.top.content = results
         return

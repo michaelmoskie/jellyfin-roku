@@ -7,6 +7,14 @@ sub init()
     m.top.functionName = "loadKefinSection"
 end sub
 
+function targetAPIRequest(path as string, params = {} as object) as dynamic
+    if not isValidAndNotEmpty(m.top.serverUrl)
+        return invalid
+    end if
+
+    return APIRequestForServer(m.top.serverUrl, m.top.userId, m.top.authToken, path, params)
+end function
+
 sub loadKefinSection()
     results = []
 
@@ -16,7 +24,7 @@ sub loadKefinSection()
         return
     end if
 
-    userId = chainLookupReturn(m.global, "session.user.id", "")
+    userId = m.top.userId
     if not isValidAndNotEmpty(userId)
         m.top.content = results
         return
@@ -122,7 +130,7 @@ function loadRecentlyAddedInLibrary(spec as object) as object
             continue for
         end if
 
-        request = APIRequest("/Items/Latest", {
+        request = targetAPIRequest("/Items/Latest", {
             ParentId: libraryId,
             Limit: limit,
             EnableImageTypes: "Primary,Backdrop,Thumb",
@@ -172,7 +180,7 @@ function requestItems(userId as string, params as object) as dynamic
         return invalid
     end if
 
-    request = APIRequest("/Users/" + userId.EncodeUriComponent() + "/Items", params)
+    request = targetAPIRequest("/Users/" + userId.EncodeUriComponent() + "/Items", params)
     if not isValid(request)
         return invalid
     end if

@@ -5,13 +5,21 @@ sub init()
     m.top.functionName = "probeHomeScreenSections"
 end sub
 
+function targetAPIRequest(path as string, params = {} as object) as dynamic
+    if not isValidAndNotEmpty(m.top.serverUrl)
+        return invalid
+    end if
+
+    return APIRequestForServer(m.top.serverUrl, m.top.userId, m.top.authToken, path, params)
+end function
+
 sub probeHomeScreenSections()
     result = {
         enabled: false,
         sections: []
     }
 
-    metaRequest = APIRequest("/HomeScreen/Meta")
+    metaRequest = targetAPIRequest("/HomeScreen/Meta")
     if not isValid(metaRequest)
         m.top.result = result
         return
@@ -26,13 +34,13 @@ sub probeHomeScreenSections()
 
     result.enabled = true
 
-    userId = chainLookupReturn(m.global, "session.user.id", "")
+    userId = m.top.userId
     if not isValidAndNotEmpty(userId)
         m.top.result = result
         return
     end if
 
-    sectionsRequest = APIRequest("/HomeScreen/Sections", { userId: userId })
+    sectionsRequest = targetAPIRequest("/HomeScreen/Sections", { userId: userId })
     if not isValid(sectionsRequest)
         m.top.result = result
         return

@@ -678,7 +678,7 @@ end sub
 sub highlightUser()
     if isValid(m.userHighlight)
         m.userHighlight.visible = true
-        m.userHighlight.blendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
+        m.userHighlight.blendColor = formatSceneGraphColor(chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT), ColorPalette.HIGHLIGHT)
     end if
 end sub
 
