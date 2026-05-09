@@ -1126,15 +1126,26 @@ sub LoadCastData()
         return
     end if
 
-    ' Safety check for cast data
     cast = []
-    if m.movieDetails <> invalid and m.movieDetails.DoesExist("credits") and m.movieDetails.credits <> invalid and m.movieDetails.credits.DoesExist("cast") and m.movieDetails.credits.cast <> invalid
-        cast = m.movieDetails.credits.cast
-    else if m.tvDetails <> invalid and m.tvDetails.DoesExist("credits") and m.tvDetails.credits <> invalid and m.tvDetails.credits.DoesExist("cast") and m.tvDetails.credits.cast <> invalid
-        cast = m.tvDetails.credits.cast
+    crew = []
+    credits = invalid
+
+    if m.movieDetails <> invalid and m.movieDetails.DoesExist("credits") and m.movieDetails.credits <> invalid
+        credits = m.movieDetails.credits
+    else if m.tvDetails <> invalid and m.tvDetails.DoesExist("credits") and m.tvDetails.credits <> invalid
+        credits = m.tvDetails.credits
     end if
 
-    if cast = invalid or cast.count() = 0
+    if credits <> invalid
+        if credits.DoesExist("cast") and credits.cast <> invalid
+            cast = credits.cast
+        end if
+        if credits.DoesExist("crew") and credits.crew <> invalid
+            crew = credits.crew
+        end if
+    end if
+
+    if (cast = invalid or cast.count() = 0) and (crew = invalid or crew.count() = 0)
         m.castHeading.visible = false
         m.castRow.visible = false
         return
@@ -1142,13 +1153,42 @@ sub LoadCastData()
 
     castToShow = []
     maxCast = 20
-    if cast.count() < maxCast then maxCast = cast.count()
+    if cast <> invalid
+        if cast.count() < maxCast then maxCast = cast.count()
+        for i = 0 to maxCast - 1
+            castToShow.push(cast[i])
+        end for
+    end if
 
-    for i = 0 to maxCast - 1
-        castToShow.push(cast[i])
-    end for
+    directorIds = {}
+    writerIds = {}
+    crewIndex = 0
 
-    ' Create content nodes for cast
+    if crew <> invalid
+        for each crewMember in crew
+            crewIndex = crewIndex + 1
+            job = LCase((crewMember.job ?? "").toStr())
+            memberId = (crewMember.id ?? crewMember.name ?? "").toStr()
+            if memberId = ""
+                memberId = `${job}-${crewIndex.toStr()}`
+            end if
+
+            if job = "director"
+                if not directorIds.DoesExist(memberId)
+                    crewMember.character = tr("Director")
+                    castToShow.push(crewMember)
+                    directorIds[memberId] = true
+                end if
+            else if job = "writer" or job = "screenplay"
+                if not writerIds.DoesExist(memberId)
+                    crewMember.character = tr("Writer")
+                    castToShow.push(crewMember)
+                    writerIds[memberId] = true
+                end if
+            end if
+        end for
+    end if
+
     castContent = CreateObject("roSGNode", "ContentNode")
 
     for each member in castToShow
@@ -1160,7 +1200,6 @@ sub LoadCastData()
         if member.profilePath <> invalid
             castNode.hdPosterUrl = "https://image.tmdb.org/t/p/w185" + member.profilePath
         end if
-        ' Add person ID for details screen
         if member.id <> invalid
             castNode.addField("personId", "integer", false)
             castNode.personId = member.id
@@ -1168,7 +1207,6 @@ sub LoadCastData()
         castContent.appendChild(castNode)
     end for
 
-    ' Make visible first, then set content - ItemGrid doesn't need wrapper ContentNode
     m.castHeading.visible = true
     m.castRow.visible = true
     m.castRow.content = castContent

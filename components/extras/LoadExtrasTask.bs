@@ -479,11 +479,20 @@ function loadPeople() as object
     end if
 
 
+    orderedPeople = []
+    trailingPeople = []
     for each person in itemDetails.People
-        ' Skip directors and writers — they are shown in the metadata row
         personType = LCase(person.Type)
-        if personType = "director" or personType = "writer" then continue for
+        if personType <> "director" and personType <> "writer"
+            orderedPeople.push(person)
+        else
+            trailingPeople.push(person)
+        end if
+    end for
 
+    orderedPeople.append(trailingPeople)
+
+    for each person in orderedPeople
         tmp = createSGNode("HomeData")
 
         ' Add server metadata to person item for multi-server navigation
