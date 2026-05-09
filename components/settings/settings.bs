@@ -20,7 +20,7 @@ sub init()
     m.userLocation = []
 
     m.settingsMenu = m.top.findNode("settingsMenu")
-    m.settingsMenu.focusBitmapBlendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
+    'm.settingsMenu.focusBitmapBlendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
     m.settingsMenu.focusFootprintBlendColor = ColorPalette.TRANSPARENT
     m.settingsMenu.focusedColor = ColorPalette.WHITE
 
@@ -204,7 +204,7 @@ sub refreshCurrentItemValue(settingItem = invalid as dynamic)
     contentItem = m.settingsMenu.content.getChild(focusIndex)
     if not isValid(contentItem) then return
 
-    contentItem.currentValue = getSettingCurrentValueLabel(settingItem)
+    contentItem.addFields({ currentValue: getSettingCurrentValueLabel(settingItem) })
 end sub
 
 ' Sync a setting to the server via PostTask (render-thread safe).
@@ -266,7 +266,7 @@ sub onColorSelected()
             end if
         end if
 
-        m.settingsMenu.focusBitmapBlendColor = selectedColor ?? ColorPalette.HIGHLIGHT
+        'm.settingsMenu.focusBitmapBlendColor = selectedColor ?? ColorPalette.HIGHLIGHT
     end if
 
     if isStringEqual(selectedSetting.settingName, "colorHomeUsername") and isValid(scene)
@@ -1169,7 +1169,7 @@ sub LoadMenu(configSection, appendPath = true as boolean)
         listItem = result.CreateChild("ContentNode")
         listItem.title = tr(item.title)
         listItem.Description = tr(item.description)
-        listItem.currentValue = getSettingCurrentValueLabel(item)
+        listItem.addFields({ currentValue: getSettingCurrentValueLabel(item) })
         listItem.id = item.id
     end for
 
@@ -1542,14 +1542,6 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
 
     checkMagicKeyPressSequence(key)
-
-    ' Navigate to overhang with UP key from settings menu
-    if key = KeyCode.UP and isValid(m.settingsMenu) and m.settingsMenu.hasFocus()
-        if m.settingsMenu.itemFocused = 0
-            m.top.lastFocus = m.settingsMenu
-            return FocusOverhang(m.top)
-        end if
-    end if
 
     if key = "back" or key = "left"
         if m.settingsMenu.focusedChild <> invalid and m.userLocation.Count() > 1
