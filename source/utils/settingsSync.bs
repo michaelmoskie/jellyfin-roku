@@ -12,6 +12,8 @@ namespace settingsSync
             { pluginKey: "showGenresButton", rokuKey: "navbar.show_genres", type: "bool" },
             { pluginKey: "showLibrariesInToolbar", rokuKey: "navbar.show_libraries", type: "bool" },
             { pluginKey: "showShuffleButton", rokuKey: "navbar.show_shuffle", type: "bool" },
+            { pluginKey: "navbarOpacity", rokuKey: "navbar.opacity", type: "opacityToPercent" },
+            { pluginKey: "navbarColor", rokuKey: "navbar.color", type: "colorHex" },
             { pluginKey: "mergeContinueWatchingNextUp", rokuKey: "ui.home.mergeContinueWatchingNextUp", type: "bool" },
             { pluginKey: "enableMultiServerLibraries", rokuKey: "ui.home.enableMultiServer", type: "bool" },
             { pluginKey: "mediaBarEnabled", rokuKey: "ui.home.mediaBarEnabled", type: "bool" },
@@ -57,7 +59,7 @@ namespace settingsSync
             rokuValue = settingsSync.PluginToRoku(pluginValue, mapping.type)
             if not isValid(rokuValue) then continue for
 
-            tmpSettings[mapping.rokuKey] = toBoolean(rokuValue)
+            tmpSettings[mapping.rokuKey] = rokuValue
             registry_write(mapping.rokuKey, rokuValue, m.global.session.user.id)
         end for
 

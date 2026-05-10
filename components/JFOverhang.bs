@@ -564,13 +564,20 @@ sub applyOverlaySettings()
 
     opacity = 0.5
     if isValid(m.global.session.user) and isValid(m.global.session.user.settings)
-        opacitySetting = m.global.session.user.settings["ui.overlayOpacity"]
+        opacitySetting = m.global.session.user.settings["navbar.opacity"]
+        if not isValid(opacitySetting)
+            opacitySetting = m.global.session.user.settings["ui.overlayOpacity"]
+        end if
         if isValid(opacitySetting) then opacity = opacitySetting.toFloat()
     end if
 
     color = "0x475569FF"
     if isValid(m.global.session.user) and isValid(m.global.session.user.settings)
-        color = formatOverlayColor(m.global.session.user.settings["ui.overlayColor"], color)
+        navColor = m.global.session.user.settings["navbar.color"]
+        if not isValid(navColor)
+            navColor = m.global.session.user.settings["ui.overlayColor"]
+        end if
+        color = formatOverlayColor(navColor, color)
     end if
 
     if isValid(m.navbarBg)

@@ -1068,6 +1068,30 @@ sub pushSettingIfValid(items as object, item as dynamic)
     end if
 end sub
 
+function titleExistsInList(titles as object, title as string) as boolean
+    if not isValid(titles) then return false
+
+    for each itemTitle in titles
+        if isStringEqual(itemTitle, title)
+            return true
+        end if
+    end for
+
+    return false
+end function
+
+sub pushUnmappedChildrenByTitle(items as object, section as dynamic, mappedTitles as object)
+    if not isValid(items) then return
+    if not isValid(section) or not isValid(section.children) then return
+
+    for each child in section.children
+        childTitle = chainLookupReturn(child, "title", "")
+        if not isValidAndNotEmpty(childTitle) then continue for
+        if titleExistsInList(mappedTitles, childTitle) then continue for
+        items.push(child)
+    end for
+end sub
+
 function normalizeBoolSettingValue(value as dynamic) as boolean
     if not isValid(value)
         return false
@@ -1325,6 +1349,33 @@ function reorderSettingsForFlutter(configTree as object) as object
             children: advancedChildren
         })
     end if
+
+    additionalChildren = []
+
+    moonfinMappedTitles = ["Navigation Bar", "Home Screen", "Featured Media Bar", "Theme Music", "Shuffle", "Visual Effects", "Support Moonfin"]
+    pushUnmappedChildrenByTitle(additionalChildren, moonfinSettings, moonfinMappedTitles)
+
+    pluginMappedTitles = ["Enable Plugin", "Settings Sync", "Home Screen Sections", "KefinTweaks", "MDBList Ratings", "TMDB", "Jellyseerr"]
+    pushUnmappedChildrenByTitle(additionalChildren, pluginRootSection, pluginMappedTitles)
+
+    userInterfaceMappedTitles = ["Colors", "General", "Home Rows"]
+    pushUnmappedChildrenByTitle(additionalChildren, userInterface, userInterfaceMappedTitles)
+
+    if additionalChildren.count() > 0
+        reordered.push({
+            title: "Additional Settings",
+            description: "Settings that are not yet grouped in the new layout.",
+            children: additionalChildren
+        })
+    end if
+
+    knownRootTitles = ["Moonfin Settings", "Moonfin Plugin", "Playback", "Remember Me?", "User Interface", "Secret"]
+    for each rootSection in configTree
+        rootTitle = chainLookupReturn(rootSection, "title", "")
+        if not isValidAndNotEmpty(rootTitle) then continue for
+        if titleExistsInList(knownRootTitles, rootTitle) then continue for
+        reordered.push(rootSection)
+    end for
 
     if reordered.count() = 0
         return configTree
@@ -1656,7 +1707,7 @@ sub radioSettingChanged()
     selectedValue = m.radioSetting.content.getChild(m.radioSetting.checkedItem).id
     set_user_setting(selectedSetting.settingName, selectedValue)
 
-    if isStringEqual(selectedSetting.settingName, "ui.overlayOpacity") or isStringEqual(selectedSetting.settingName, "ui.overlayColor")
+    if isStringEqual(selectedSetting.settingName, "ui.overlayOpacity") or isStringEqual(selectedSetting.settingName, "ui.overlayColor") or isStringEqual(selectedSetting.settingName, "navbar.opacity") or isStringEqual(selectedSetting.settingName, "navbar.color")
         if isValid(m.global)
             m.global.overlaySettingsChanged = m.global.overlaySettingsChanged + 1
         end if

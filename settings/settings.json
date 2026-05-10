@@ -25,6 +25,112 @@
             ]
           },
           {
+            "title": "Navbar Color",
+            "description": "Set the navigation bar color independently from Media Bar overlay settings.",
+            "settingName": "navbar.color",
+            "type": "radio",
+            "default": "0x475569",
+            "options": [
+              {
+                "title": "Black - Pure black",
+                "id": "0x000000"
+              },
+              {
+                "title": "Brown - Dark brown",
+                "id": "0x3E2723"
+              },
+              {
+                "title": "Charcoal - Dark gray-blue",
+                "id": "0x36454F"
+              },
+              {
+                "title": "Dark Blue - Cool dark blue",
+                "id": "0x1A2332"
+              },
+              {
+                "title": "Dark Green - Forest green",
+                "id": "0x0B4F0F"
+              },
+              {
+                "title": "Dark Red - Burgundy/wine",
+                "id": "0x8B0000"
+              },
+              {
+                "title": "Gray - Standard gray",
+                "id": "0x808080"
+              },
+              {
+                "title": "Indigo - Deep blue",
+                "id": "0x1E3A8A"
+              },
+              {
+                "title": "Navy - Very dark blue",
+                "id": "0x0D1B2A"
+              },
+              {
+                "title": "Purple - Deep purple",
+                "id": "0x4A148C"
+              },
+              {
+                "title": "Slate - Cool neutral gray-blue",
+                "id": "0x475569"
+              },
+              {
+                "title": "Teal - Blue-green",
+                "id": "0x00695C"
+              }
+            ]
+          },
+          {
+            "title": "Navbar Opacity",
+            "description": "Set navigation bar opacity independently from Media Bar overlay settings.",
+            "settingName": "navbar.opacity",
+            "type": "radio",
+            "default": "0.7",
+            "options": [
+              {
+                "title": "10%",
+                "id": "0.1"
+              },
+              {
+                "title": "20%",
+                "id": "0.2"
+              },
+              {
+                "title": "30%",
+                "id": "0.3"
+              },
+              {
+                "title": "40%",
+                "id": "0.4"
+              },
+              {
+                "title": "50%",
+                "id": "0.5"
+              },
+              {
+                "title": "60%",
+                "id": "0.6"
+              },
+              {
+                "title": "70%",
+                "id": "0.7"
+              },
+              {
+                "title": "80%",
+                "id": "0.8"
+              },
+              {
+                "title": "90%",
+                "id": "0.9"
+              },
+              {
+                "title": "100%",
+                "id": "1.0"
+              }
+            ]
+          },
+          {
             "title": "Show Favorites Button",
             "description": "Show the favorites button in the navigation bar",
             "settingName": "navbar.show_favorites",
