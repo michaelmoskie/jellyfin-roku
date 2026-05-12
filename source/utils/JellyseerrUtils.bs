@@ -467,11 +467,13 @@ function GetJellyseerrConfig() as object
     serverUrl = ""
 
     if m.global <> invalid and m.global.session <> invalid
-        pluginEnabled = m.global.session.user.settings["plugin.enabled"] = true
-        jellyseerrSettingEnabled = m.global.session.user.settings["jellyseerr.enabled"] = true
+        if m.global.session.user <> invalid and m.global.session.user.settings <> invalid
+            pluginEnabled = JellyseerrParseBool(m.global.session.user.settings["plugin.enabled"], false)
+            jellyseerrSettingEnabled = JellyseerrParseBool(m.global.session.user.settings["jellyseerr.enabled"], false)
+        end if
         pluginInfo = m.global.session.pluginInfo
         if pluginInfo <> invalid
-            pluginJellyseerrEnabled = pluginInfo.jellyseerrEnabled = true
+            pluginJellyseerrEnabled = JellyseerrParseBool(pluginInfo.jellyseerrEnabled, false)
         end if
         if m.global.session.server <> invalid
             serverUrl = m.global.session.server.url ?? ""
@@ -813,8 +815,8 @@ function CreateMediaContentNode(item as object) as object
         posterUrl = tmdbUrls.posterW500 + posterPath
         node.hdPosterUrl = posterUrl
         node.sdPosterUrl = tmdbUrls.posterW342 + posterPath
-        node.addField("posterUrl", "string", false)
-        node.posterUrl = posterUrl
+        node.addField("PosterUrl", "string", false)
+        node.PosterUrl = posterUrl
         node.url = posterUrl
     end if
 
@@ -924,13 +926,33 @@ function isValidStringValue(value as dynamic) as boolean
     return value <> ""
 end function
 
+function JellyseerrParseBool(value as dynamic, defaultValue = false as boolean) as boolean
+    if value = invalid then return defaultValue
+
+    valueType = type(value)
+    if valueType = "Boolean" or valueType = "roBoolean"
+        return value
+    else if valueType = "Integer" or valueType = "LongInteger" or valueType = "Float" or valueType = "Double" or valueType = "roInt" or valueType = "roInteger" or valueType = "roFloat" or valueType = "roDouble"
+        return value <> 0
+    else if valueType = "String" or valueType = "roString"
+        normalized = LCase(value.Trim())
+        if normalized = "true" or normalized = "1" or normalized = "yes" or normalized = "on"
+            return true
+        else if normalized = "false" or normalized = "0" or normalized = "no" or normalized = "off"
+            return false
+        end if
+    end if
+
+    return defaultValue
+end function
+
 function IsValidJellyseerrConfig(config as object) as boolean
     if config = invalid
         return false
     end if
 
     ' Plugin proxy mode is always valid if serverUrl exists
-    if config.usePluginProxy = true
+    if JellyseerrParseBool(config.usePluginProxy)
         return isValidStringValue(config.serverUrl)
     end if
 
@@ -1130,7 +1152,7 @@ end sub
 ' Search API
 ' ============================================
 
-function SearchJellyseerr(query as string) as object
+function SearchJellyseerr(query as string, timeoutMs = 1500 as integer) as object
     ' Search Jellyseerr for movies and TV shows
     ' Returns array of search results in standardized format
     ' NOTE: Does NOT filter out items already in library (per user request)
@@ -1156,7 +1178,9 @@ function SearchJellyseerr(query as string) as object
     searchTask.control = "RUN"
 
     ' Wait for response (with timeout)
-    timeout = 5000 ' 5 seconds
+    timeout = timeoutMs
+    if timeout <= 0 then timeout = 1500
+    if timeout > 5000 then timeout = 5000
     startTime = CreateObject("roTimespan")
     response = invalid
 
@@ -1168,7 +1192,12 @@ function SearchJellyseerr(query as string) as object
         sleep(50) ' Check every 50ms
     end while
 
-    if response = invalid or not response.success then return []
+    if response = invalid
+        searchTask.control = "stop"
+        return []
+    end if
+
+    if not response.success then return []
     if response.data = invalid or response.data.results = invalid then return []
 
     ' Convert Jellyseerr results to standard format

@@ -125,6 +125,10 @@ function getPosterURL(itemData) as string
         posterURL = itemData.backdropURL
     end if
 
+    if not isValidAndNotEmpty(posterURL)
+        return ""
+    end if
+
     ' Adjust image dimensions as needed
     posterURL = posterURL.replace("maxHeight=720", `maxHeight=${m.itemPoster.height}`)
     posterURL = posterURL.replace("maxHeight=331", `maxHeight=${m.itemPoster.height}`)

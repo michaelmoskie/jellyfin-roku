@@ -163,11 +163,30 @@ sub itemContentChanged()
         m.itemTextExtra.translation = [m.itemTextExtra.translation[0], imageDimensions[1] + 65]
     end if
 
+    isJellyseerrResult = (itemData.isJellyseerrResult <> invalid and itemData.isJellyseerrResult = true)
+
+    if isJellyseerrResult
+        m.itemPoster.loadDisplayMode = "scaleToFit"
+    else if m.topParent.imageDisplayMode <> invalid
+        m.itemPoster.loadDisplayMode = m.topParent.imageDisplayMode
+    end if
+
+    titleText = isValidAndNotEmpty(itemData.json.SeriesName) ? itemData.json.SeriesName : itemData.title
+
     posterURL = itemData.PosterUrl
-    if isValidAndNotEmpty(itemData.landscapePosterURL)
-        posterURL = itemData.landscapePosterURL
-    else if isValidAndNotEmpty(itemData.backdropURL)
-        posterURL = itemData.backdropURL
+    if not isJellyseerrResult
+        if isValidAndNotEmpty(itemData.landscapePosterURL)
+            posterURL = itemData.landscapePosterURL
+        else if isValidAndNotEmpty(itemData.backdropURL)
+            posterURL = itemData.backdropURL
+        end if
+    end if
+
+    if not isValidAndNotEmpty(posterURL)
+        m.itemPoster.uri = invalid
+        m.posterText.text = itemData.title
+        m.title.text = titleText
+        return
     end if
 
     posterURL = posterURL.replace("maxHeight=720", `maxHeight=${m.itemPoster.height}`)
@@ -177,7 +196,7 @@ sub itemContentChanged()
 
     m.itemPoster.uri = posterURL
     m.posterText.text = itemData.title
-    m.title.text = isValidAndNotEmpty(itemData.json.SeriesName) ? itemData.json.SeriesName : itemData.title
+    m.title.text = titleText
 
     ' Don't show the same text for both the title and subtitle
     if isStringEqual(m.itemTextExtra.text, m.title.text)

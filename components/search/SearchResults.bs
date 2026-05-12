@@ -19,6 +19,8 @@ sub init()
     m.debounceTimer = m.top.findNode("debounceTimer")
     m.debounceTimer.observeFieldScoped("fire", "onDebounceTimerFire")
     m.pendingQuery = ""
+    m.searchRequestId = 0
+    m.activeSearchToken = ""
 
     m.searchHelpText = m.top.findNode("SearchHelpText")
     m.searchHelpText.text = tr("You can search for Titles, People, Live TV Channels and more")
@@ -51,6 +53,8 @@ sub searchMedias()
         m.debounceTimer.control = "stop"
         m.searchTask.control = "stop"
         m.pendingQuery = ""
+        m.activeSearchToken = ""
+        m.searchTask.requestToken = ""
         stopLoadingSpinner()
         m.top.selectedItem = invalid
         m.searchRow.selectedItem = invalid
@@ -69,20 +73,28 @@ sub onDebounceTimerFire()
     query = m.pendingQuery
     if query = "" then return
 
+    m.searchRequestId = m.searchRequestId + 1
+    m.activeSearchToken = m.searchRequestId.toStr() + ":" + query
+
     m.searchTask.control = "stop"
     startLoadingSpinner(false)
     m.searchTask.unobserveFieldScoped("results")
     m.searchTask.observeFieldScoped("results", "loadResults")
     m.searchTask.query = query
+    m.searchTask.requestToken = m.activeSearchToken
     m.searchTask.control = "RUN"
 end sub
 
 sub loadResults()
-    m.searchTask.unobserveFieldScoped("results")
-    stopLoadingSpinner()
-
     results = m.searchTask.results
     if not isValid(results) then return
+
+    resultToken = results.requestToken
+    if m.activeSearchToken = "" or not isValid(resultToken) or resultToken <> m.activeSearchToken
+        return
+    end if
+
+    stopLoadingSpinner()
 
     m.searchRow.itemData = results
     m.top.selectedItem = invalid

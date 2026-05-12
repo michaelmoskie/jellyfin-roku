@@ -11,7 +11,11 @@ sub init()
 end sub
 
 sub search()
-    if m.top.query = invalid or m.top.query = ""
+    query = m.top.query
+    requestToken = m.top.requestToken
+
+    if query = invalid or query = ""
+        publishSearchResults({ Items: [], TotalRecordCount: 0 }, "", requestToken, true)
         return
     end if
 
@@ -22,34 +26,31 @@ sub search()
     end if
 
     if allSessions.Count() = 0
-        results = searchMedia(m.top.query)
+        results = normalizeSearchResults(searchMedia(query))
+        publishSearchResults(results, query, requestToken, false)
 
-        if not isValid(results) or type(results) = "roArray"
-            results = { Items: [], TotalRecordCount: 0 }
-        end if
+        if isSearchRequestStale(requestToken) then return
+        appendJellyseerrResults(results, query)
+        if isSearchRequestStale(requestToken) then return
 
-        appendJellyseerrResults(results, m.top.query)
-        m.top.results = results
+        publishSearchResults(results, query, requestToken, true)
         return
     end if
 
     port = CreateObject("roMessagePort")
     activeRequests = {}
-    requestObjects = {}
     allItems = []
     totalCount = 0
 
     for each userSession in allSessions
-        itemsInfo = startSearchRequest(userSession, port, "items")
+        itemsInfo = startSearchRequest(userSession, port, "items", query)
         if isValid(itemsInfo)
             activeRequests[itemsInfo.id] = { session: userSession, type: "items" }
-            requestObjects[itemsInfo.id] = itemsInfo.request
         end if
 
-        personsInfo = startSearchRequest(userSession, port, "persons")
+        personsInfo = startSearchRequest(userSession, port, "persons", query)
         if isValid(personsInfo)
             activeRequests[personsInfo.id] = { session: userSession, type: "persons" }
-            requestObjects[personsInfo.id] = personsInfo.request
         end if
     end for
 
@@ -71,7 +72,6 @@ sub search()
 
             if isValid(requestInfo)
                 activeRequests.Delete(requestId)
-                requestObjects.Delete(requestId)
 
                 userSession = requestInfo.session
                 responseCode = msg.GetResponseCode()
@@ -94,33 +94,44 @@ sub search()
         end if
     end while
 
-    results = {
+    results = normalizeSearchResults({
         Items: allItems,
         TotalRecordCount: totalCount
-    }
+    })
 
-    appendJellyseerrResults(results, m.top.query)
-    m.top.results = results
+    publishSearchResults(results, query, requestToken, false)
+    if isSearchRequestStale(requestToken) then return
+
+    appendJellyseerrResults(results, query)
+    if isSearchRequestStale(requestToken) then return
+
+    publishSearchResults(results, query, requestToken, true)
 end sub
 
 sub appendJellyseerrResults(results as object, query as string)
     config = GetJellyseerrConfig()
-    if config = invalid or config.enabled <> true then return
+    if config = invalid or not JellyseerrParseBool(config.enabled, false) then return
 
-    jellyseerrResults = SearchJellyseerr(query)
+    jellyseerrResults = SearchJellyseerr(query, 1500)
     if not isValidAndNotEmpty(jellyseerrResults) then return
+
+    if not isValid(results.Items) or type(results.Items) <> "roArray"
+        results.Items = []
+    end if
 
     for each jellyseerrItem in jellyseerrResults
         results.Items.push(jellyseerrItem)
     end for
+
+    results.TotalRecordCount = results.Items.Count()
 end sub
 
-function startSearchRequest(userSession as object, port as object, searchType as string) as object
+function startSearchRequest(userSession as object, port as object, searchType as string, query as string) as object
     url = ""
 
     if searchType = "items"
         url = buildURLForSession(userSession, "/Users/" + userSession.userId + "/Items", {
-            searchTerm: m.top.query,
+            searchTerm: query,
             fields: "ChildCount,ItemCounts,Genres,RecursiveItemCount,ImageTags,BackdropImageTags",
             IncludeItemTypes: "LiveTvChannel,Movie,BoxSet,Series,Episode,Video,Audio,MusicAlbum,MusicArtist,Playlist",
             EnableTotalRecordCount: false,
@@ -131,7 +142,7 @@ function startSearchRequest(userSession as object, port as object, searchType as
     else if searchType = "persons"
         url = buildURLForSession(userSession, "/Persons", {
             userId: userSession.userId,
-            searchTerm: m.top.query,
+            searchTerm: query,
             EnableTotalRecordCount: false,
             ImageTypeLimit: 1,
             limit: 100
@@ -195,4 +206,41 @@ function transformToSearchData(item as object, userSession as object) as object
     tmp.json = item
 
     return tmp
+end function
+
+function normalizeSearchResults(results as dynamic) as object
+    if not isValid(results) or type(results) = "roArray"
+        return { Items: [], TotalRecordCount: 0 }
+    end if
+
+    items = results.Items
+    if not isValid(items) or type(items) <> "roArray"
+        items = []
+    end if
+
+    totalRecordCount = results.TotalRecordCount
+    if not isValid(totalRecordCount)
+        totalRecordCount = items.Count()
+    end if
+
+    return {
+        Items: items,
+        TotalRecordCount: totalRecordCount
+    }
+end function
+
+sub publishSearchResults(results as object, query as string, requestToken as string, isComplete as boolean)
+    payload = normalizeSearchResults(results)
+    payload.query = query
+    payload.requestToken = requestToken
+    payload.isComplete = isComplete
+    m.top.results = payload
+end sub
+
+function isSearchRequestStale(requestToken as string) as boolean
+    currentToken = m.top.requestToken
+    if not isValid(currentToken) or not isValid(requestToken)
+        return false
+    end if
+    return currentToken <> requestToken
 end function
