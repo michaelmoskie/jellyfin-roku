@@ -145,13 +145,29 @@ namespace moonfinPlugin
         return providerIds.Tmdb ?? providerIds.tmdb ?? ""
     end function
 
+    function ParseBoolSetting(value as dynamic, defaultVal as boolean) as boolean
+        if value = invalid then return defaultVal
+
+        valueType = Type(value)
+        if valueType = "Boolean" or valueType = "roBoolean" then return value
+        if valueType = "Integer" or valueType = "LongInteger" or valueType = "roInt" or valueType = "roInteger" then return (value = 1)
+
+        if valueType = "String" or valueType = "roString"
+            normalized = LCase(value.Trim())
+            if normalized = "true" then return true
+            if normalized = "false" then return false
+        end if
+
+        return defaultVal
+    end function
+
     function IsEnabled() as boolean
-        return toBoolean(chainLookupReturn(m.global.session, "user.settings.`plugin.enabled`", false))
+        return moonfinPlugin.ParseBoolSetting(chainLookupReturn(m.global.session, "user.settings.`plugin.enabled`", false), false)
     end function
 
     function IsRatingsEnabled() as boolean
         if not moonfinPlugin.IsEnabled() then return false
-        return toBoolean(chainLookupReturn(m.global.session, "user.settings.`plugin.mdblist.enabled`", true))
+        return moonfinPlugin.ParseBoolSetting(chainLookupReturn(m.global.session, "user.settings.`plugin.mdblist.enabled`", true), true)
     end function
 
     function BuildDisplayRatings(ratings as object) as object

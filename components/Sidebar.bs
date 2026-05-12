@@ -167,8 +167,8 @@ sub rebuildNavItems()
     if m.favoritesButtonEnabled then m.navItems.push(m.favoritesItem)
     if m.genresButtonEnabled then m.navItems.push(m.genresItem)
 
-    jellyseerrEnabled = m.global.session.user.settings["jellyseerr.enabled"]
-    if jellyseerrEnabled = true
+    jellyseerrEnabled = parseBoolSetting(m.global.session.user.settings["jellyseerr.enabled"])
+    if jellyseerrEnabled
         updateJellyseerrItemAppearance()
         m.navItems.push(m.jellyseerrItem)
     end if
@@ -591,13 +591,20 @@ end function
 
 sub onSessionChanged()
     currentSettings = {
-        shuffle: m.global.session.user.settings["navbar.show_shuffle"],
-        favorites: m.global.session.user.settings["navbar.show_favorites"],
-        genres: m.global.session.user.settings["navbar.show_genres"],
-        libraries: m.global.session.user.settings["navbar.show_libraries"],
-        jellyseerr: m.global.session.user.settings["jellyseerr.enabled"]
+        shuffle: parseBoolSetting(m.global.session.user.settings["navbar.show_shuffle"]),
+        favorites: parseBoolSetting(m.global.session.user.settings["navbar.show_favorites"]),
+        genres: parseBoolSetting(m.global.session.user.settings["navbar.show_genres"]),
+        libraries: parseBoolSetting(m.global.session.user.settings["navbar.show_libraries"]),
+        jellyseerr: parseBoolSetting(m.global.session.user.settings["jellyseerr.enabled"])
     }
-    if currentSettings.shuffle <> m.lastNavbarSettings.shuffle or currentSettings.favorites <> m.lastNavbarSettings.favorites or currentSettings.genres <> m.lastNavbarSettings.genres or currentSettings.libraries <> m.lastNavbarSettings.libraries or currentSettings.jellyseerr <> m.lastNavbarSettings.jellyseerr
+    lastSettings = {
+        shuffle: parseBoolSetting(m.lastNavbarSettings.shuffle),
+        favorites: parseBoolSetting(m.lastNavbarSettings.favorites),
+        genres: parseBoolSetting(m.lastNavbarSettings.genres),
+        libraries: parseBoolSetting(m.lastNavbarSettings.libraries),
+        jellyseerr: parseBoolSetting(m.lastNavbarSettings.jellyseerr)
+    }
+    if currentSettings.shuffle <> lastSettings.shuffle or currentSettings.favorites <> lastSettings.favorites or currentSettings.genres <> lastSettings.genres or currentSettings.libraries <> lastSettings.libraries or currentSettings.jellyseerr <> lastSettings.jellyseerr
         loadNavbarSettings()
         rebuildNavItems()
     end if
