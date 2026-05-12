@@ -18,20 +18,20 @@ sub init()
     m.hiddenUsers.color = "0xFFFFFFCC"
 
     m.editButton = m.top.findNode("editButton")
-    m.editButton.background = "0x374151FF"
+    m.editButton.background = "0x2a2e40FF"
     m.editButton.color = "0xFFFFFFFF"
-    m.editButton.focusBackground = "0x4B5563FF"
+    m.editButton.focusBackground = "0x00A4DCFF"
     m.editButton.focusColor = "0xFFFFFFFF"
     m.editButton.observeField("buttonSelected", "onEditButtonSelected")
 
     m.manualLogin = m.top.findNode("manualLogin")
-    m.manualLogin.background = "0x292929FF"
+    m.manualLogin.background = "0x2a2e40FF"
     m.manualLogin.color = "0xFFFFFFFF"
     m.manualLogin.focusBackground = "0x00A4DCFF"
     m.manualLogin.focusColor = "0xFFFFFFFF"
 
     m.changeServer = m.top.findNode("changeServer")
-    m.changeServer.background = "0x292929FF"
+    m.changeServer.background = "0x2a2e40FF"
     m.changeServer.color = "0xFFFFFFFF"
     m.changeServer.focusBackground = "0x00A4DCFF"
     m.changeServer.focusColor = "0xFFFFFFFF"
@@ -122,7 +122,7 @@ sub itemContentChanged()
     redraw()
 end sub
 
-const ITEM_WIDTH = 200
+const ITEM_WIDTH = 180
 const ITEM_SPACING = 30
 const CLIP_WIDTH = 1120
 
@@ -194,21 +194,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
             return true
         end if
 
-        if m.manualLogin.hasFocus()
-            m.changeServer.setFocus(true)
-            m.changeServer.focus = true
-            m.manualLogin.focus = false
-            return true
-        end if
+        return false
     end if
 
     if key = KeyCode.LEFT
-        if m.changeServer.hasFocus()
-            m.manualLogin.setFocus(true)
-            m.manualLogin.focus = true
-            m.changeServer.focus = false
-            return true
-        end if
+        return false
     end if
 
     if key = KeyCode.OK
@@ -250,10 +240,16 @@ function onKeyEvent(key as string, press as boolean) as boolean
             return false
         end if
 
-        if m.manualLogin.hasFocus() or m.changeServer.hasFocus()
+        if m.manualLogin.hasFocus()
             m.editButton.setFocus(true)
             m.editButton.focus = true
             m.manualLogin.focus = false
+            return true
+        end if
+
+        if m.changeServer.hasFocus()
+            m.manualLogin.setFocus(true)
+            m.manualLogin.focus = true
             m.changeServer.focus = false
             return true
         end if
@@ -272,6 +268,13 @@ function onKeyEvent(key as string, press as boolean) as boolean
             m.manualLogin.setFocus(true)
             m.manualLogin.focus = true
             m.editButton.focus = false
+            return true
+        end if
+
+        if m.manualLogin.hasFocus()
+            m.changeServer.setFocus(true)
+            m.changeServer.focus = true
+            m.manualLogin.focus = false
             return true
         end if
 
