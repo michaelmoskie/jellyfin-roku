@@ -6,7 +6,7 @@
             <Poster width="1720" height="880" uri="pkg:/images/dialog.9.png" />
             <LayoutGroup horizAlignment="center" translation="[860,50]" itemSpacings="[50]" layoutDirection="vert">
                 <Text text="Select Subtitle Track" font="font:LargeBoldSystemFont" color="#FFFFFF" horizAlign="center" />
-                <RadiobuttonList id="subtitleMenu" itemspacing="[0,10]" opacity="1" vertFocusAnimationStyle="floatingFocus" drawFocusFeedback="false" itemSize="[1500, 70]" numRows="10" />
+                <RadiobuttonList id="subtitleMenu" itemspacing="[0,10]" opacity="1" vertFocusAnimationStyle="floatingFocus" drawFocusFeedback="false" itemSize="[1500, 70]" numRows="8" />
             </LayoutGroup>
         </Group>
     </children>

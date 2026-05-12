@@ -184,7 +184,7 @@
             translation="[860, 505]"
             width="215"
             height="35"
-            uri="pkg:/images/icons/navbar.png"
+            uri="pkg:/images/icons/navbar.9.png"
             loadDisplayMode="scaleToFit"
         />
         <LayoutGroup

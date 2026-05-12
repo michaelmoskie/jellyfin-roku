@@ -83,14 +83,11 @@ function APIRequest(url as string, params = {} as object) as dynamic
     full_url = buildURL(url, params)
     if full_url = invalid then return invalid
 
-    serverURL = m.global.session.server.url
-    if serverURL = invalid then return invalid
-
     req = CreateObject("roUrlTransfer")
     req.setUrl(full_url)
     req = authRequest(req)
     ' SSL cert
-    if serverURL.left(8) = "https://"
+    if LCase(full_url).left(8) = "https://"
         setCertificateAuthority(req)
     end if
 
@@ -183,23 +180,127 @@ function deleteVoid(req)
     return true
 end function
 
-function get_url()
-    ' Validate the entire chain before accessing
-    if not isValid(m.global) then return invalid
-    if not isValid(m.global.session) then return invalid
-    if not isValid(m.global.session.server) then return invalid
+function getRuntimeContextValue(key as string) as dynamic
+    if not isValidAndNotEmpty(key)
+        return invalid
+    end if
 
-    serverURL = m.global.session.server.url
-    if serverURL <> invalid
-        if serverURL.right(1) = "/"
-            serverURL = serverURL.left(serverURL.len() - 1)
-        end if
+    runtimeContext = GetGlobalAA()
+    if isValid(runtimeContext) and runtimeContext.DoesExist(key)
+        return runtimeContext[key]
+    end if
 
-        ' append http:// to the start if not specified
-        if serverURL.left(7) <> "http://" and serverURL.left(8) <> "https://"
-            serverURL = "http://" + serverURL
+    return invalid
+end function
+
+function getRegistryValue(section as string, key as string) as dynamic
+    if not isValidAndNotEmpty(section) or not isValidAndNotEmpty(key)
+        return invalid
+    end if
+
+    registry = CreateObject("roRegistrySection", section)
+    if registry.exists(key)
+        return registry.read(key)
+    end if
+
+    return invalid
+end function
+
+function getActiveUserIdFromRegistry() as dynamic
+    runtimeUserId = getRuntimeContextValue("moonfin.userId")
+    if isValidAndNotEmpty(runtimeUserId)
+        return runtimeUserId
+    end if
+
+    activeUserId = getRegistryValue("Jellyfin", "active_user")
+    if isValidAndNotEmpty(activeUserId)
+        return activeUserId
+    end if
+
+    usersRaw = getRegistryValue("Jellyfin", "available_users")
+    if not isValidAndNotEmpty(usersRaw)
+        return invalid
+    end if
+
+    users = ParseJson(usersRaw)
+    if type(users) = "roArray" or type(users) = "Array"
+        if users.count() = 1
+            firstUser = users[0]
+            if isValid(firstUser) and isValidAndNotEmpty(firstUser.id)
+                return firstUser.id
+            end if
         end if
     end if
+
+    return invalid
+end function
+
+function getServerUrlFromRegistry() as dynamic
+    serverURL = getRuntimeContextValue("moonfin.serverUrl")
+    if isValidAndNotEmpty(serverURL)
+        return serverURL
+    end if
+
+    serverURL = getRegistryValue("Jellyfin", "server")
+    if isValidAndNotEmpty(serverURL)
+        return serverURL
+    end if
+
+    activeUserId = getActiveUserIdFromRegistry()
+    if isValidAndNotEmpty(activeUserId)
+        serverURL = getRegistryValue(activeUserId, "serverUrl")
+        if isValidAndNotEmpty(serverURL)
+            return serverURL
+        end if
+    end if
+
+    usersRaw = getRegistryValue("Jellyfin", "available_users")
+    if isValidAndNotEmpty(usersRaw)
+        users = ParseJson(usersRaw)
+        if (type(users) = "roArray" or type(users) = "Array") and users.count() = 1
+            firstUser = users[0]
+            if isValid(firstUser) and isValidAndNotEmpty(firstUser.server)
+                return firstUser.server
+            end if
+        end if
+    end if
+
+    return invalid
+end function
+
+function getAuthTokenFromRegistry() as dynamic
+    authToken = getRuntimeContextValue("moonfin.authToken")
+    if isValidAndNotEmpty(authToken)
+        return authToken
+    end if
+
+    activeUserId = getActiveUserIdFromRegistry()
+    if not isValidAndNotEmpty(activeUserId)
+        return invalid
+    end if
+
+    authToken = getRegistryValue(activeUserId, "token")
+    if isValidAndNotEmpty(authToken)
+        return authToken
+    end if
+
+    return invalid
+end function
+
+function get_url()
+    serverURL = getServerUrlFromRegistry()
+    if not isValidAndNotEmpty(serverURL) then return invalid
+
+    serverURL = serverURL.toStr().trim()
+
+    if serverURL.right(1) = "/"
+        serverURL = serverURL.left(serverURL.len() - 1)
+    end if
+
+    if serverURL.left(7) <> "http://" and serverURL.left(8) <> "https://"
+        serverURL = "http://" + serverURL
+    end if
+
     return serverURL
 end function
 
@@ -222,14 +323,98 @@ end function
 
 function buildAuthHeader() as string
     QUOTE = Chr(34)
-    auth = "MediaBrowser" + " Client=" + QUOTE + m.global.app.name + " Roku" + QUOTE
-    auth = auth + ", Device=" + QUOTE + m.global.device.name + " (" + m.global.device.model + ")" + QUOTE
-    auth = auth + ", Version=" + QUOTE + m.global.app.version + QUOTE
-    auth = auth + ", DeviceId=" + QUOTE + m.global.device.serverDeviceName + QUOTE
-    if isValid(m.global.session) and isValid(m.global.session.user) and isValid(m.global.session.user.authToken)
-        auth = auth + ", Token=" + QUOTE + m.global.session.user.authToken + QUOTE
+    headerContext = getAuthHeaderContext()
+
+    auth = "MediaBrowser" + " Client=" + QUOTE + headerContext.appName + " Roku" + QUOTE
+    auth = auth + ", Device=" + QUOTE + headerContext.deviceName + " (" + headerContext.deviceModel + ")" + QUOTE
+    auth = auth + ", Version=" + QUOTE + headerContext.appVersion + QUOTE
+    auth = auth + ", DeviceId=" + QUOTE + headerContext.deviceId + QUOTE
+    if isValidAndNotEmpty(headerContext.authToken)
+        auth = auth + ", Token=" + QUOTE + headerContext.authToken + QUOTE
     end if
+
     return auth
+end function
+
+function getAuthHeaderContext() as object
+    context = {
+        appName: "Moonfin",
+        appVersion: "0.0.0",
+        deviceName: "Roku",
+        deviceModel: "Roku",
+        deviceId: "Roku",
+        authToken: invalid
+    }
+
+    runtimeAppName = getRuntimeContextValue("moonfin.appName")
+    if isValidAndNotEmpty(runtimeAppName)
+        context.appName = runtimeAppName
+    end if
+
+    runtimeAppVersion = getRuntimeContextValue("moonfin.appVersion")
+    if isValidAndNotEmpty(runtimeAppVersion)
+        context.appVersion = runtimeAppVersion
+    end if
+
+    runtimeDeviceName = getRuntimeContextValue("moonfin.deviceName")
+    if isValidAndNotEmpty(runtimeDeviceName)
+        context.deviceName = runtimeDeviceName
+    end if
+
+    runtimeDeviceModel = getRuntimeContextValue("moonfin.deviceModel")
+    if isValidAndNotEmpty(runtimeDeviceModel)
+        context.deviceModel = runtimeDeviceModel
+    end if
+
+    runtimeDeviceId = getRuntimeContextValue("moonfin.deviceId")
+    if isValidAndNotEmpty(runtimeDeviceId)
+        context.deviceId = runtimeDeviceId
+    end if
+
+    if not isValidAndNotEmpty(context.appName) or not isValidAndNotEmpty(context.appVersion)
+        appInfo = CreateObject("roAppInfo")
+        if isValid(appInfo)
+            appName = appInfo.GetTitle()
+            if isValidAndNotEmpty(appName)
+                context.appName = appName
+            end if
+
+            appVersion = appInfo.GetVersion()
+            if isValidAndNotEmpty(appVersion)
+                context.appVersion = appVersion
+            end if
+        end if
+    end if
+
+    if not isValidAndNotEmpty(context.deviceName) or not isValidAndNotEmpty(context.deviceModel) or not isValidAndNotEmpty(context.deviceId)
+        deviceInfo = CreateObject("roDeviceInfo")
+        if isValid(deviceInfo)
+            deviceName = deviceInfo.GetModelDisplayName()
+            if not isValidAndNotEmpty(deviceName)
+                deviceName = deviceInfo.GetModel()
+            end if
+            if isValidAndNotEmpty(deviceName)
+                context.deviceName = deviceName
+            end if
+
+            deviceModel = deviceInfo.GetModel()
+            if isValidAndNotEmpty(deviceModel)
+                context.deviceModel = deviceModel
+            end if
+
+            deviceId = deviceInfo.GetChannelClientID()
+            if isValidAndNotEmpty(deviceId)
+                context.deviceId = deviceId
+            end if
+        end if
+    end if
+
+    authToken = getAuthTokenFromRegistry()
+    if isValidAndNotEmpty(authToken)
+        context.authToken = authToken
+    end if
+
+    return context
 end function
 
 ' sets the certificate authority by file path on the passed node
@@ -250,15 +435,17 @@ end function
 
 function buildAuthHeaderForServer(serverData as object) as string
     QUOTE = Chr(34)
-    auth = "MediaBrowser" + " Client=" + QUOTE + m.global.app.name + " Roku" + QUOTE
-    auth = auth + ", Device=" + QUOTE + m.global.device.name + " (" + m.global.device.model + ")" + QUOTE
-    auth = auth + ", Version=" + QUOTE + m.global.app.version + QUOTE
+    headerContext = getAuthHeaderContext()
+
+    auth = "MediaBrowser" + " Client=" + QUOTE + headerContext.appName + " Roku" + QUOTE
+    auth = auth + ", Device=" + QUOTE + headerContext.deviceName + " (" + headerContext.deviceModel + ")" + QUOTE
+    auth = auth + ", Version=" + QUOTE + headerContext.appVersion + QUOTE
 
     if isValidAndNotEmpty(serverData.userId)
         auth = auth + ", UserId=" + QUOTE + serverData.userId + QUOTE
     end if
 
-    auth = auth + ", DeviceId=" + QUOTE + m.global.device.serverDeviceName + QUOTE
+    auth = auth + ", DeviceId=" + QUOTE + headerContext.deviceId + QUOTE
 
     if isValidAndNotEmpty(serverData.authToken)
         auth = auth + ", Token=" + QUOTE + serverData.authToken + QUOTE

@@ -9,6 +9,22 @@ import "pkg:/source/utils/misc.bs"
 import "pkg:/source/utils/settingsSync.bs"
 
 namespace session
+    sub setRuntimeRequestContextValue(key as string, value as dynamic)
+        if key = "" then return
+
+        runtimeContext = GetGlobalAA()
+        if not isValid(runtimeContext) then return
+
+        if value = invalid
+            if runtimeContext.DoesExist(key)
+                runtimeContext.Delete(key)
+            end if
+            return
+        end if
+
+        runtimeContext[key] = value
+    end sub
+
     sub Init()
         m.global.addFields({
             session: {
@@ -49,6 +65,10 @@ namespace session
             tmpSessionServer = m.global.session.server
             tmpSessionServer[key] = value
             session.Update("server", tmpSessionServer)
+
+            if LCase(key) = "url"
+                session.setRuntimeRequestContextValue("moonfin.serverUrl", value)
+            end if
         end sub
 
         function UpdateURL(value as string) as boolean
@@ -155,6 +175,12 @@ namespace session
 
             session.user.Update("settings", tmpSettingArray)
 
+            session.setRuntimeRequestContextValue("moonfin.userId", tmpSession.user.id)
+            session.setRuntimeRequestContextValue("moonfin.authToken", tmpSession.user.authToken)
+            if isValid(m.global.session.server.url)
+                session.setRuntimeRequestContextValue("moonfin.serverUrl", m.global.session.server.url)
+            end if
+
             reg = CreateObject("roRegistrySection", tmpSession.user.id)
             reg.write("serverId", m.global.session.server.id)
             if isValid(m.global.session.server.url)
@@ -195,6 +221,8 @@ namespace session
                 tmpDevice.AddReplace("serverDeviceName", deviceName)
                 m.global.setFields({ device: tmpDevice })
             end if
+
+            session.setRuntimeRequestContextValue("moonfin.deviceId", deviceName)
         end sub
 
         sub CheckPluginStatus()
@@ -420,6 +448,10 @@ namespace session
                 Policy: {},
                 settings: {}
             })
+
+            session.setRuntimeRequestContextValue("moonfin.userId", invalid)
+            session.setRuntimeRequestContextValue("moonfin.authToken", invalid)
+
             session.user.settings.SaveDefaults()
         end sub
 

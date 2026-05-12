@@ -616,9 +616,29 @@ function isThemeMusicEnabled() as boolean
     if not isValid(m.global) or not isValid(m.global.session) then return false
     if not isValid(m.global.session.user) or not isValid(m.global.session.user.settings) then return false
 
-    themeMusicSetting = m.global.session.user.settings["playback.thememusic.enabled"]
-    if isValid(themeMusicSetting)
+    themeMusicSetting = toBoolean(m.global.session.user.settings["playback.thememusic.enabled"])
+    settingType = LCase(Type(themeMusicSetting))
+
+    if settingType = "boolean" or settingType = "roboolean"
         return themeMusicSetting
+    end if
+
+    if settingType = "integer" or settingType = "rointeger" or settingType = "int" or settingType = "roint"
+        return themeMusicSetting <> 0
+    end if
+
+    if settingType = "float" or settingType = "rofloat" or settingType = "double" or settingType = "rodouble"
+        return themeMusicSetting <> 0
+    end if
+
+    if settingType = "string" or settingType = "rostring"
+        normalizedSetting = LCase(themeMusicSetting.trim())
+        if normalizedSetting = "1" or normalizedSetting = "yes" or normalizedSetting = "on"
+            return true
+        end if
+        if normalizedSetting = "0" or normalizedSetting = "no" or normalizedSetting = "off"
+            return false
+        end if
     end if
 
     return false ' Default is disabled
@@ -811,12 +831,16 @@ end function
 ' convert value to boolean and return value
 function toBoolean(value as dynamic) as dynamic
     if value = invalid then return invalid
-    if Type(value) = "Boolean" then return value
-    if Type(value) <> "String" then return value
+    valueType = LCase(Type(value))
 
-    if value = "true"
+    if valueType = "boolean" or valueType = "roboolean" then return value
+    if valueType <> "string" and valueType <> "rostring" then return value
+
+    normalizedValue = LCase(value.trim())
+
+    if normalizedValue = "true"
         return true
-    else if value = "false"
+    else if normalizedValue = "false"
         return false
     else
         return value

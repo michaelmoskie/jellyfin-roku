@@ -183,7 +183,7 @@ sub itemContentChanged()
     end if
 
     if not isValidAndNotEmpty(posterURL)
-        m.itemPoster.uri = invalid
+        m.itemPoster.uri = string.EMPTY
         m.posterText.text = itemData.title
         m.title.text = titleText
         return
