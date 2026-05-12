@@ -53,6 +53,10 @@ end sub
 
 function runKefinSpec(sectionKind as string, spec as object, userId as string) as dynamic
     sectionName = LCase(sectionKind ?? "")
+    if not isValidAndNotEmpty(sectionName)
+        sectionName = LCase(chainLookupReturn(spec, "kind", ""))
+    end if
+
     limit = normalizeLimit(chainLookupReturn(spec, "limit", DEFAULT_SECTION_LIMIT), DEFAULT_SECTION_LIMIT)
 
     if sectionName = "recentlyreleasedmovies"

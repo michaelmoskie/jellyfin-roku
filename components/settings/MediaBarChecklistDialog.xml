@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <component name="MediaBarChecklistDialog" extends="StandardMessageDialog" initialFocus="checklist">
+    <interface>
+        <field id="allowReorder" type="boolean" value="false" />
+    </interface>
     <children>
         <StdDlgContentArea>
             <CheckList

@@ -1,6 +1,8 @@
 import "pkg:/source/api/baserequest.bs"
 import "pkg:/source/utils/misc.bs"
 
+const HSS_ENRICH_FIELDS = "Type,UserData,Overview,Genres,CommunityRating,CriticRating,OfficialRating,RunTimeTicks,ProductionYear,SeriesName,ParentIndexNumber,IndexNumber,Status,ImageTags,BackdropImageTags,ParentBackdropItemId,ParentBackdropImageTags,ParentThumbItemId,ParentThumbImageTag,SeriesId,SeriesPrimaryImageTag,ParentLogoItemId,ParentLogoImageTag"
+
 sub init()
     m.top.functionName = "loadHomeScreenSection"
 end sub
@@ -44,6 +46,7 @@ sub loadHomeScreenSection()
 
     response = getJson(request)
     itemsPayload = getItemsPayload(response)
+    itemsPayload = enrichItemsPayload(itemsPayload, userId)
 
     for each item in itemsPayload
         homeData = createSGNode("HomeData")
@@ -68,5 +71,213 @@ function getItemsPayload(response as dynamic) as object
         return response.Items
     end if
 
+    if isChainValid(response, "items")
+        return response.items
+    end if
+
     return []
+end function
+
+function enrichItemsPayload(itemsPayload as object, userId as string) as object
+    if not isValidAndNotEmpty(itemsPayload) or not isValidAndNotEmpty(userId)
+        return itemsPayload
+    end if
+
+    if hasOverviewOnAllItems(itemsPayload)
+        return itemsPayload
+    end if
+
+    itemIds = collectItemIds(itemsPayload)
+    if not isValidAndNotEmpty(itemIds)
+        return itemsPayload
+    end if
+
+    request = targetAPIRequest("/Users/" + userId.EncodeUriComponent() + "/Items", {
+        Ids: itemIds.Join(","),
+        Fields: HSS_ENRICH_FIELDS,
+        EnableImageTypes: "Primary,Backdrop,Thumb,Logo",
+        ImageTypeLimit: 1,
+        EnableTotalRecordCount: false
+    })
+
+    if not isValid(request)
+        return itemsPayload
+    end if
+
+    response = getJson(request)
+    enrichedPayload = getItemsPayload(response)
+    if not isValidAndNotEmpty(enrichedPayload)
+        return itemsPayload
+    end if
+
+    enrichedById = {}
+    for each enrichedItem in enrichedPayload
+        if not isAssociativeArrayValue(enrichedItem)
+            continue for
+        end if
+
+        itemId = getItemLookupId(enrichedItem)
+        if isValidAndNotEmpty(itemId) and not enrichedById.DoesExist(itemId)
+            enrichedById.AddReplace(itemId, enrichedItem)
+        end if
+    end for
+
+    if not isValidAndNotEmpty(enrichedById)
+        return itemsPayload
+    end if
+
+    mergedPayload = []
+    for each item in itemsPayload
+        if not isAssociativeArrayValue(item)
+            mergedPayload.push(item)
+            continue for
+        end if
+
+        itemId = getItemLookupId(item)
+        if not isValidAndNotEmpty(itemId) or not enrichedById.DoesExist(itemId)
+            mergedPayload.push(item)
+            continue for
+        end if
+
+        mergedPayload.push(mergeSectionItem(item, enrichedById[itemId]))
+    end for
+
+    return mergedPayload
+end function
+
+function hasOverviewOnAllItems(itemsPayload as object) as boolean
+    for each item in itemsPayload
+        if not isAssociativeArrayValue(item)
+            return false
+        end if
+
+        overview = toNormalizedString(getValueCaseInsensitive(item, "Overview", ""))
+        if not isValidAndNotEmpty(overview)
+            return false
+        end if
+    end for
+
+    return true
+end function
+
+function collectItemIds(itemsPayload as object) as object
+    itemIds = []
+    seenIds = {}
+
+    for each item in itemsPayload
+        if not isAssociativeArrayValue(item)
+            continue for
+        end if
+
+        itemId = getItemLookupId(item)
+        if not isValidAndNotEmpty(itemId) or seenIds.DoesExist(itemId)
+            continue for
+        end if
+
+        seenIds.AddReplace(itemId, true)
+        itemIds.push(itemId)
+    end for
+
+    return itemIds
+end function
+
+function getItemLookupId(item as object) as string
+    return toNormalizedString(getValueCaseInsensitive(item, "Id", ""))
+end function
+
+function mergeSectionItem(rawItem as object, enrichedItem as object) as object
+    merged = {}
+
+    for each key in rawItem
+        merged.AddReplace(key, rawItem[key])
+    end for
+
+    if isAssociativeArrayValue(enrichedItem)
+        for each key in enrichedItem
+            currentValue = invalid
+            if merged.DoesExist(key)
+                currentValue = merged[key]
+            end if
+
+            enrichedValue = enrichedItem[key]
+            if not isMissingMergeValue(enrichedValue) or isMissingMergeValue(currentValue)
+                merged.AddReplace(key, enrichedValue)
+            end if
+        end for
+    end if
+
+    rawImageTags = getValueCaseInsensitive(rawItem, "ImageTags", invalid)
+    enrichedImageTags = getValueCaseInsensitive(enrichedItem, "ImageTags", invalid)
+    if isAssociativeArrayValue(rawImageTags) or isAssociativeArrayValue(enrichedImageTags)
+        mergedImageTags = {}
+
+        if isAssociativeArrayValue(rawImageTags)
+            for each key in rawImageTags
+                mergedImageTags.AddReplace(key, rawImageTags[key])
+            end for
+        end if
+
+        if isAssociativeArrayValue(enrichedImageTags)
+            for each key in enrichedImageTags
+                mergedImageTags.AddReplace(key, enrichedImageTags[key])
+            end for
+        end if
+
+        merged.AddReplace("ImageTags", mergedImageTags)
+    end if
+
+    return merged
+end function
+
+function getValueCaseInsensitive(data as dynamic, key as string, defaultValue = invalid as dynamic) as dynamic
+    if not isAssociativeArrayValue(data)
+        return defaultValue
+    end if
+
+    if data.DoesExist(key)
+        return data[key]
+    end if
+
+    normalizedKey = LCase(key)
+    for each dataKey in data
+        if LCase(dataKey) = normalizedKey
+            return data[dataKey]
+        end if
+    end for
+
+    return defaultValue
+end function
+
+function toNormalizedString(value as dynamic) as string
+    if not isValid(value)
+        return ""
+    end if
+
+    if GetInterface(value, "ifString") <> invalid
+        return value.ToStr().Trim()
+    end if
+
+    return ""
+end function
+
+function isMissingMergeValue(value as dynamic) as boolean
+    if not isValid(value)
+        return true
+    end if
+
+    valueType = type(value)
+    if valueType = "String" or valueType = "roString"
+        return Len(value.Trim()) = 0
+    end if
+
+    if valueType = "Array" or valueType = "roArray"
+        return value.Count() = 0
+    end if
+
+    return false
+end function
+
+function isAssociativeArrayValue(value as dynamic) as boolean
+    valueType = type(value)
+    return valueType = "AssociativeArray" or valueType = "roAssociativeArray"
 end function

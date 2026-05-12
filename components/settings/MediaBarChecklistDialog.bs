@@ -20,5 +20,69 @@ function onKeyEvent(key as string, press as boolean) as boolean
         end if
     end if
 
+    if m.top.allowReorder and m.checklist.isInFocusChain()
+        if isStringEqual(key, KeyCode.REWIND)
+            return moveChecklistItem(-1)
+        end if
+
+        if isStringEqual(key, KeyCode.FASTFORWRD)
+            return moveChecklistItem(1)
+        end if
+    end if
+
     return false
+end function
+
+function moveChecklistItem(direction as integer) as boolean
+    content = m.checklist.content
+    if not isValid(content)
+        return false
+    end if
+
+    focusedIndex = m.checklist.itemFocused
+    if focusedIndex < 0
+        return false
+    end if
+
+    targetIndex = focusedIndex + direction
+    itemCount = content.getChildCount()
+    if targetIndex < 0 or targetIndex >= itemCount
+        return false
+    end if
+
+    rows = []
+    for i = 0 to itemCount - 1
+        item = content.getChild(i)
+        rows.push({
+            id: item.id,
+            title: item.title
+        })
+    end for
+
+    checkedState = m.checklist.checkedState
+    if type(checkedState) <> "Array" and type(checkedState) <> "roArray"
+        checkedState = []
+    end if
+
+    tmpRow = rows[focusedIndex]
+    rows[focusedIndex] = rows[targetIndex]
+    rows[targetIndex] = tmpRow
+
+    if focusedIndex < checkedState.Count() and targetIndex < checkedState.Count()
+        tmpChecked = checkedState[focusedIndex]
+        checkedState[focusedIndex] = checkedState[targetIndex]
+        checkedState[targetIndex] = tmpChecked
+    end if
+
+    rebuiltContent = createObject("roSGNode", "ContentNode")
+    for each row in rows
+        listItem = rebuiltContent.CreateChild("ContentNode")
+        listItem.id = row.id
+        listItem.title = row.title
+    end for
+
+    m.checklist.content = rebuiltContent
+    m.checklist.checkedState = checkedState
+    m.checklist.jumpToItem = targetIndex
+    return true
 end function

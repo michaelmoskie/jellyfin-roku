@@ -26,6 +26,9 @@ namespace settingsSync
             { pluginKey: "mediaBarOpacity", rokuKey: "ui.overlayOpacity", type: "opacityToPercent" },
             { pluginKey: "mediaBarOverlayColor", rokuKey: "ui.overlayColor", type: "colorHex" },
             { pluginKey: "shuffleContentType", rokuKey: "shuffle_content_type", type: "shuffleType" },
+            { pluginKey: "homeRowsV2", rokuKey: "ui.home.rowsV2", type: "jsonObjectArray", skipRegistry: true },
+            { pluginKey: "homeRowsSource", rokuKey: "ui.home.rowsSource", type: "direct", skipRegistry: true },
+            { pluginKey: "homeRowOrder", rokuKey: "ui.home.rowOrder", type: "jsonArray", skipRegistry: true },
             { pluginKey: "detailsScreenBlur", rokuKey: "ui.backdrop.detailBlurAmount", type: "direct" },
             { pluginKey: "browsingBlur", rokuKey: "ui.backdrop.homeBlurAmount", type: "direct" },
             { pluginKey: "themeMusicEnabled", rokuKey: "playback.thememusic.enabled", type: "bool" },
@@ -60,8 +63,27 @@ namespace settingsSync
             if not isValid(rokuValue) then continue for
 
             tmpSettings[mapping.rokuKey] = rokuValue
-            registry_write(mapping.rokuKey, rokuValue, m.global.session.user.id)
+            if not chainLookupReturn(mapping, "skipRegistry", false)
+                registry_write(mapping.rokuKey, rokuValue, m.global.session.user.id)
+            end if
         end for
+
+        shouldFetchResolvedRows = toBoolean(chainLookupReturn(tmpSettings, "homeRows.useServerConfig", false))
+        if shouldFetchResolvedRows
+            resolvedHomeRows = settingsSync.FetchResolvedHomeRows("tv")
+            if isValid(resolvedHomeRows)
+                resolvedRowsSource = LCase(chainLookupReturn(resolvedHomeRows, "source", "legacy"))
+                resolvedRows = chainLookupReturn(resolvedHomeRows, "rows", [])
+
+                tmpSettings["ui.home.resolvedRows"] = FormatJson({
+                    source: resolvedRowsSource,
+                    rows: resolvedRows
+                })
+                tmpSettings["ui.home.rowsSource"] = resolvedRowsSource
+
+                tmpSettings["ui.home.rowsV2"] = FormatJson(resolvedRows)
+            end if
+        end if
 
         session.user.Update("settings", tmpSettings)
     end sub
@@ -126,6 +148,11 @@ namespace settingsSync
                 return FormatJson(pluginValue)
             end if
             return pluginValue.toStr()
+        else if conversionType = "jsonObjectArray"
+            if type(pluginValue) = "roArray" or type(pluginValue) = "Array"
+                return FormatJson(pluginValue)
+            end if
+            return "[]"
         else if conversionType = "opacityToPercent"
             percent = 50
             if type(pluginValue) = "Integer" or type(pluginValue) = "roInt" or type(pluginValue) = "roInteger"
@@ -170,6 +197,12 @@ namespace settingsSync
                 return parsed
             end if
             return []
+        else if conversionType = "jsonObjectArray"
+            parsed = ParseJson(rokuStr)
+            if type(parsed) = "roArray" or type(parsed) = "Array"
+                return parsed
+            end if
+            return []
         else if conversionType = "opacityToPercent"
             rokuFloat = val(rokuStr)
             return int(rokuFloat * 100 + 0.5)
@@ -191,6 +224,29 @@ namespace settingsSync
         if not isValid(result) then return invalid
 
         return moonfinPlugin.normalizeKeys(result)
+    end function
+
+    function FetchResolvedHomeRows(profile as string) as object
+        req = APIRequest(`/Moonfin/HomeRows/${profile}`)
+        if not isValid(req) then return invalid
+
+        result = getJson(req)
+        if not isValid(result) then return invalid
+
+        normalizedResult = moonfinPlugin.normalizeKeys(result)
+
+        rows = chainLookupReturn(normalizedResult, "rows", [])
+        normalizedRows = []
+        if type(rows) = "roArray" or type(rows) = "Array"
+            for each row in rows
+                if type(row) = "roAssociativeArray" or type(row) = "AssociativeArray"
+                    normalizedRows.push(moonfinPlugin.normalizeKeys(row))
+                end if
+            end for
+        end if
+
+        normalizedResult["rows"] = normalizedRows
+        return normalizedResult
     end function
 
     sub SaveProfile(profile as string, profileData as object)
