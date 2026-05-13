@@ -1020,6 +1020,90 @@ sub onMetaDataLoaded()
     m.loadItemsTask1.control = TaskControl.RUN
 end sub
 
+sub clearTextNode(node as dynamic)
+    if isValid(node)
+        node.text = ""
+    end if
+end sub
+
+sub hideNode(node as dynamic)
+    if isValid(node)
+        node.visible = false
+    end if
+end sub
+
+sub resetFocusedItemDetails()
+    clearTextNode(m.itemOverview)
+
+    hideNode(m.movieMetadataRow)
+    hideNode(m.showMetadataRow)
+    hideNode(m.episodeMetadataRow)
+
+    textNodes = [
+        m.communityRating,
+        m.criticRatingLabel,
+        m.episodeNumber,
+        m.releaseYear,
+        m.showStatus,
+        m.officialRating,
+        m.runtime,
+        m.showReleaseYear,
+        m.showOfficialRating,
+        m.showRuntime,
+        m.showCommunityRating,
+        m.episodeAirDate,
+        m.episodeRuntime
+    ]
+
+    for each node in textNodes
+        clearTextNode(node)
+        hideNode(node)
+    end for
+
+    hideNode(m.communityRatingGroup)
+    hideNode(m.showCommunityRatingGroup)
+
+    if isValid(m.star)
+        m.star.visible = false
+        m.star.width = 0
+        m.star.height = 0
+    end if
+
+    if isValid(m.showStar)
+        m.showStar.visible = false
+        m.showStar.width = 0
+        m.showStar.height = 0
+    end if
+
+    hideNode(m.criticRatingGroup)
+
+    if isValid(m.criticRatingIcon)
+        m.criticRatingIcon.uri = ""
+        m.criticRatingIcon.visible = false
+        m.criticRatingIcon.width = 0
+        m.criticRatingIcon.height = 0
+    end if
+
+    clearPluginRatings()
+end sub
+
+sub clearFocusedItemBackdrop()
+    if isValid(m.backdropFadeIn) then m.backdropFadeIn.control = "stop"
+    if isValid(m.backdropPrevFadeOut) then m.backdropPrevFadeOut.control = "stop"
+
+    if isValid(m.backdrop)
+        m.backdrop.uri = ""
+        m.backdrop.opacity = m.backdropTargetOpacity
+    end if
+
+    if isValid(m.backdropPrev)
+        m.backdropPrev.uri = ""
+        m.backdropPrev.opacity = 0
+    end if
+
+    m.backdropCrossfading = false
+end sub
+
 sub onItemFocusChanged()
     if not isValid(m.homeRows.content) then return
     if m.homeRows.rowItemFocused[0] < 0 or m.homeRows.rowItemFocused[1] < 0 then return
@@ -1030,6 +1114,8 @@ sub onItemFocusChanged()
     if isValid(m.itemTitle)
         m.itemTitle.text = focusedItem.title ?? ""
     end if
+
+    resetFocusedItemDetails()
 
     if isValid(m.backdrop) and isValidAndNotEmpty(focusedItem.backdropURL)
         if isValid(m.backdropFadeIn) then m.backdropFadeIn.control = "stop"
@@ -1043,12 +1129,19 @@ sub onItemFocusChanged()
         m.backdrop.opacity = 0.0
         m.backdrop.uri = focusedItem.backdropURL
         m.backdropCrossfading = true
+    else
+        clearFocusedItemBackdrop()
     end if
 
+    m.currentFocusedItemId = ""
     m.currentFocusedItemServerUrl = invalid
+
+    if isValidAndNotEmpty(focusedItem.id)
+        m.currentFocusedItemId = focusedItem.id
+    end if
+
     if isChainValid(focusedItem, "json._serverUrl") and isValidAndNotEmpty(focusedItem.json._serverUrl)
         m.currentFocusedItemServerUrl = focusedItem.json._serverUrl
-        m.currentFocusedItemBackdropURL = focusedItem.backdropURL
     end if
 
     itemId = focusedItem.id
@@ -1079,6 +1172,27 @@ sub onItemDetailsLoaded()
     json = item.json
     if not isValid(json) then return
 
+    loadedItemId = ""
+    if isValidAndNotEmpty(item.id)
+        loadedItemId = item.id
+    else if isValidAndNotEmpty(chainLookupReturn(json, "Id", ""))
+        loadedItemId = json.Id
+    end if
+
+    if not isValidAndNotEmpty(m.currentFocusedItemId)
+        return
+    end if
+
+    if not isValidAndNotEmpty(loadedItemId)
+        return
+    end if
+
+    if LCase(m.currentFocusedItemId) <> LCase(loadedItemId)
+        return
+    end if
+
+    resetFocusedItemDetails()
+
     isEpisode = isValid(json.Type) and json.Type = "Episode"
 
     if isValid(m.backdrop) and not isValidAndNotEmpty(m.currentFocusedItemServerUrl)
@@ -1102,37 +1216,6 @@ sub onItemDetailsLoaded()
             applyBackdropWithEffect(backdropUri)
         end if
     end if
-
-    setFieldText("communityRating", "")
-    setFieldText("criticRatingLabel", "")
-    setFieldText("episodeNumber", "")
-    setFieldText("releaseYear", "")
-    setFieldText("showStatus", "")
-    setFieldText("officialRating", "")
-    setFieldText("runtime", "")
-
-    setFieldVisibility("communityRating", false)
-    setFieldVisibility("criticRatingLabel", false)
-    setFieldVisibility("episodeNumber", false)
-    setFieldVisibility("releaseYear", false)
-    setFieldVisibility("showStatus", false)
-    setFieldVisibility("officialRating", false)
-    setFieldVisibility("runtime", false)
-    setFieldVisibility("communityRatingGroup", false)
-    if isValid(m.star)
-        m.star.visible = false
-        m.star.width = 0
-        m.star.height = 0
-    end if
-    if isValid(m.criticRatingGroup) then m.criticRatingGroup.visible = false
-    if isValid(m.criticRatingIcon)
-        m.criticRatingIcon.uri = ""
-        m.criticRatingIcon.visible = false
-        m.criticRatingIcon.width = 0
-        m.criticRatingIcon.height = 0
-    end if
-
-    clearPluginRatings()
 
     if isValid(json.Type)
         if json.Type = "Episode"
