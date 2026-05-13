@@ -2,10 +2,15 @@ import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/utils/misc.bs"
 
 const LOGO_RIGHT_PADDING = 30
+const CONTROLS_ROW_X = 103
+const CONTROLS_ROW_Y = 920
+const CONTROLS_ITEM_SPACING = 20
+const CONTROLS_GROUP_GAP = 40
+const TRANSPORT_BTN_W = 120
 
 sub init()
-    m.videoControls = m.top.findNode("videoControls")
-    m.optionControls = m.top.findNode("optionControls")
+    m.transportControls = m.top.findNode("transportControls")
+    m.secondaryControls = m.top.findNode("secondaryControls")
 
     if isValid(m.videoControls)
         if chainLookupReturn(m.global.session, "user.settings.`playback.showPlaybackSpeedControls`", false)
@@ -41,9 +46,9 @@ sub init()
     m.seekbarGroup = m.top.findNode("seekbarGroup")
     m.nextItem = m.top.FindNode("nextItem")
     m.previousItem = m.top.FindNode("previousItem")
-    m.clock = m.top.FindNode("clock")
+    m.itemBackButton = m.top.findNode("itemBack")
+    m.itemNextButton = m.top.findNode("itemNext")
 
-    ' Track if user is seeking
     m.isSeeking = false
     m.seekPercentage = 0
 
@@ -65,14 +70,11 @@ sub init()
     m.top.observeField("nextItemIcon", "onNextItemIconChanged")
     m.top.observeField("nextItemTitleText", "onNextItemTitleTextChanged")
 
-    ' Default focus on seekbar
-    m.defaultButtonIndex = 0
+    m.defaultButtonIndex = 2
     m.focusedButtonIndex = 0
     m.currentButtonGroup = "seekbar"
     m.logoMoved = false
 
-    m.videoControls.buttonFocused = 0
-    m.optionControls.buttonFocused = 0
     m.seekbarGroup.setFocus(true)
     m.progressIndicator.blendColor = "0xFFFFFFFF"
     m.deviceInfo = CreateObject("roDeviceInfo")
@@ -80,24 +82,27 @@ sub init()
     m.progressBarBackground.color = ColorPalette.BLACK77
     m.progressBar.color = "#00a4dc"
 
-    ' Style all buttons in both control rows
-    videoButtons = m.videoControls.getChildren(-1, 0)
-    for each button in videoButtons
+    transportButtons = m.transportControls.getChildren(-1, 0)
+    for each button in transportButtons
         button.background = ColorPalette.DARKGREY
         button.focusBackground = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
     end for
 
-    optionButtons = m.optionControls.getChildren(-1, 0)
-    for each button in optionButtons
+    secondaryButtons = m.secondaryControls.getChildren(-1, 0)
+    for each button in secondaryButtons
         button.background = ColorPalette.DARKGREY
         button.focusBackground = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
     end for
 
-    m.top.isSeeking = false
-    m.scrubberOldPosition.opacity = 0.66
-    m.top.liveTvStartOffset = 0
-    m.top.liveTvRewindLimit = LIVETV_REWIND_LIMIT
-    reloadUI()
+    if isValid(m.itemBackButton)
+        setButtonInGroup(m.transportControls, m.itemBackButton, isValidAndNotEmpty(m.previousItem.text), 0)
+    end if
+
+    if isValid(m.itemNextButton)
+        setButtonInGroup(m.transportControls, m.itemNextButton, isValidAndNotEmpty(m.nextItem.text), m.transportControls.getChildCount())
+    end if
+
+    positionSecondaryControls()
 end sub
 
 ' onProgressPercentageChanged: Handler for changes to m.top.progressPercentage param
@@ -109,7 +114,7 @@ sub onProgressPercentageChanged()
 
     ' Update circle indicator position (centered on progress, offset by circle radius)
     indicatorX = 103 + (m.progressBarBackground.width * m.top.progressPercentage) - 10
-    m.progressIndicator.translation = [indicatorX, 912]
+    m.progressIndicator.translation = [indicatorX, 812]
 end sub
 
 ' clampSeek: Clamps the given position to be within the bounds of the video duration or live TV rewind limit, depending on the content type.
@@ -136,6 +141,16 @@ end function
 
 sub setVideoEndingTime()
     m.videoEndingTime.text = "Ends at " + m.top.videoEndingTime
+end sub
+
+sub updateSeekPreview(totalTime as float)
+    newPosition = totalTime * m.seekPercentage
+    m.progressBar.width = m.progressBarBackground.width * m.seekPercentage
+
+    indicatorX = 103 + (m.progressBarBackground.width * m.seekPercentage) - 10
+    m.progressIndicator.translation = [indicatorX, 812]
+    m.videoRemainingTime.text = secondsToHuman(newPosition, true) + " / " + secondsToHuman(totalTime, true)
+    m.top.action = "seek," + newPosition.ToStr()
 end sub
 
 
@@ -230,6 +245,11 @@ end sub
 '
 sub onPreviousItemTitleTextChanged()
     m.previousItem.text = m.top.previousItemTitleText
+
+    if isValid(m.itemBackButton)
+        setButtonInGroup(m.transportControls, m.itemBackButton, isValidAndNotEmpty(m.previousItem.text), 0)
+        positionSecondaryControls()
+    end if
 end sub
 
 ' onNextItemIconChanged: Handler for changes to m.top.nextItemIcon param.
@@ -251,27 +271,134 @@ end sub
 '
 sub onNextItemTitleTextChanged()
     m.nextItem.text = m.top.nextItemTitleText
+
+    if isValid(m.itemNextButton)
+        setButtonInGroup(m.transportControls, m.itemNextButton, isValidAndNotEmpty(m.nextItem.text), m.transportControls.getChildCount())
+        positionSecondaryControls()
+    end if
 end sub
 
-' clearAllButtonFocus: Remove focus from all button groups
-'
+sub setButtonInGroup(group as object, button as object, show as boolean, insertIndex as integer)
+    if not isValid(group) or not isValid(button) then return
+
+    isInGroup = isValid(button.getParent())
+    if show
+        if not isInGroup
+            group.insertChild(button, insertIndex)
+        end if
+    else
+        if isInGroup
+            group.removeChild(button)
+        end if
+    end if
+end sub
+
+sub positionSecondaryControls()
+    if not isValid(m.transportControls) or not isValid(m.secondaryControls) then return
+
+    count = m.transportControls.getChildCount()
+    if count = 0
+        totalWidth = 0
+    else
+        totalWidth = count * TRANSPORT_BTN_W + (count - 1) * CONTROLS_ITEM_SPACING
+    end if
+
+    m.secondaryControls.translation = [CONTROLS_ROW_X + totalWidth + CONTROLS_GROUP_GAP, CONTROLS_ROW_Y]
+end sub
+
+function isButtonNavigable(button) as boolean
+    if not isValid(button) then return false
+    if not isValid(button.focus) then return false
+    if isValid(button.visible) and button.visible = false then return false
+    return true
+end function
+
+function getNavigableIndexFrom(buttonGroup as object, startIndex as integer, direction as integer) as integer
+    if direction = 0 or not isValid(buttonGroup) then return -1
+
+    childCount = buttonGroup.getChildCount()
+    i = startIndex
+
+    while i >= 0 and i < childCount
+        button = buttonGroup.getChild(i)
+        if isButtonNavigable(button)
+            return i
+        end if
+
+        i = i + direction
+    end while
+
+    return -1
+end function
+
+function getFirstNavigableIndex(buttonGroup as object) as integer
+    return getNavigableIndexFrom(buttonGroup, 0, 1)
+end function
+
+function getLastNavigableIndex(buttonGroup as object) as integer
+    if not isValid(buttonGroup) then return -1
+    return getNavigableIndexFrom(buttonGroup, buttonGroup.getChildCount() - 1, -1)
+end function
+
+function getControlGroup(groupName as string)
+    if groupName = "secondary"
+        return m.secondaryControls
+    end if
+
+    return m.transportControls
+end function
+
 sub clearAllButtonFocus()
-    for each child in m.videoControls.getChildren(-1, 0)
+    for each child in m.transportControls.getChildren(-1, 0)
         if isValid(child.focus)
             child.focus = false
         end if
     end for
 
-    for each child in m.optionControls.getChildren(-1, 0)
+    for each child in m.secondaryControls.getChildren(-1, 0)
         if isValid(child.focus)
             child.focus = false
         end if
     end for
 
-    m.videoControls.setFocus(false)
-    m.optionControls.setFocus(false)
+    m.transportControls.setFocus(false)
+    m.secondaryControls.setFocus(false)
     m.seekbarGroup.setFocus(false)
     m.isSeeking = false
+end sub
+
+sub focusControlGroup(groupName as string, targetIndex as integer, fallbackDirection as integer)
+    buttonGroup = getControlGroup(groupName)
+    if not isValid(buttonGroup) then return
+
+    target = targetIndex
+    if target < 0 or target >= buttonGroup.getChildCount()
+        target = -1
+    end if
+
+    if target = -1 or not isButtonNavigable(buttonGroup.getChild(target))
+        if fallbackDirection < 0
+            target = getLastNavigableIndex(buttonGroup)
+        else
+            target = getFirstNavigableIndex(buttonGroup)
+        end if
+    end if
+
+    if target = -1 then return
+
+    clearAllButtonFocus()
+    m.currentButtonGroup = groupName
+    m.focusedButtonIndex = target
+
+    focusedButton = buttonGroup.getChild(target)
+    focusedButton.focus = true
+    buttonGroup.setFocus(true)
+
+    if groupName = "transport"
+        checkDisplaySiblingItem(focusedButton.id)
+    else
+        checkDisplaySiblingItem("")
+    end if
 end sub
 
 sub focusOnSeekbar()
@@ -281,21 +408,29 @@ sub focusOnSeekbar()
     m.seekbarGroup.setFocus(true)
 end sub
 
-sub focusOnVideoControls()
-    clearAllButtonFocus()
-    m.currentButtonGroup = "video"
-    m.focusedButtonIndex = m.defaultButtonIndex
-    m.videoControls.buttonFocused = m.focusedButtonIndex
-    focusedButton = m.videoControls.getChild(m.focusedButtonIndex)
-    if isValid(focusedButton) and isValid(focusedButton.focus)
-        focusedButton.focus = true
+sub focusOnTransportControls(index = invalid)
+    targetIndex = m.defaultButtonIndex
+    if isValid(index)
+        targetIndex = index
     end if
-    m.videoControls.setFocus(true)
+
+    focusControlGroup("transport", targetIndex, 1)
+end sub
+
+sub focusOnSecondaryControls(index = invalid)
+    targetIndex = getFirstNavigableIndex(m.secondaryControls)
+    if isValid(index)
+        targetIndex = index
+    end if
+
+    focusControlGroup("secondary", targetIndex, 1)
 end sub
 
 sub resetFocusToDefaultButton()
-    if m.top.focusTarget = "video"
-        focusOnVideoControls()
+    if m.top.focusTarget = "video" or m.top.focusTarget = "transport"
+        focusOnTransportControls()
+    else if m.top.focusTarget = "secondary"
+        focusOnSecondaryControls()
     else
         focusOnSeekbar()
     end if
@@ -317,14 +452,16 @@ sub onVisibleChanged()
 
     m.inactivityTimer.unobserveField("fire")
     m.inactivityTimer.control = "stop"
-end sub' onFocusChanged: Handler for changes to the focus of this menu.
+end sub
+
+' onFocusChanged: Handler for changes to the focus of this menu.
 '
 sub onFocusChanged()
     if m.top.hasfocus
-        if m.currentButtonGroup = "option"
-            m.optionControls.setFocus(true)
-        else if m.currentButtonGroup = "video"
-            m.videoControls.setFocus(true)
+        if m.currentButtonGroup = "secondary"
+            m.secondaryControls.setFocus(true)
+        else if m.currentButtonGroup = "transport"
+            m.transportControls.setFocus(true)
         else
             m.seekbarGroup.setFocus(true)
         end if
@@ -353,10 +490,21 @@ end sub
 ' onButtonSelected: Handler for selection of buttons from the menu.
 '
 sub onButtonSelected()
-    if m.currentButtonGroup = "option"
-        selectedButton = m.optionControls.getChild(m.focusedButtonIndex)
+    if m.currentButtonGroup = "seekbar"
+        m.top.action = "videoplaypause"
+        return
+    end if
+
+    if m.currentButtonGroup = "secondary"
+        selectedButton = m.secondaryControls.getChild(m.focusedButtonIndex)
+    else if m.currentButtonGroup = "transport"
+        selectedButton = m.transportControls.getChild(m.focusedButtonIndex)
     else
-        selectedButton = m.videoControls.getChild(m.focusedButtonIndex)
+        return
+    end if
+
+    if not isValid(selectedButton) or not isValid(selectedButton.id)
+        return
     end if
 
     if LCase(selectedButton.id) = "chapterlist"
@@ -434,48 +582,23 @@ function onKeyEvent(key as string, press as boolean) as boolean
             m.seekPercentage = m.seekPercentage + 0.01
             if m.seekPercentage > 1.0 then m.seekPercentage = 1.0
 
-            newPosition = totalTime * m.seekPercentage
-
-            m.progressBar.width = m.progressBarBackground.width * m.seekPercentage
-            indicatorX = 103 + (m.progressBarBackground.width * m.seekPercentage) - 10
-            m.progressIndicator.translation = [indicatorX, 912]
-            m.videoRemainingTime.text = secondsToHuman(newPosition, true) + " / " + secondsToHuman(totalTime, true)
-
-            m.top.action = "seek," + newPosition.ToStr()
+            updateSeekPreview(totalTime)
             return true
         end if
 
-        ' Get current button group
-        if m.currentButtonGroup = "option"
-            buttonGroup = m.optionControls
-        else
-            buttonGroup = m.videoControls
-        end if
+        if m.currentButtonGroup = "transport" or m.currentButtonGroup = "secondary"
+            buttonGroup = getControlGroup(m.currentButtonGroup)
+            nextIndex = getNavigableIndexFrom(buttonGroup, m.focusedButtonIndex + 1, 1)
 
-        ' Navigate right in current row
-        if m.focusedButtonIndex + 1 >= buttonGroup.getChildCount()
-            return true
-        end if
-
-        focusedButton = buttonGroup.getChild(m.focusedButtonIndex)
-        focusedButton.focus = false
-
-        ' Skip spacer elements until next button is found
-        for i = m.focusedButtonIndex + 1 to buttonGroup.getChildCount()
-            m.focusedButtonIndex = i
-            focusedButton = buttonGroup.getChild(m.focusedButtonIndex)
-
-            if isValid(focusedButton.focus)
-                buttonGroup.buttonFocused = m.focusedButtonIndex
-                focusedButton.focus = true
-
-                ' Check if we should display sibling item info (only for video controls)
-                if m.currentButtonGroup = "video"
-                    checkDisplaySiblingItem(focusedButton.id)
-                end if
-                exit for
+            if nextIndex <> -1
+                focusControlGroup(m.currentButtonGroup, nextIndex, 1)
+            else if m.currentButtonGroup = "transport"
+                focusOnSecondaryControls()
+            else
+                firstTransportIndex = getFirstNavigableIndex(m.transportControls)
+                focusOnTransportControls(firstTransportIndex)
             end if
-        end for
+        end if
 
         return true
     end if
@@ -494,76 +617,33 @@ function onKeyEvent(key as string, press as boolean) as boolean
             m.seekPercentage = m.seekPercentage - 0.01
             if m.seekPercentage < 0 then m.seekPercentage = 0
 
-            newPosition = totalTime * m.seekPercentage
-
-            m.progressBar.width = m.progressBarBackground.width * m.seekPercentage
-            indicatorX = 103 + (m.progressBarBackground.width * m.seekPercentage) - 10
-            m.progressIndicator.translation = [indicatorX, 912]
-            m.videoRemainingTime.text = secondsToHuman(newPosition, true) + " / " + secondsToHuman(totalTime, true)
-
-            m.top.action = "seek," + newPosition.ToStr()
+            updateSeekPreview(totalTime)
             return true
         end if
 
-        ' Navigate left in current row
-        if m.focusedButtonIndex = 0
-            return true
-        end if
+        if m.currentButtonGroup = "transport" or m.currentButtonGroup = "secondary"
+            buttonGroup = getControlGroup(m.currentButtonGroup)
+            previousIndex = getNavigableIndexFrom(buttonGroup, m.focusedButtonIndex - 1, -1)
 
-        ' Get current button group
-        if m.currentButtonGroup = "option"
-            buttonGroup = m.optionControls
-        else
-            buttonGroup = m.videoControls
-        end if
-
-        focusedButton = buttonGroup.getChild(m.focusedButtonIndex)
-        focusedButton.focus = false
-
-        ' Skip spacer elements until next button is found
-        for i = m.focusedButtonIndex - 1 to 0 step -1
-            m.focusedButtonIndex = i
-            focusedButton = buttonGroup.getChild(m.focusedButtonIndex)
-
-            if isValid(focusedButton.focus)
-                buttonGroup.buttonFocused = m.focusedButtonIndex
-                focusedButton.focus = true
-
-                ' Check if we should display sibling item info (only for video controls)
-                if m.currentButtonGroup = "video"
-                    checkDisplaySiblingItem(focusedButton.id)
-                end if
-                exit for
+            if previousIndex <> -1
+                focusControlGroup(m.currentButtonGroup, previousIndex, -1)
+            else if m.currentButtonGroup = "secondary"
+                lastTransportIndex = getLastNavigableIndex(m.transportControls)
+                focusOnTransportControls(lastTransportIndex)
             end if
-        end for
+        end if
 
         return true
     end if
 
     if key = "down"
-        ' Move from video controls to seekbar, or seekbar to option controls
-        if m.currentButtonGroup = "video"
-            focusedButton = m.videoControls.getChild(m.focusedButtonIndex)
-            focusedButton.focus = false
-            m.videoControls.setFocus(false)
-
-            ' Switch to seekbar
-            m.currentButtonGroup = "seekbar"
-            m.seekbarGroup.setFocus(true)
-            m.progressIndicator.blendColor = "0xFFFFFFFF"
+        if m.currentButtonGroup = "seekbar"
+            focusOnTransportControls()
+        else if m.currentButtonGroup = "transport"
+            focusOnSecondaryControls()
+        else if m.currentButtonGroup = "secondary"
             checkDisplaySiblingItem("")
-        else if m.currentButtonGroup = "seekbar"
-            ' Switch to option controls
-            m.seekbarGroup.setFocus(false)
-            m.progressIndicator.blendColor = "0xFFFFFFFF"
-            m.isSeeking = false
-            m.currentButtonGroup = "option"
-
-            m.focusedButtonIndex = 0
-            focusedButton = m.optionControls.getChild(m.focusedButtonIndex)
-            focusedButton.focus = true
-            m.optionControls.setFocus(true)
-            m.optionControls.buttonFocused = m.focusedButtonIndex
+            m.top.action = "hide"
         end if
 
         if key = "right"
@@ -647,31 +727,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
 
     if key = "up"
-        ' Move from seekbar to video controls, or option controls to seekbar
-        if m.currentButtonGroup = "seekbar"
-            ' Switch to video controls
-            m.seekbarGroup.setFocus(false)
-            m.progressIndicator.blendColor = "0xFFFFFFFF"
-            m.isSeeking = false
-            m.currentButtonGroup = "video"
-
-            m.focusedButtonIndex = m.defaultButtonIndex
-            focusedButton = m.videoControls.getChild(m.focusedButtonIndex)
-            focusedButton.focus = true
-            m.videoControls.setFocus(true)
-            m.videoControls.buttonFocused = m.focusedButtonIndex
-
-            focusedButtonID = focusedButton.id
-            checkDisplaySiblingItem(focusedButtonID)
-        else if m.currentButtonGroup = "option"
-            focusedButton = m.optionControls.getChild(m.focusedButtonIndex)
-            focusedButton.focus = false
-            m.optionControls.setFocus(false)
-
-            ' Switch to seekbar
-            m.currentButtonGroup = "seekbar"
-            m.seekbarGroup.setFocus(true)
-            m.progressIndicator.blendColor = "0xFFFFFFFF"
+        if m.currentButtonGroup = "secondary"
+            focusOnTransportControls()
+        else if m.currentButtonGroup = "transport"
+            focusOnSeekbar()
         end if
 
     ' Look for video seek buttons being pressed and execute the seek action

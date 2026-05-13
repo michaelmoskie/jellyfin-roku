@@ -13,38 +13,38 @@
 
     <Clock id="clock" translation="[1618, 61]" />
 
-    <!-- Primary playback controls (above seekbar) -->
-    <ButtonGroup id="videoControls" itemSpacings="[20]" layoutDirection="horiz" horizAlignment="left" translation="[103,820]">
-      <IconButton id="videoPlayPause" padding="20" icon="pkg:/images/icons/play.png" height="80" width="120" />
+    <!-- Transport controls (below seekbar) -->
+    <LayoutGroup id="transportControls" itemSpacings="[20]" layoutDirection="horiz" horizAlignment="left" translation="[103,920]">
+      <IconButton id="itemBack" padding="20" icon="pkg:/images/icons/previous.png" height="80" width="120" />
       <IconButton id="rewind" padding="20" icon="pkg:/images/icons/rewinds.png" height="80" width="120" />
+      <IconButton id="videoPlayPause" padding="20" icon="pkg:/images/icons/play.png" height="80" width="120" />
       <IconButton id="fastForward" padding="20" icon="pkg:/images/icons/fast_forward.png" height="80" width="120" />
-      <IconButton id="showAudioMenu" padding="27" icon="pkg:/images/icons/select_audio.png" height="65" width="100" />
-      <IconButton id="showSubtitleMenu" padding="0" icon="pkg:/images/icons/select_subtitle.png" height="65" width="100" />
-    </ButtonGroup>
+      <IconButton id="itemNext" padding="20" icon="pkg:/images/icons/play_next.png" height="80" width="120" />
+    </LayoutGroup>
 
     <!-- Progress bar and time display -->
-    <Group id="seekbarGroup" translation="[103,920]">
+    <Group id="seekbarGroup" translation="[103,820]">
       <Rectangle id="progressBarBackground" width="1714" height="8">
         <Rectangle id="progressBar" width="0" height="8" />
       </Rectangle>
     </Group>
-    <Poster id="progressIndicator" uri="pkg:/images/icons/circle.png" width="20" height="20" translation="[103,912]" loadDisplayMode="scaleToFit" />
+    <Poster id="progressIndicator" uri="pkg:/images/icons/circle.png" width="20" height="20" translation="[103,812]" loadDisplayMode="scaleToFit" />
 
-    <Text id="videoEndingTime" font="font:SmallSystemFont" color="0xffffffFF" horizAlign="right" width="300" translation="[1517,820]" />
-    <Text id="videoRemainingTime" font="font:MediumSystemFont" color="0xffffffFF" horizAlign="right" width="300" translation="[1517,975]" />
+    <Text id="videoEndingTime" font="font:SmallSystemFont" color="0xffffffFF" horizAlign="right" width="300" translation="[1517,780]" />
+    <Text id="videoRemainingTime" font="font:MediumSystemFont" color="0xffffffFF" horizAlign="left" width="300" translation="[103,855]" />
 
-    <!-- Secondary options (below seekbar) -->
-    <ButtonGroup id="optionControls" itemSpacings="[20]" layoutDirection="horiz" horizAlignment="left" translation="[103,975]">
+    <!-- Secondary controls (same row as transport, positioned dynamically) -->
+    <LayoutGroup id="secondaryControls" itemSpacings="[20]" layoutDirection="horiz" horizAlignment="left" translation="[843,920]">
+      <IconButton id="showSpeedMenu" padding="16" icon="pkg:/images/icons/settings.png" height="65" width="100" />
       <IconButton id="chapterList" padding="16" icon="pkg:/images/icons/select_chapter.png" height="65" width="100" />
-      <IconButton id="itemBack" padding="20" icon="pkg:/images/icons/previous.png" height="80" width="120" />
-      <IconButton id="itemNext" padding="20" icon="pkg:/images/icons/play_next.png" height="80" width="120" />
+      <IconButton id="showSubtitleMenu" padding="0" icon="pkg:/images/icons/select_subtitle.png" height="65" width="100" />
+      <IconButton id="showAudioMenu" padding="27" icon="pkg:/images/icons/select_audio.png" height="65" width="100" />
       <IconButton id="showVideoInfoPopup" padding="16" icon="pkg:/images/icons/trailer.png" height="65" width="100" />
-      <IconButton id="showVideoOverviewPopup" padding="25" icon="pkg:/images/icons/info.png" height="65" width="100" />
-    </ButtonGroup>
+    </LayoutGroup>
 
     <!-- Item preview labels (show on focus) -->
     <ExpandingLabel
-      translation="[200, 850]"
+      translation="[200, 885]"
       id="previousItem"
       visible="false"
       icon=""
@@ -62,7 +62,7 @@
     />
 
     <ExpandingLabel
-      translation="[1520, 850]"
+      translation="[1520, 885]"
       id="nextItem"
       visible="false"
       icon=""
