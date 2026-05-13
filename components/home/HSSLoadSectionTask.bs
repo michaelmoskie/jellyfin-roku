@@ -7,24 +7,26 @@ sub init()
     m.top.functionName = "loadHomeScreenSection"
 end sub
 
-function targetAPIRequest(path as string, params = {} as object) as dynamic
-    if not isValidAndNotEmpty(m.top.serverUrl)
+function targetAPIRequest(serverUrl as string, userId as string, authToken as string, path as string, params = {} as object) as dynamic
+    if not isValidAndNotEmpty(serverUrl)
         return invalid
     end if
 
-    return APIRequestForServer(m.top.serverUrl, m.top.userId, m.top.authToken, path, params)
+    return APIRequestForServer(serverUrl, userId, authToken, path, params)
 end function
 
 sub loadHomeScreenSection()
     results = []
 
+    serverUrl = m.top.serverUrl
+    userId = m.top.userId
+    authToken = m.top.authToken
     sectionType = m.top.sectionType
     if not isValidAndNotEmpty(sectionType)
         m.top.content = results
         return
     end if
 
-    userId = m.top.userId
     if not isValidAndNotEmpty(userId)
         m.top.content = results
         return
@@ -32,13 +34,17 @@ sub loadHomeScreenSection()
 
     pathSection = sectionType.EncodeUriComponent()
     params = { userId: userId }
+    params.AddReplace("Fields", HSS_ENRICH_FIELDS)
+    params.AddReplace("EnableImageTypes", "Primary,Backdrop,Thumb,Logo")
+    params.AddReplace("ImageTypeLimit", 1)
+    params.AddReplace("EnableTotalRecordCount", false)
 
     additionalData = m.top.additionalData
     if isValidAndNotEmpty(additionalData)
         params.AddReplace("additionalData", additionalData)
     end if
 
-    request = targetAPIRequest("/HomeScreen/Section/" + pathSection, params)
+    request = targetAPIRequest(serverUrl, userId, authToken, "/HomeScreen/Section/" + pathSection, params)
     if not isValid(request)
         m.top.content = results
         return
@@ -46,7 +52,7 @@ sub loadHomeScreenSection()
 
     response = getJson(request)
     itemsPayload = getItemsPayload(response)
-    itemsPayload = enrichItemsPayload(itemsPayload, userId)
+    itemsPayload = enrichItemsPayload(itemsPayload, serverUrl, userId, authToken)
 
     for each item in itemsPayload
         homeData = createSGNode("HomeData")
@@ -78,7 +84,7 @@ function getItemsPayload(response as dynamic) as object
     return []
 end function
 
-function enrichItemsPayload(itemsPayload as object, userId as string) as object
+function enrichItemsPayload(itemsPayload as object, serverUrl as string, userId as string, authToken as string) as object
     if not isValidAndNotEmpty(itemsPayload) or not isValidAndNotEmpty(userId)
         return itemsPayload
     end if
@@ -92,7 +98,7 @@ function enrichItemsPayload(itemsPayload as object, userId as string) as object
         return itemsPayload
     end if
 
-    request = targetAPIRequest("/Users/" + userId.EncodeUriComponent() + "/Items", {
+    request = targetAPIRequest(serverUrl, userId, authToken, "/Users/" + userId.EncodeUriComponent() + "/Items", {
         Ids: itemIds.Join(","),
         Fields: HSS_ENRICH_FIELDS,
         EnableImageTypes: "Primary,Backdrop,Thumb,Logo",

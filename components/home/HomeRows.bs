@@ -9,6 +9,8 @@ import "pkg:/source/utils/multiserver.bs"
 const LOADING_WAIT_TIME = 2
 const HSS_LOCAL_ROWS_SETTING = "ui.home.hssRowsLocalConfig"
 const KT_LOCAL_ROWS_SETTING = "ui.home.ktRowsLocalConfig"
+const HSS_MAX_CONCURRENT_SECTION_TASKS = 3
+const KT_MAX_CONCURRENT_SECTION_TASKS = 3
 
 ' Helper function to get poster size based on user preference
 function getPosterSize(preferWide = true as boolean) as object
@@ -90,11 +92,15 @@ sub init()
     m.hssSections = []
     m.hssSuppressedBuiltins = {}
     m.hssSectionTasks = {}
+    m.hssSectionTaskQueue = []
+    m.activeHssSectionTaskCount = 0
     m.hssRowTitleByKey = {}
     m.hssRowTitles = []
     m.ktProbeTask = invalid
     m.ktSections = []
     m.ktSectionTasks = {}
+    m.ktSectionTaskQueue = []
+    m.activeKtSectionTaskCount = 0
     m.ktRowTitleByKey = {}
     m.ktRowTitles = []
     m.serverHomeRows = []
@@ -107,8 +113,6 @@ sub init()
         kefintweaks: {}
     }
     m.pendingProbeCount = 0
-    m.loadedCachedHssProbeState = false
-    m.loadedCachedKtProbeState = false
     m.initialHomeRowsStarted = false
 end sub
 
@@ -806,6 +810,9 @@ function getHssBuiltinEquivalent(section as string) as string
 end function
 
 sub cleanupHssTasks()
+    m.hssSectionTaskQueue = []
+    m.activeHssSectionTaskCount = 0
+
     if not isValid(m.hssSectionTasks)
         m.hssSectionTasks = {}
         return
@@ -853,6 +860,9 @@ sub removeTrackedHssRows()
 end sub
 
 sub cleanupKtTasks()
+    m.ktSectionTaskQueue = []
+    m.activeKtSectionTaskCount = 0
+
     if not isValid(m.ktSectionTasks)
         m.ktSectionTasks = {}
         return
@@ -911,8 +921,6 @@ sub startHomeRowsLoading()
     m.ktSections = []
     m.serverDynamicRowTitles = {}
     m.pendingProbeCount = 0
-    m.loadedCachedHssProbeState = false
-    m.loadedCachedKtProbeState = false
     m.initialHomeRowsStarted = false
 
     refreshServerRowsState()
@@ -943,7 +951,7 @@ sub startHomeRowsLoading()
     end if
 
     if shouldProbeHss
-        m.loadedCachedHssProbeState = loadCachedHssProbeState()
+        loadCachedHssProbeState()
         m.hssProbeTask = CreateObject("roSGNode", "HSSProbeTask")
         m.hssProbeTask.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
         m.hssProbeTask.userId = chainLookupReturn(m.global, "session.user.id", "")
@@ -954,7 +962,7 @@ sub startHomeRowsLoading()
     end if
 
     if shouldProbeKt
-        m.loadedCachedKtProbeState = loadCachedKtProbeState()
+        loadCachedKtProbeState()
         m.ktProbeTask = CreateObject("roSGNode", "KefinTweaksProbeTask")
         m.ktProbeTask.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
         m.ktProbeTask.userId = chainLookupReturn(m.global, "session.user.id", "")
@@ -962,11 +970,6 @@ sub startHomeRowsLoading()
         m.ktProbeTask.observeField("result", "onKTProbeComplete")
         m.pendingProbeCount++
         m.ktProbeTask.control = "RUN"
-    end if
-
-    requiresHssProbeBeforeStartup = shouldProbeHss and not m.loadedCachedHssProbeState
-    if requiresHssProbeBeforeStartup
-        return
     end if
 
     m.initialHomeRowsStarted = true
@@ -1007,7 +1010,22 @@ sub onHSSProbeComplete()
         m.pendingProbeCount = m.pendingProbeCount - 1
     end if
 
-    if not m.initialHomeRowsStarted and m.pendingProbeCount = 0
+    if m.initialHomeRowsStarted
+        if shouldUseResolvedServerRows()
+            return
+        end if
+
+        cleanupHssTasks()
+        removeTrackedHssRows()
+        resetHssRowTracking()
+
+        if shouldLoadHss()
+            createHssRows()
+        end if
+        return
+    end if
+
+    if not m.initialHomeRowsStarted
         m.initialHomeRowsStarted = true
         processUserSections()
     end if
@@ -1040,6 +1058,10 @@ sub onKTProbeComplete()
     end if
 
     if m.initialHomeRowsStarted
+        if shouldUseResolvedServerRows()
+            return
+        end if
+
         cleanupKtTasks()
         removeTrackedKtRows()
         resetKtRowTracking()
@@ -1222,17 +1244,7 @@ function createHssRowFromServerRow(row as object, rowIndex as integer) as boolea
         rowNode.cursorSize = getPosterSize(false)
     end if
 
-    task = CreateObject("roSGNode", "HSSLoadSectionTask")
-    task.sectionType = sectionType
-    task.additionalData = additionalData
-    task.displayText = sectionTitle
-    task.sectionKey = sectionKey
-    task.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
-    task.userId = chainLookupReturn(m.global, "session.user.id", "")
-    task.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
-    task.observeField("content", "onHssSectionLoaded")
-    m.hssSectionTasks[sectionKey] = task
-    task.control = "RUN"
+    enqueueHssSectionTask(sectionType, additionalData, sectionTitle, sectionKey)
 
     return true
 end function
@@ -1307,17 +1319,7 @@ function createKtRowFromServerRow(row as object, rowIndex as integer) as boolean
         rowNode.cursorSize = getPosterSize(false)
     end if
 
-    task = CreateObject("roSGNode", "KefinTweaksLoadSectionTask")
-    task.sectionKind = sectionKind
-    task.spec = sectionSpec
-    task.displayText = sectionTitle
-    task.sectionKey = sectionKey
-    task.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
-    task.userId = chainLookupReturn(m.global, "session.user.id", "")
-    task.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
-    task.observeField("content", "onKtSectionLoaded")
-    m.ktSectionTasks[sectionKey] = task
-    task.control = "RUN"
+    enqueueKtSectionTask(sectionKind, sectionSpec, sectionTitle, sectionKey)
 
     return true
 end function
@@ -1671,6 +1673,108 @@ function addHomeSection(sectionType as string) as boolean
     return false
 end function
 
+sub enqueueHssSectionTask(sectionType as string, additionalData as string, sectionTitle as string, sectionKey as string)
+    if not isValid(m.hssSectionTaskQueue)
+        m.hssSectionTaskQueue = []
+    end if
+
+    m.hssSectionTaskQueue.push({
+        sectionType: sectionType,
+        additionalData: additionalData,
+        sectionTitle: sectionTitle,
+        sectionKey: sectionKey
+    })
+
+    drainHssSectionTaskQueue()
+end sub
+
+sub drainHssSectionTaskQueue()
+    if not isValid(m.hssSectionTaskQueue)
+        m.hssSectionTaskQueue = []
+    end if
+
+    if not isValid(m.hssSectionTasks)
+        m.hssSectionTasks = {}
+    end if
+
+    while m.activeHssSectionTaskCount < HSS_MAX_CONCURRENT_SECTION_TASKS and m.hssSectionTaskQueue.Count() > 0
+        taskDescriptor = m.hssSectionTaskQueue.Shift()
+        if not isAssociativeArrayValue(taskDescriptor)
+            continue while
+        end if
+
+        sectionType = chainLookupReturn(taskDescriptor, "sectionType", "")
+        sectionKey = chainLookupReturn(taskDescriptor, "sectionKey", "")
+        if not isValidAndNotEmpty(sectionType) or not isValidAndNotEmpty(sectionKey)
+            continue while
+        end if
+
+        task = CreateObject("roSGNode", "HSSLoadSectionTask")
+        task.sectionType = sectionType
+        task.additionalData = chainLookupReturn(taskDescriptor, "additionalData", "")
+        task.displayText = chainLookupReturn(taskDescriptor, "sectionTitle", "")
+        task.sectionKey = sectionKey
+        task.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
+        task.userId = chainLookupReturn(m.global, "session.user.id", "")
+        task.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
+        task.observeField("content", "onHssSectionLoaded")
+        m.hssSectionTasks[sectionKey] = task
+        m.activeHssSectionTaskCount++
+        task.control = "RUN"
+    end while
+end sub
+
+sub enqueueKtSectionTask(sectionType as string, sectionSpec as dynamic, sectionTitle as string, sectionKey as string)
+    if not isValid(m.ktSectionTaskQueue)
+        m.ktSectionTaskQueue = []
+    end if
+
+    m.ktSectionTaskQueue.push({
+        sectionType: sectionType,
+        sectionSpec: sectionSpec,
+        sectionTitle: sectionTitle,
+        sectionKey: sectionKey
+    })
+
+    drainKtSectionTaskQueue()
+end sub
+
+sub drainKtSectionTaskQueue()
+    if not isValid(m.ktSectionTaskQueue)
+        m.ktSectionTaskQueue = []
+    end if
+
+    if not isValid(m.ktSectionTasks)
+        m.ktSectionTasks = {}
+    end if
+
+    while m.activeKtSectionTaskCount < KT_MAX_CONCURRENT_SECTION_TASKS and m.ktSectionTaskQueue.Count() > 0
+        taskDescriptor = m.ktSectionTaskQueue.Shift()
+        if not isAssociativeArrayValue(taskDescriptor)
+            continue while
+        end if
+
+        sectionType = chainLookupReturn(taskDescriptor, "sectionType", "")
+        sectionKey = chainLookupReturn(taskDescriptor, "sectionKey", "")
+        if not isValidAndNotEmpty(sectionType) or not isValidAndNotEmpty(sectionKey)
+            continue while
+        end if
+
+        task = CreateObject("roSGNode", "KefinTweaksLoadSectionTask")
+        task.sectionKind = sectionType
+        task.spec = chainLookupReturn(taskDescriptor, "sectionSpec", {})
+        task.displayText = chainLookupReturn(taskDescriptor, "sectionTitle", "")
+        task.sectionKey = sectionKey
+        task.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
+        task.userId = chainLookupReturn(m.global, "session.user.id", "")
+        task.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
+        task.observeField("content", "onKtSectionLoaded")
+        m.ktSectionTasks[sectionKey] = task
+        m.activeKtSectionTaskCount++
+        task.control = "RUN"
+    end while
+end sub
+
 sub createHssRows()
     if not isValidAndNotEmpty(m.hssSections)
         return
@@ -1710,17 +1814,7 @@ sub createHssRows()
             row.cursorSize = getPosterSize(false)
         end if
 
-        task = CreateObject("roSGNode", "HSSLoadSectionTask")
-        task.sectionType = sectionType
-        task.additionalData = additionalData
-        task.displayText = sectionTitle
-        task.sectionKey = sectionKey
-        task.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
-        task.userId = chainLookupReturn(m.global, "session.user.id", "")
-        task.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
-        task.observeField("content", "onHssSectionLoaded")
-        m.hssSectionTasks[sectionKey] = task
-        task.control = "RUN"
+        enqueueHssSectionTask(sectionType, additionalData, sectionTitle, sectionKey)
 
         sectionIndex++
     end for
@@ -1765,17 +1859,7 @@ sub createKtRows()
             row.cursorSize = getPosterSize(false)
         end if
 
-        task = CreateObject("roSGNode", "KefinTweaksLoadSectionTask")
-        task.sectionKind = sectionType
-        task.spec = sectionSpec
-        task.displayText = sectionTitle
-        task.sectionKey = sectionKey
-        task.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
-        task.userId = chainLookupReturn(m.global, "session.user.id", "")
-        task.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
-        task.observeField("content", "onKtSectionLoaded")
-        m.ktSectionTasks[sectionKey] = task
-        task.control = "RUN"
+        enqueueKtSectionTask(sectionType, sectionSpec, sectionTitle, sectionKey)
 
         sectionIndex++
     end for
@@ -3282,6 +3366,12 @@ end sub
 sub onHssSectionLoaded(msg as object)
     m.processedRowCount++
 
+    if m.activeHssSectionTaskCount > 0
+        m.activeHssSectionTaskCount = m.activeHssSectionTaskCount - 1
+    end if
+
+    drainHssSectionTaskQueue()
+
     node = msg.getRoSGNode()
     if not isValid(node)
         setRowItemSize()
@@ -3341,6 +3431,12 @@ end sub
 
 sub onKtSectionLoaded(msg as object)
     m.processedRowCount++
+
+    if m.activeKtSectionTaskCount > 0
+        m.activeKtSectionTaskCount = m.activeKtSectionTaskCount - 1
+    end if
+
+    drainKtSectionTaskQueue()
 
     node = msg.getRoSGNode()
     if not isValid(node)

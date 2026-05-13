@@ -2,6 +2,7 @@ import "pkg:/source/api/baserequest.bs"
 import "pkg:/source/utils/misc.bs"
 
 const DEFAULT_SECTION_LIMIT = 15
+const KEFIN_CONFIG_REQUEST_TIMEOUT_MS = 8000
 
 sub init()
     m.top.functionName = "probeKefinTweaks"
@@ -68,13 +69,33 @@ function getKefinConfigSource() as string
             continue for
         end if
 
-        source = req.GetToString()
+        source = getRequestBodyWithTimeout(req, KEFIN_CONFIG_REQUEST_TIMEOUT_MS)
         if isValidAndNotEmpty(source)
             return source
         end if
     end for
 
     return ""
+end function
+
+function getRequestBodyWithTimeout(req as dynamic, timeoutMs as integer) as string
+    if not isValid(req)
+        return ""
+    end if
+
+    req.setMessagePort(CreateObject("roMessagePort"))
+    req.AsyncGetToString()
+
+    response = wait(timeoutMs, req.GetMessagePort())
+    if type(response) <> "roUrlEvent"
+        return ""
+    end if
+
+    if response.GetResponseCode() <> 200
+        return ""
+    end if
+
+    return response.GetString()
 end function
 
 function extractKefinConfigJson(source as string) as string
