@@ -1,4 +1,4 @@
-import "pkg:/components/home/RadioStations.bs"
+import "pkg:/source/api/MoonfinPlugin.bs"
 import "pkg:/source/constants/HomeRowItemSizes.bs"
 import "pkg:/source/enums/ItemType.bs"
 import "pkg:/source/enums/KeyCode.bs"
@@ -204,6 +204,15 @@ end function
 
 function isKtEnabled() as boolean
     return normalizeBooleanValue(get_user_setting("plugin.kefintweaks.enabled"), false)
+end function
+
+function isPluginFeatureOptedOut(settingName as string) as boolean
+    settingValue = get_user_setting(settingName)
+    if not isValid(settingValue)
+        return false
+    end if
+
+    return not normalizeBooleanValue(settingValue, false)
 end function
 
 function loadCachedHssProbeState() as boolean
@@ -726,6 +735,14 @@ function shouldLoadHss() as boolean
         end if
     end if
 
+    if isPluginFeatureOptedOut("plugin.enabled") or isPluginFeatureOptedOut("plugin.hss.enabled")
+        return false
+    end if
+
+    if moonfinPlugin.IsPluginInstalled()
+        return true
+    end if
+
     if not isHssEnabled()
         return false
     end if
@@ -746,6 +763,14 @@ function shouldLoadKt() as boolean
         if m.serverHomeRowsSource = "kefintweaks" or hasServerRowsForSource("kefintweaks")
             return true
         end if
+    end if
+
+    if isPluginFeatureOptedOut("plugin.enabled") or isPluginFeatureOptedOut("plugin.kefintweaks.enabled")
+        return false
+    end if
+
+    if moonfinPlugin.IsPluginInstalled()
+        return true
     end if
 
     if not isKtEnabled()

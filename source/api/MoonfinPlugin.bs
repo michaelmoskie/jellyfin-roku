@@ -165,6 +165,12 @@ namespace moonfinPlugin
         return moonfinPlugin.ParseBoolSetting(chainLookupReturn(m.global.session, "user.settings.`plugin.enabled`", false), false)
     end function
 
+    function IsPluginInstalled() as boolean
+        pluginInfo = m.global.session.pluginInfo
+        if not isValid(pluginInfo) then return false
+        return pluginInfo.installed = true
+    end function
+
     function IsRatingsEnabled() as boolean
         if not moonfinPlugin.IsEnabled() then return false
         return moonfinPlugin.ParseBoolSetting(chainLookupReturn(m.global.session, "user.settings.`plugin.mdblist.enabled`", true), true)

@@ -241,6 +241,14 @@ namespace session
                     defaultSettings: result.defaultSettings ?? invalid
                 }
 
+                if not isValid(get_user_setting("plugin.enabled"))
+                    set_user_setting("plugin.enabled", "true")
+                end if
+
+                if toBoolean(pluginInfo.jellyseerrEnabled) = true and not isValid(get_user_setting("jellyseerr.enabled"))
+                    set_user_setting("jellyseerr.enabled", "true")
+                end if
+
             end if
 
             tmpSession = m.global.session
