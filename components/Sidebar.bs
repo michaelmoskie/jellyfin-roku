@@ -536,31 +536,6 @@ sub collapseLibraries()
     rebuildNavItems()
 end sub
 
-sub manageLibraryExpansion()
-    if not m.librariesEnabled or m.libraryItems.count() = 0 then return
-    if m.avatarSelected
-        if m.librariesExpanded then collapseLibraries()
-        return
-    end if
-
-    libIdx = -1
-    for i = 0 to m.navItems.count() - 1
-        if m.navItems[i].id = "libraries"
-            libIdx = i
-            exit for
-        end if
-    end for
-    if libIdx < 0 then return
-
-    inLibArea = (m.selectedIndex >= libIdx and m.selectedIndex < m.navItems.count() - 1)
-
-    if inLibArea and not m.librariesExpanded
-        expandLibraries()
-    else if not inLibArea and m.librariesExpanded
-        collapseLibraries()
-    end if
-end sub
-
 sub loadNavbarSettings()
     m.shuffleButtonEnabled = parseBoolSetting(m.global.session.user.settings["navbar.show_shuffle"], m.global.session.user.settings["show_shuffle_button"], true)
     m.favoritesButtonEnabled = parseBoolSetting(m.global.session.user.settings["navbar.show_favorites"], invalid, true)
@@ -713,12 +688,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
         else if m.selectedIndex = 0
             m.avatarSelected = true
             m.selectedIndex = -1
-            manageLibraryExpansion()
             layoutSidebar()
             return true
         else
             m.selectedIndex = m.selectedIndex - 1
-            manageLibraryExpansion()
             layoutSidebar()
             return true
         end if
@@ -731,7 +704,6 @@ function onKeyEvent(key as string, press as boolean) as boolean
             return true
         else if m.selectedIndex < maxIndex
             m.selectedIndex = m.selectedIndex + 1
-            manageLibraryExpansion()
             layoutSidebar()
             return true
         end if
