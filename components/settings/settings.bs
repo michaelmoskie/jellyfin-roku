@@ -1688,7 +1688,6 @@ sub updateHssSettingGate()
     usingServerRows = shouldUseServerManagedHomeRows()
 
     setSettingVisibilityByName(m.configTree, "plugin.hss.enabled", pluginDetected and not usingServerRows)
-    setSettingVisibilityByName(m.configTree, "homeRows.manageHssRows", usingServerRows)
 end sub
 
 sub updateKtSettingGate()
@@ -1700,7 +1699,6 @@ sub updateKtSettingGate()
     usingServerRows = shouldUseServerManagedHomeRows()
 
     setSettingVisibilityByName(m.configTree, "plugin.kefintweaks.enabled", pluginDetected and not usingServerRows)
-    setSettingVisibilityByName(m.configTree, "homeRows.manageKtRows", usingServerRows)
 end sub
 
 function reorderSettingsForFlutter(configTree as object) as object

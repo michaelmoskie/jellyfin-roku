@@ -1739,22 +1739,6 @@
             "settingName": "homeRows.useServerConfig",
             "type": "bool",
             "default": "false"
-          },
-          {
-            "title": "Manage HSS Rows",
-            "description": "Enable or disable individual Home Screen Sections plugin rows for Roku. Use Rewind/Fast-Forward to reorder rows.",
-            "settingName": "homeRows.manageHssRows",
-            "type": "string",
-            "default": "",
-            "visible": false
-          },
-          {
-            "title": "Manage KefinTweaks Rows",
-            "description": "Enable or disable individual KefinTweaks rows for Roku. Use Rewind/Fast-Forward to reorder rows.",
-            "settingName": "homeRows.manageKtRows",
-            "type": "string",
-            "default": "",
-            "visible": false
           }
         ]
       },
