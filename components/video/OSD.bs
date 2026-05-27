@@ -70,7 +70,7 @@ sub init()
     m.top.observeField("nextItemIcon", "onNextItemIconChanged")
     m.top.observeField("nextItemTitleText", "onNextItemTitleTextChanged")
 
-    m.defaultButtonIndex = 2
+    m.defaultButtonIndex = 1
     m.focusedButtonIndex = 0
     m.currentButtonGroup = "seekbar"
     m.logoMoved = false
@@ -640,7 +640,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
         if m.currentButtonGroup = "seekbar"
             focusOnTransportControls()
         else if m.currentButtonGroup = "transport"
-            focusOnSecondaryControls()
+            checkDisplaySiblingItem("")
+            m.top.action = "hide"
         else if m.currentButtonGroup = "secondary"
             checkDisplaySiblingItem("")
             m.top.action = "hide"
@@ -728,7 +729,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     if key = "up"
         if m.currentButtonGroup = "secondary"
-            focusOnTransportControls()
+            focusOnSeekbar()
+
         else if m.currentButtonGroup = "transport"
             focusOnSeekbar()
         end if
