@@ -44,10 +44,9 @@
         <!-- Info overlay content with background box -->
         <Poster
             id="infoBackground"
-            translation="[150, 460]"
+            translation="[150, 580]"
             width="1620"
-            height="220"
-            uri="pkg:/images/icons/info-box-bg-white.png"
+            uri="pkg:/images/icons/info-box-bg-white.9.png"
             loadDisplayMode="scaleToFit"
         />
 
@@ -62,7 +61,7 @@
                 layoutDirection="horiz"
                 itemSpacings="[18]"
             >
-                <Label id="yearLabel" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" text="" />
+                <Label id="yearLabel" font="font:SmallestBoldSystemFont" color="0xFFFFFFFF" text="" />
                 <Label
                     id="separatorDot1"
                     font="font:SmallSystemFont"
@@ -70,7 +69,7 @@
                     text="•"
                     visible="false"
                 />
-                <Label id="ratingLabel" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" text="" />
+                <Label id="ratingLabel" font="font:SmallestBoldSystemFont" color="0xFFFFFFFF" text="" />
                 <Label
                     id="separatorDot2"
                     font="font:SmallSystemFont"
@@ -78,7 +77,7 @@
                     text="•"
                     visible="false"
                 />
-                <Label id="runtimeLabel" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" text="" />
+                <Label id="runtimeLabel" font="font:SmallestBoldSystemFont" color="0xFFFFFFFF" text="" />
                 <Label
                     id="separatorDot3"
                     font="font:SmallSystemFont"
@@ -86,8 +85,8 @@
                     text="•"
                     visible="false"
                 />
-                <Label id="starLabel" font="font:MediumBoldSystemFont" color="0xFFD700FF" text="★" visible="false" />
-                <Label id="communityRatingLabel" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" text="" />
+                <Label id="starLabel" font="font:SmallestBoldSystemFont" color="0xFFD700FF" text="★" visible="false" />
+                <Label id="communityRatingLabel" font="font:SmallestBoldSystemFont" color="0xFFFFFFFF" text="" />
                 <Label
                     id="separatorDot4"
                     font="font:SmallSystemFont"
@@ -95,7 +94,7 @@
                     text="•"
                     visible="false"
                 />
-                <Label id="genresLabel" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" text="" />
+                <Label id="genresLabel" font="font:SmallestBoldSystemFont" color="0xFFFFFFFF" text="" />
             </LayoutGroup>
 
             <RatingsRow
@@ -113,26 +112,25 @@
                 font="font:SmallestSystemFont"
                 color="0xFFFFFFFF"
                 wrap="true"
-                numLines="5"
-                ellipsizeOnBoundary="true"
                 text=""
             />
         </LayoutGroup>        <!-- Left navigation arrow -->
         <Group
             id="leftArrow"
-            translation="[40, 293]"
+            translation="[40, 290]"
             visible="false"
         >
             <Poster
                 id="leftArrowBg"
-                width="48"
-                height="48"
+                width="64"
+                height="64"
                 uri="pkg:/images/icons/circle-bg-white.png"
                 loadDisplayMode="scaleToFit"
             />
             <Poster
                 width="48"
                 height="48"
+                translation="[5, 8]"
                 uri="pkg:/images/icons/chevron-left.png"
                 loadDisplayMode="scaleToFit"
             />
@@ -141,19 +139,20 @@
         <!-- Right navigation arrow -->
         <Group
             id="rightArrow"
-            translation="[1832, 293]"
+            translation="[1832, 290]"
             visible="false"
         >
             <Poster
                 id="rightArrowBg"
-                width="48"
-                height="48"
+                width="64"
+                height="64"
                 uri="pkg:/images/icons/circle-bg-white.png"
                 loadDisplayMode="scaleToFit"
             />
             <Poster
                 width="48"
                 height="48"
+                translation="[10, 8]"
                 uri="pkg:/images/icons/chevron-right.png"
                 loadDisplayMode="scaleToFit"
             />
@@ -181,10 +180,10 @@
 
         <Poster
             id="dotsBackground"
-            translation="[860, 505]"
+            translation="[860, 792]"
             width="215"
             height="35"
-            uri="pkg:/images/icons/navbar.9.png"
+            uri="pkg:/images/dots.9.png"
             loadDisplayMode="scaleToFit"
         />
         <LayoutGroup
