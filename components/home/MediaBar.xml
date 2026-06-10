@@ -69,7 +69,10 @@
                     text="•"
                     visible="false"
                 />
-                <Label id="ratingLabel" font="font:SmallestBoldSystemFont" color="0xFFFFFFFF" text="" />
+                <Group id="ratingGroup">
+                    <Poster id="ratingBg" uri="pkg:/images/hd_focus.9.png" loadDisplayMode="scaleToFit" blendColor="#888888" opacity="1.0" visible="false" />
+                    <Label id="ratingLabel" font="font:TinyBoldSystemFont" color="0xFFFFFFFF" text="" />
+                </Group>
                 <Label
                     id="separatorDot2"
                     font="font:SmallSystemFont"
@@ -124,7 +127,7 @@
                 id="leftArrowBg"
                 width="64"
                 height="64"
-                uri="pkg:/images/icons/circle-bg-white.png"
+                uri="pkg:/images/icons/circle64.png"
                 loadDisplayMode="scaleToFit"
             />
             <Poster
@@ -146,7 +149,7 @@
                 id="rightArrowBg"
                 width="64"
                 height="64"
-                uri="pkg:/images/icons/circle-bg-white.png"
+                uri="pkg:/images/icons/circle64.png"
                 loadDisplayMode="scaleToFit"
             />
             <Poster
@@ -190,6 +193,7 @@
             id="indicatorDots"
             translation="[910, 670]"
             layoutDirection="horiz"
+            vertAlignment="center"
             itemSpacings="[10]"
         />
 
