@@ -332,11 +332,10 @@ function loadMergedContinueWatching() as object
     if isChainValid(recentPlayedResponse, "Items")
         for each item in recentPlayedResponse.Items
             sId = item.LookupCI("SeriesId")
-            'if not seriesLastPlayedIds.DoesExist(sId)
-            lastPlayed = getNestedValue(item, "UserData.LastPlayedDate")
-            seriesLastPlayedMap[sId] = lastPlayed
-                'seriesLastPlayedIds[sId] = true
-            'end if
+            if seriesLastPlayedMap[sId] = invalid
+                lastPlayed = item["UserData"]["LastPlayedDate"]
+                seriesLastPlayedMap[sId] = lastPlayed
+            end if
         end for
     end if
 
@@ -347,9 +346,9 @@ function loadMergedContinueWatching() as object
             itemId = item.LookupCI("Id")
             seriesId = item.LookupCI("SeriesId")
             userData = item.LookupCI("UserData")
-            'if userData["LastPlayedDate"] = invalid
-            userData["LastPlayedDate"] = seriesLastPlayedMap[seriesId]
-            'end if
+            if userData["LastPlayedDate"] = invalid
+                userData["LastPlayedDate"] = seriesLastPlayedMap[seriesId]
+            end if
             ' Only add if not already in resume items
             if not resumeItemIds.DoesExist(itemId)
                 tmp = createSGNode("HomeData")
@@ -382,22 +381,22 @@ function loadMergedContinueWatching() as object
         end for
     end if
 
-    sortedResults = sortServerResultsByDate(results, "UserData.LastPlayedDate")
+    sortedResults = sortServerResultsByDate(results)
     return sortedResults
 end function
 
 ' sortServerResultsByDate: Sorts multi-server results by a date field (descending)
 '
 ' @param {array} results - Array of items from multiple servers
-' @param {string} dateField - Dot-notation path to date field (e.g., "UserData.LastPlayedDate")
 ' @return {array} Sorted array
-function sortServerResultsByDate(results as object, dateField as string) as object
+function sortServerResultsByDate(results as object) as object
     if not isValidAndNotEmpty(results) then return []
 
     ' Convert to array with sortable date values
     sortableItems = []
     for each item in results
-        dateValue = getNestedValue(item, dateField)
+        dateValue = item.json["UserData"]["LastPlayedDate"]
+        ? "nested " ; dateValue
         sortableItems.push({
             item: item,
             sortDate: dateValue
@@ -432,27 +431,6 @@ function sortServerResultsByDate(results as object, dateField as string) as obje
     end for
 
     return sortedResults
-end function
-
-' getNestedValue: Gets a value from a nested object using dot notation
-'
-' @param {object} obj - Object to search
-' @param {string} path - Dot-notation path (e.g., "UserData.LastPlayedDate")
-' @return {dynamic} Value at path or invalid
-function getNestedValue(obj as object, path as string) as dynamic
-    if not isValid(obj) or path = "" then return invalid
-
-    parts = path.split(".")
-    current = obj
-
-    for each part in parts
-        if not isValid(current) then return invalid
-        if type(current) <> "roAssociativeArray" then return invalid
-        if not current.DoesExist(part) then return invalid
-        current = current[part]
-    end for
-
-    return current
 end function
 
 function loadSeasonOfEpisodes() as object
