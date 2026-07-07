@@ -10,8 +10,6 @@ import "pkg:/source/utils/JellyseerrUtils.bs"
 import "pkg:/source/utils/misc.bs"
 import "pkg:/source/utils/settingsSync.bs"
 
-const HOME_ROWS_HSS_LOCAL_SETTING = "ui.home.hssRowsLocalConfig"
-const HOME_ROWS_KT_LOCAL_SETTING = "ui.home.ktRowsLocalConfig"
 
 sub init()
     m.top.optionsAvailable = false
@@ -81,10 +79,6 @@ sub init()
     m.mediaBarSelectorDialogOptions = []
     m.mediaBarPickerTask = invalid
     m.pendingMediaBarSettingItem = invalid
-    m.hssDetected = invalid
-    m.hssProbeTask = invalid
-    m.ktDetected = invalid
-    m.ktProbeTask = invalid
     m.homeRowsSourceTask = invalid
     m.pendingPluginRowsSetting = invalid
     m.pendingPluginRowsSource = ""
@@ -101,11 +95,7 @@ sub init()
     m.seerrLogoutTask = invalid
 
     m.configTree = reorderSettingsForFlutter(GetConfigTree())
-    updateHssSettingGate()
-    updateKtSettingGate()
     LoadMenu({ children: m.configTree })
-    refreshHssPluginDetection()
-    refreshKtPluginDetection()
 end sub
 
 sub onKeypressTimerFire()
@@ -343,30 +333,6 @@ sub onMediaBarSelectorDialogButton(event as object)
     m.settingsMenu.setFocus(true)
 end sub
 
-sub openPluginRowsManager(settingItem as object)
-    sourceName = getPluginRowsManagerSource(chainLookupReturn(settingItem, "settingName", ""))
-    if not isValidAndNotEmpty(sourceName)
-        ShowToast("Unsupported row manager.", "error")
-        m.settingsMenu.setFocus(true)
-        return
-    end if
-
-    if isValid(m.homeRowsSourceTask)
-        clearHomeRowsSourceTask()
-    end if
-
-    m.pendingPluginRowsSetting = settingItem
-    m.pendingPluginRowsSource = sourceName
-
-    m.homeRowsSourceTask = createObject("roSGNode", "HomeRowsSourceRowsTask")
-    m.homeRowsSourceTask.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
-    m.homeRowsSourceTask.userId = chainLookupReturn(m.global, "session.user.id", "")
-    m.homeRowsSourceTask.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
-    m.homeRowsSourceTask.source = sourceName
-    m.homeRowsSourceTask.observeFieldScoped("rows", "onHomeRowsSourceRowsLoaded")
-    m.homeRowsSourceTask.observeFieldScoped("errorMessage", "onHomeRowsSourceRowsError")
-    m.homeRowsSourceTask.control = "RUN"
-end sub
 
 sub onHomeRowsSourceRowsLoaded(event as object)
     rows = event.getData()
@@ -440,8 +406,8 @@ sub showPluginRowsManagerDialog(settingItem as object, sourceName as string, row
         return
     end if
 
-    settingKey = getPluginRowsManagerStorageKey(sourceName)
-    savedRows = parsePluginRowsConfigValue(getUserSettingValue(settingKey, "[]"))
+    settingKey = ""
+    savedRows = parsePluginRowsConfigValue(getUserSettingValue("", "[]"))
     savedMap = buildPluginRowsConfigMap(savedRows)
 
     sortedRows = []
@@ -478,11 +444,6 @@ sub showPluginRowsManagerDialog(settingItem as object, sourceName as string, row
     }
     dialog.palette = dlgPalette
 
-    if isStringEqual(normalizeHomeRowsSourceName(sourceName), "hss")
-        dialog.title = tr("Manage HSS Rows")
-    else
-        dialog.title = tr("Manage KefinTweaks Rows")
-    end if
     dialog.message = [tr("Use Rewind/Fast-Forward to reorder rows. Press OK to toggle each row.")]
 
     dialog.allowReorder = true
@@ -610,9 +571,6 @@ function getSettingCurrentValueLabel(settingItem as dynamic) as string
     if not isValid(settingItem.type) then return ""
     if not isValid(settingItem.settingName) then return ""
 
-    if isPluginRowsManagerSetting(settingItem.settingName)
-        return getPluginRowsManagerSummary(settingItem.settingName)
-    end if
 
     if isStringEqual(settingItem.settingName, "jellyseerr.accountSettings")
         return GetJellyseerrAccountStatusLabel()
@@ -748,39 +706,11 @@ function getHomeSectionOrder() as object
 end function
 
 function normalizeHomeRowsSourceName(sourceValue as dynamic) as string
-    source = LCase(dynamicToDisplayString(sourceValue))
-
-    if isStringEqual(source, "kefin") or isStringEqual(source, "kefintweak") or isStringEqual(source, "kefintweaks")
-        return "kefintweaks"
-    end if
-
-    return source
+    return LCase(dynamicToDisplayString(sourceValue))
 end function
 
-function isPluginRowsManagerSetting(settingName as dynamic) as boolean
-    if not isValid(settingName) then return false
 
-    if isStringEqual(settingName, "homeRows.manageHssRows") then return true
-    if isStringEqual(settingName, "homeRows.manageKtRows") then return true
-    return false
-end function
 
-function getPluginRowsManagerSource(settingName as dynamic) as string
-    if not isPluginRowsManagerSetting(settingName)
-        return ""
-    end if
-
-    if isStringEqual(settingName, "homeRows.manageHssRows") then return "hss"
-    return "kefintweaks"
-end function
-
-function getPluginRowsManagerStorageKey(sourceName as dynamic) as string
-    source = normalizeHomeRowsSourceName(sourceName)
-
-    if isStringEqual(source, "hss") then return HOME_ROWS_HSS_LOCAL_SETTING
-    if isStringEqual(source, "kefintweaks") then return HOME_ROWS_KT_LOCAL_SETTING
-    return ""
-end function
 
 function parsePluginRowsConfigValue(value as dynamic) as object
     if not isValid(value)
@@ -845,28 +775,6 @@ function buildPluginRowsConfigMap(configRows as object) as object
     end for
 
     return configMap
-end function
-
-function getPluginRowsManagerSummary(settingName as dynamic) as string
-    sourceName = getPluginRowsManagerSource(settingName)
-    settingKey = getPluginRowsManagerStorageKey(sourceName)
-    if not isValidAndNotEmpty(settingKey)
-        return tr("Configure")
-    end if
-
-    savedRows = parsePluginRowsConfigValue(getUserSettingValue(settingKey, "[]"))
-    if savedRows.Count() = 0
-        return tr("Configure")
-    end if
-
-    enabledCount = 0
-    for each row in savedRows
-        if normalizeBoolSettingValue(chainLookupReturn(row, "enabled", false))
-            enabledCount++
-        end if
-    end for
-
-    return enabledCount.ToStr() + "/" + savedRows.Count().ToStr() + " " + tr("enabled")
 end function
 
 function buildHomeRowsV2Payload(rowOrder = invalid as dynamic) as object
@@ -1227,8 +1135,6 @@ sub onPluginPingComplete()
         session.user.settings.Save("plugin.enabled", "false")
     end if
 
-    updateHssSettingGate()
-    updateKtSettingGate()
     if m.userLocation.Count() > 0
         RefreshCurrentMenu()
     end if
@@ -1895,21 +1801,6 @@ sub setUserBoolSetting(settingName as string, enabled as boolean, syncToServer =
     end if
 end sub
 
-function isHssPluginDetected() as boolean
-    if not isValid(m.hssDetected)
-        return true
-    end if
-
-    return m.hssDetected
-end function
-
-function isKtPluginDetected() as boolean
-    if not isValid(m.ktDetected)
-        return true
-    end if
-
-    return m.ktDetected
-end function
 
 sub setSettingVisibilityByName(items as object, settingName as string, isVisible as boolean)
     if not isValid(items)
@@ -1927,85 +1818,6 @@ sub setSettingVisibilityByName(items as object, settingName as string, isVisible
     end for
 end sub
 
-sub refreshHssPluginDetection()
-    if isValid(m.hssProbeTask)
-        m.hssProbeTask.unobserveField("result")
-        m.hssProbeTask.control = "STOP"
-    end if
-
-    m.hssProbeTask = createObject("roSGNode", "HSSProbeTask")
-    m.hssProbeTask.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
-    m.hssProbeTask.userId = chainLookupReturn(m.global, "session.user.id", "")
-    m.hssProbeTask.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
-    m.hssProbeTask.observeField("result", "onHssPluginProbeComplete")
-    m.hssProbeTask.control = "RUN"
-end sub
-
-sub onHssPluginProbeComplete()
-    if not isValid(m.hssProbeTask) then return
-
-    result = m.hssProbeTask.result
-    m.hssProbeTask.unobserveField("result")
-    m.hssProbeTask = invalid
-
-    m.hssDetected = normalizeBoolSettingValue(chainLookupReturn(result, "enabled", false))
-    updateHssSettingGate()
-
-    if m.userLocation.Count() > 0
-        RefreshCurrentMenu()
-    end if
-end sub
-
-sub refreshKtPluginDetection()
-    if isValid(m.ktProbeTask)
-        m.ktProbeTask.unobserveField("result")
-        m.ktProbeTask.control = "STOP"
-    end if
-
-    m.ktProbeTask = createObject("roSGNode", "KefinTweaksProbeTask")
-    m.ktProbeTask.serverUrl = chainLookupReturn(m.global, "session.server.url", "")
-    m.ktProbeTask.userId = chainLookupReturn(m.global, "session.user.id", "")
-    m.ktProbeTask.authToken = chainLookupReturn(m.global, "session.user.authToken", "")
-    m.ktProbeTask.observeField("result", "onKtPluginProbeComplete")
-    m.ktProbeTask.control = "RUN"
-end sub
-
-sub onKtPluginProbeComplete()
-    if not isValid(m.ktProbeTask) then return
-
-    result = m.ktProbeTask.result
-    m.ktProbeTask.unobserveField("result")
-    m.ktProbeTask = invalid
-
-    m.ktDetected = normalizeBoolSettingValue(chainLookupReturn(result, "enabled", false))
-    updateKtSettingGate()
-
-    if m.userLocation.Count() > 0
-        RefreshCurrentMenu()
-    end if
-end sub
-
-sub updateHssSettingGate()
-    if not isValid(m.configTree)
-        return
-    end if
-
-    pluginDetected = isHssPluginDetected()
-    usingServerRows = shouldUseServerManagedHomeRows()
-
-    setSettingVisibilityByName(m.configTree, "plugin.hss.enabled", pluginDetected and not usingServerRows)
-end sub
-
-sub updateKtSettingGate()
-    if not isValid(m.configTree)
-        return
-    end if
-
-    pluginDetected = isKtPluginDetected()
-    usingServerRows = shouldUseServerManagedHomeRows()
-
-    setSettingVisibilityByName(m.configTree, "plugin.kefintweaks.enabled", pluginDetected and not usingServerRows)
-end sub
 
 function reorderSettingsForFlutter(configTree as object) as object
     if not isValid(configTree) then return configTree
@@ -2031,8 +1843,6 @@ function reorderSettingsForFlutter(configTree as object) as object
 
     enablePlugin = findSettingsChildByTitle(pluginRootSection, "Enable Plugin")
     pluginSettingsSync = findSettingsChildByTitle(pluginRootSection, "Settings Sync")
-    pluginHss = findSettingsChildByTitle(pluginRootSection, "Home Screen Sections")
-    pluginKefinTweaks = findSettingsChildByTitle(pluginRootSection, "KefinTweaks")
     mdblist = findSettingsChildByTitle(pluginRootSection, "MDBList Ratings")
     tmdb = findSettingsChildByTitle(pluginRootSection, "TMDB")
     jellyseerr = findSettingsChildByTitle(pluginRootSection, "Seerr")
@@ -2090,8 +1900,6 @@ function reorderSettingsForFlutter(configTree as object) as object
     pluginChildren = []
     pushSettingIfValid(pluginChildren, enablePlugin)
     pushSettingIfValid(pluginChildren, pluginSettingsSync)
-    pushSettingIfValid(pluginChildren, pluginHss)
-    pushSettingIfValid(pluginChildren, pluginKefinTweaks)
 
     integrationsChildren = []
     if pluginChildren.count() > 0
@@ -2139,7 +1947,7 @@ function reorderSettingsForFlutter(configTree as object) as object
     moonfinMappedTitles = ["Navigation Bar", "Home Screen", "Featured Media Bar", "Theme Music", "Shuffle", "Visual Effects", "Support Moonfin"]
     pushUnmappedChildrenByTitle(additionalChildren, moonfinSettings, moonfinMappedTitles)
 
-    pluginMappedTitles = ["Enable Plugin", "Settings Sync", "Home Screen Sections", "KefinTweaks", "MDBList Ratings", "TMDB", "Seerr", "Jellyseerr"]
+    pluginMappedTitles = ["Enable Plugin", "Settings Sync", "MDBList Ratings", "TMDB", "Seerr", "Jellyseerr"]
     pushUnmappedChildrenByTitle(additionalChildren, pluginRootSection, pluginMappedTitles)
 
     userInterfaceMappedTitles = ["Colors", "General", "Home Rows"]
@@ -2169,8 +1977,6 @@ function reorderSettingsForFlutter(configTree as object) as object
 end function
 
 sub LoadMenu(configSection, appendPath = true as boolean)
-    updateHssSettingGate()
-    updateKtSettingGate()
 
     if configSection.children = invalid
         ' Load parent menu
@@ -2295,11 +2101,6 @@ sub settingSelected()
         return
     end if
 
-    if isValid(selectedItem.settingName) and isPluginRowsManagerSetting(selectedItem.settingName)
-        m.settingDesc.visible = false
-        openPluginRowsManager(selectedItem)
-        return
-    end if
 
     if selectedItem.type <> invalid
         if isValid(selectedItem.Description)
@@ -2371,13 +2172,6 @@ sub settingSelected()
             if Left(chainLookupReturn(selectedItem, "settingName", ""), 17) = "homeScreenSection"
                 filteredOptions = []
                 for each option in selectedItem.options
-                    optionId = chainLookupReturn(option, "id", "")
-                    if isStringEqual(optionId, "hss_all") and not isHssPluginDetected()
-                        continue for
-                    end if
-                    if isStringEqual(optionId, "kt_all") and not isKtPluginDetected()
-                        continue for
-                    end if
                     filteredOptions.push(option)
                 end for
                 radioOptions = filteredOptions
@@ -2440,23 +2234,6 @@ sub boolSettingChanged()
     selectedSetting = getFocusedSetting()
     if not isValid(selectedSetting) then return
 
-    if selectedSetting.settingName = "plugin.hss.enabled" and m.boolSetting.checkedItem = 1 and not isHssPluginDetected()
-        ShowToast("Home Screen Sections plugin was not detected on this server.", "error")
-        setUserBoolSetting("plugin.hss.enabled", false)
-        refreshCurrentItemValue(selectedSetting)
-        hideEditingControls()
-        m.settingsMenu.setFocus(true)
-        return
-    end if
-
-    if selectedSetting.settingName = "plugin.kefintweaks.enabled" and m.boolSetting.checkedItem = 1 and not isKtPluginDetected()
-        ShowToast("KefinTweaks plugin was not detected on this server.", "error")
-        setUserBoolSetting("plugin.kefintweaks.enabled", false)
-        refreshCurrentItemValue(selectedSetting)
-        hideEditingControls()
-        m.settingsMenu.setFocus(true)
-        return
-    end if
 
     if m.boolSetting.checkedItem = 1
         session.user.settings.Save(selectedSetting.settingName, "true")
@@ -2505,19 +2282,6 @@ sub boolSettingChanged()
     hideEditingControls()
     m.settingsMenu.setFocus(true)
 
-    if selectedSetting.settingName = "plugin.enabled"
-        refreshHssPluginDetection()
-        refreshKtPluginDetection()
-        if m.userLocation.Count() > 0
-            RefreshCurrentMenu()
-        end if
-    else if selectedSetting.settingName = "homeRows.useServerConfig"
-        updateHssSettingGate()
-        updateKtSettingGate()
-        if m.userLocation.Count() > 0
-            RefreshCurrentMenu()
-        end if
-    end if
 end sub
 
 sub radioSettingChanged()

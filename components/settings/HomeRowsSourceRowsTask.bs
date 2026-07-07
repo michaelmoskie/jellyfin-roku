@@ -133,13 +133,7 @@ function sortRowsByOrder(rows as object) as object
 end function
 
 function normalizeHomeRowsSource(value as dynamic) as string
-    source = LCase(toNormalizedString(value))
-
-    if source = "kefin" or source = "kefintweak" or source = "kefintweaks"
-        return "kefintweaks"
-    end if
-
-    return source
+    return LCase(toNormalizedString(value))
 end function
 
 function normalizeBoolean(value as dynamic, defaultValue = false as boolean) as boolean
