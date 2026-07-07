@@ -326,27 +326,25 @@ function loadMergedContinueWatching() as object
     }
     recentPlayedResponse = api.items.get(recentPlayedParams)
 
-    ' Create a lookup map of series LastPlayedDate to populate nextup
+ ' Create a lookup map of series LastPlayedDate to populate nextup
     seriesLastPlayedMap = {}
-    'seriesLastPlayedIds = {}
     if isChainValid(recentPlayedResponse, "Items")
         for each item in recentPlayedResponse.Items
             sId = item.LookupCI("SeriesId")
-            if seriesLastPlayedMap[sId] = invalid
-                lastPlayed = item["UserData"]["LastPlayedDate"]
-                seriesLastPlayedMap[sId] = lastPlayed
+            userData = item.LookupCI("UserData")
+            if isValid(sId) and isValid(userData) and seriesLastPlayedMap[sId] = invalid
+                seriesLastPlayedMap[sId] = userData["LastPlayedDate"]
             end if
         end for
     end if
-
-
     ' Add Next Up items that aren't already in Continue Watching
     if isChainValid(nextUpData, "Items")
         for each item in nextUpData.Items
             itemId = item.LookupCI("Id")
             seriesId = item.LookupCI("SeriesId")
             userData = item.LookupCI("UserData")
-            if userData["LastPlayedDate"] = invalid
+            if not isValid(userData) then userData = {}
+            if userData["LastPlayedDate"] = invalid and isValid(seriesId)
                 userData["LastPlayedDate"] = seriesLastPlayedMap[seriesId]
             end if
             ' Only add if not already in resume items
@@ -395,8 +393,10 @@ function sortServerResultsByDate(results as object) as object
     ' Convert to array with sortable date values
     sortableItems = []
     for each item in results
-        dateValue = item.json["UserData"]["LastPlayedDate"]
-        ? "nested " ; dateValue
+        dateValue = invalid
+        if isValid(item.json) and isValid(item.json.UserData)
+            dateValue = item.json.UserData.LastPlayedDate
+        end if
         sortableItems.push({
             item: item,
             sortDate: dateValue
