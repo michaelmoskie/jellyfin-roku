@@ -1,5 +1,10 @@
 *.svg
 .env
+# Local secret env files (Roku/dev credentials)
+.env.local
+.env.*.local
+.env.roku
+.env.roku.*
 # BrightScript 
 dist/apps
 out/
@@ -7,9 +12,17 @@ build/
 roku_modules
 source/globals.brs
 moonfin.zip
+*.pkg
 # NPM 
 node_modules/
 # Eclipse
 .buildpath
 .project
 .settings
+
+# Local-only packaging wrappers
+scripts/create-roku-pkg.local.sh
+scripts/create-roku-pkg.local.*
+
+# Local QA tooling (RokuWebDriver), not part of the app build
+tests/
