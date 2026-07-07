@@ -192,11 +192,21 @@
         "description": "Featured carousel content and overlay appearance.",
         "children": [
           {
-            "title": "Enable Media Bar",
+            "title": "Media Bar Mode",
             "description": "Display a featured content slideshow at the top of the home screen.",
-            "settingName": "ui.home.mediaBarEnabled",
-            "type": "bool",
-            "default": "true"
+            "settingName": "ui.home.mediaBarMode",
+            "type": "radio",
+            "default": "moonfin",
+            "options": [
+              {
+                "title": "Moonfin",
+                "id": "moonfin"
+              },
+              {
+                "title": "Off",
+                "id": "off"
+              }
+            ]
           },
           {
             "title": "Content Type",

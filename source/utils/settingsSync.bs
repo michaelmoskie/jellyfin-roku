@@ -16,7 +16,7 @@ namespace settingsSync
             { pluginKey: "navbarColor", rokuKey: "navbar.color", type: "colorHex" },
             { pluginKey: "mergeContinueWatchingNextUp", rokuKey: "ui.home.mergeContinueWatchingNextUp", type: "bool" },
             { pluginKey: "enableMultiServerLibraries", rokuKey: "ui.home.enableMultiServer", type: "bool" },
-            { pluginKey: "mediaBarEnabled", rokuKey: "ui.home.mediaBarEnabled", type: "bool" },
+            { pluginKey: "mediaBarMode", rokuKey: "ui.home.mediaBarMode", type: "direct" },
             { pluginKey: "mediaBarSourceType", rokuKey: "ui.home.mediaBarSourceType", type: "direct" },
             { pluginKey: "mediaBarLibraryIds", rokuKey: "ui.home.mediaBarLibraryIds", type: "jsonArray" },
             { pluginKey: "mediaBarCollectionIds", rokuKey: "ui.home.mediaBarCollectionIds", type: "jsonArray" },

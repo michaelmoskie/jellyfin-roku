@@ -34,7 +34,7 @@ end function
 ' Helper function to check if Featured Media is enabled via toggle (not home sections)
 function isFeaturedMediaEnabled() as boolean
     ' Check the media bar enabled toggle in Moonfin settings
-    mediaBarEnabled = get_user_setting("ui.home.mediaBarEnabled")
+    mediaBarEnabled = (get_user_setting("ui.home.mediaBarMode") <> "off")
 
     ' Default to true if not set
     if not isValid(mediaBarEnabled)
