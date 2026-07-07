@@ -213,10 +213,14 @@ We welcome contributions to Moonfin for Roku!
 4. Test thoroughly on Roku devices
 5. Submit a pull request with a detailed description
 
-## Translating
+## Help translate Moonfin [here](https://translate.moonfin.io/engage/roku/)
 
-Translations are maintained through the Jellyfin Weblate instance:
-- [Jellyfin Roku on Weblate](https://translate.jellyfin.org/projects/jellyfin/jellyfin-roku)
+<a href="https://translate.moonfin.io/engage/roku/">
+  <img
+    src="https://translate.moonfin.io/widgets/roku/-/multi-auto.svg"
+    alt="Moonfin Roku translation status by language"
+  />
+</a>
 
 Translations contributed to Moonfin that are universally applicable will be submitted upstream to benefit the entire community.
 
