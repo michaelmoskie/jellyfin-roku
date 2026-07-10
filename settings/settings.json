@@ -298,6 +298,10 @@
                 "id": "makd"
               },
               {
+                "title": "Gallery",
+                "id": "gallery"
+              },
+              {
                 "title": "Banner",
                 "id": "banner"
               },
