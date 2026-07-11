@@ -4,12 +4,12 @@
     "description": "Navigation, home screen, media bar, and visual customization.",
     "children": [
       {
-        "title": "Navigation Bar",
-        "description": "Navbar position and toolbar buttons.",
+        "title": "Navigation",
+        "description": "Navbar style toolbar buttons, appearance",
         "icon": "dynamiccontent.png",
         "children": [
           {
-            "title": "Position",
+            "title": "Navigation Style",
             "description": "Choose where to display the navigation bar. 'Top' shows a horizontal bar at the top of the screen. 'Left' shows a vertical sidebar on the left.",
             "settingName": "navbar.position",
             "type": "radio",
@@ -146,7 +146,7 @@
             "default": "true"
           },
           {
-            "title": "Show Libraries",
+            "title": "Show Libraries in Toolbar",
             "description": "Show the libraries button in the navigation bar",
             "settingName": "navbar.show_libraries",
             "type": "bool",
@@ -168,15 +168,8 @@
         "children": [
           {
             "title": "Merge Continue Watching and Next Up",
-            "description": "Combine Continue Watching and Next Up into one row",
+            "description": "Combine both rows into a single home section",
             "settingName": "ui.home.mergeContinueWatchingNextUp",
-            "type": "bool",
-            "default": "false"
-          },
-          {
-            "title": "Multi-Server Libraries",
-            "description": "Combine items from multiple servers in a single view",
-            "settingName": "ui.home.enableMultiServer",
             "type": "bool",
             "default": "false"
           },
@@ -188,98 +181,424 @@
             "default": "false"
           },
           {
-            "title": "Since You Watched Rows",
-            "description": "How many Since You Watched rows to show when the section is enabled.",
-            "settingName": "ui.home.sinceYouWatchedNumRows",
-            "type": "radio",
-            "default": "1",
-            "options": [
-              { "title": "1", "id": "1" },
-              { "title": "2", "id": "2" },
-              { "title": "3", "id": "3" },
-              { "title": "4", "id": "4" },
-              { "title": "5", "id": "5" }
-            ]
-          },
-          {
-            "title": "Since You Watched Source",
-            "description": "Use local library recommendations or online recommendations through Seerr.",
-            "settingName": "ui.home.sinceYouWatchedSource",
-            "type": "radio",
-            "default": "local",
-            "options": [
-              { "title": "Local", "id": "local" },
-              { "title": "Online", "id": "online" }
-            ]
-          },
-          {
-            "title": "Since You Watched Seed",
-            "description": "Which watched items seed the Since You Watched rows.",
-            "settingName": "ui.home.sinceYouWatchedSourceItem",
-            "type": "radio",
-            "default": "recentlyWatched",
-            "options": [
-              { "title": "Recently Watched", "id": "recentlyWatched" },
-              { "title": "Favorites", "id": "favorites" },
-              { "title": "Random", "id": "random" }
-            ]
-          },
-          {
-            "title": "Since You Watched Content",
-            "description": "Which content types the Since You Watched rows use.",
-            "settingName": "ui.home.sinceYouWatchedSourceType",
-            "type": "radio",
-            "default": "movies",
-            "options": [
-              { "title": "Movies", "id": "movies" },
-              { "title": "TV Shows", "id": "shows" },
-              { "title": "Movies & TV Shows", "id": "both" }
-            ]
-          },
-          {
-            "title": "Include Watched Titles",
-            "description": "Show titles you have already played in Since You Watched rows.",
-            "settingName": "ui.home.sinceYouWatchedIncludeWatched",
-            "type": "bool",
-            "default": "false"
-          },
-          {
-            "title": "Rewatch Movies",
-            "description": "Include finished movies in the Rewatch row.",
-            "settingName": "ui.home.rewatchIncludeMovies",
-            "type": "bool",
-            "default": "true"
-          },
-          {
-            "title": "Rewatch TV Shows",
-            "description": "Include finished shows in the Rewatch row.",
-            "settingName": "ui.home.rewatchIncludeShows",
-            "type": "bool",
-            "default": "true"
-          },
-          {
-            "title": "Rewatch Collections",
-            "description": "Include finished collections in the Rewatch row.",
-            "settingName": "ui.home.rewatchIncludeCollections",
-            "type": "bool",
-            "default": "true"
-          },
-          {
-            "title": "Rewatch Sorting",
-            "description": "Order the Rewatch row by most recently watched or at random.",
-            "settingName": "ui.home.rewatchSortBy",
-            "type": "radio",
-            "default": "recentlyWatched",
-            "options": [
-              { "title": "Recently Watched", "id": "recentlyWatched" },
-              { "title": "Random", "id": "random" }
-            ]
-          }
+            "title": "Home Rows",
+            "description": "Customize the home screen sections",
+            "icon": "homescreen.png",
+            "children": [
+              {
+                "title": "Section 1",
+                "visible": true,
+                "description": "Select what to show in section 1. Moonfin will need to be closed and reopened for change to take effect.",
+                "settingName": "homeScreenSection0",
+                "type": "radio",
+                "default": "resume",
+                "options": [
+                  {
+                    "title": "Continue Listening",
+                    "id": "resumeaudio"
+                  },
+                  {
+                    "title": "Continue Watching",
+                    "id": "resume"
+                  },
+                  {
+                    "title": "Favorites",
+                    "id": "favorites"
+                  },
+                  {
+                    "title": "Live TV",
+                    "id": "livetv"
+                  },
+                  {
+                    "title": "My List",
+                    "id": "mylist"
+                  },
+                  {
+                    "title": "My Media",
+                    "id": "smalllibrarytiles"
+                  },
+                  {
+                    "title": "Next Up",
+                    "id": "nextup"
+                  },
+                  {
+                    "title": "None",
+                    "id": "none"
+                  },
+                  {
+                    "title": "Recently Added Media",
+                    "id": "latestmedia"
+                  },
+                  {
+                    "title": "Recently Released",
+                    "id": "recentlyreleased"
+                  }
+                ]
+              },
+              {
+                "title": "Section 2",
+                "visible": true,
+                "description": "Select what to show in section 2. Moonfin will need to be closed and reopened for change to take effect.",
+                "settingName": "homeScreenSection1",
+                "type": "radio",
+                "default": "recentlyreleased",
+                "options": [
+                  {
+                    "title": "Continue Listening",
+                    "id": "resumeaudio"
+                  },
+                  {
+                    "title": "Continue Watching",
+                    "id": "resume"
+                  },
+                  {
+                    "title": "Favorites",
+                    "id": "favorites"
+                  },
+                  {
+                    "title": "Live TV",
+                    "id": "livetv"
+                  },
+                  {
+                    "title": "My List",
+                    "id": "mylist"
+                  },
+                  {
+                    "title": "My Media",
+                    "id": "smalllibrarytiles"
+                  },
+                  {
+                    "title": "Next Up",
+                    "id": "nextup"
+                  },
+                  {
+                    "title": "None",
+                    "id": "none"
+                  },
+                  {
+                    "title": "Recently Added Media",
+                    "id": "latestmedia"
+                  },
+                  {
+                    "title": "Recently Released",
+                    "id": "recentlyreleased"
+                  }
+                ]
+              },
+              {
+                "title": "Section 3",
+                "visible": true,
+                "description": "Select what to show in section 3. Moonfin will need to be closed and reopened for change to take effect.",
+                "settingName": "homeScreenSection2",
+                "type": "radio",
+                "default": "nextup",
+                "options": [
+                  {
+                    "title": "Continue Listening",
+                    "id": "resumeaudio"
+                  },
+                  {
+                    "title": "Continue Watching",
+                    "id": "resume"
+                  },
+                  {
+                    "title": "Favorites",
+                    "id": "favorites"
+                  },
+                  {
+                    "title": "Live TV",
+                    "id": "livetv"
+                  },
+                  {
+                    "title": "My List",
+                    "id": "mylist"
+                  },
+                  {
+                    "title": "My Media",
+                    "id": "smalllibrarytiles"
+                  },
+                  {
+                    "title": "Next Up",
+                    "id": "nextup"
+                  },
+                  {
+                    "title": "None",
+                    "id": "none"
+                  },
+                  {
+                    "title": "Recently Added Media",
+                    "id": "latestmedia"
+                  },
+                  {
+                    "title": "Recently Released",
+                    "id": "recentlyreleased"
+                  }
+                ]
+              },
+              {
+                "title": "Section 4",
+                "visible": true,
+                "description": "Select what to show in section 4. Moonfin will need to be closed and reopened for change to take effect.",
+                "settingName": "homeScreenSection3",
+                "type": "radio",
+                "default": "latestmedia",
+                "options": [
+                  {
+                    "title": "Continue Listening",
+                    "id": "resumeaudio"
+                  },
+                  {
+                    "title": "Continue Watching",
+                    "id": "resume"
+                  },
+                  {
+                    "title": "Favorites",
+                    "id": "favorites"
+                  },
+                  {
+                    "title": "Live TV",
+                    "id": "livetv"
+                  },
+                  {
+                    "title": "My List",
+                    "id": "mylist"
+                  },
+                  {
+                    "title": "My Media",
+                    "id": "smalllibrarytiles"
+                  },
+                  {
+                    "title": "Next Up",
+                    "id": "nextup"
+                  },
+                  {
+                    "title": "None",
+                    "id": "none"
+                  },
+                  {
+                    "title": "Recently Added Media",
+                    "id": "latestmedia"
+                  },
+                  {
+                    "title": "Recently Released",
+                    "id": "recentlyreleased"
+                  }
+                ]
+              },
+              {
+                "title": "Section 5",
+                "visible": true,
+                "description": "Select what to show in section 5. Moonfin will need to be closed and reopened for change to take effect.",
+                "settingName": "homeScreenSection4",
+                "type": "radio",
+                "default": "none",
+                "options": [
+                  {
+                    "title": "Continue Listening",
+                    "id": "resumeaudio"
+                  },
+                  {
+                    "title": "Continue Watching",
+                    "id": "resume"
+                  },
+                  {
+                    "title": "Favorites",
+                    "id": "favorites"
+                  },
+                  {
+                    "title": "Live TV",
+                    "id": "livetv"
+                  },
+                  {
+                    "title": "My List",
+                    "id": "mylist"
+                  },
+                  {
+                    "title": "My Media",
+                    "id": "smalllibrarytiles"
+                  },
+                  {
+                    "title": "Next Up",
+                    "id": "nextup"
+                  },
+                  {
+                    "title": "None",
+                    "id": "none"
+                  },
+                  {
+                    "title": "Recently Added Media",
+                    "id": "latestmedia"
+                  },
+                  {
+                    "title": "Recently Released",
+                    "id": "recentlyreleased"
+                  }
+                ]
+              },
+              {
+                "title": "Section 6",
+                "visible": true,
+                "description": "Select what to show in section 6. Moonfin will need to be closed and reopened for change to take effect.",
+                "settingName": "homeScreenSection5",
+                "type": "radio",
+                "default": "none",
+                "options": [
+                  {
+                    "title": "Continue Listening",
+                    "id": "resumeaudio"
+                  },
+                  {
+                    "title": "Continue Watching",
+                    "id": "resume"
+                  },
+                  {
+                    "title": "Favorites",
+                    "id": "favorites"
+                  },
+                  {
+                    "title": "Live TV",
+                    "id": "livetv"
+                  },
+                  {
+                    "title": "My List",
+                    "id": "mylist"
+                  },
+                  {
+                    "title": "My Media",
+                    "id": "smalllibrarytiles"
+                  },
+                  {
+                    "title": "Next Up",
+                    "id": "nextup"
+                  },
+                  {
+                    "title": "None",
+                    "id": "none"
+                  },
+                  {
+                    "title": "Recently Added Media",
+                    "id": "latestmedia"
+                  },
+                  {
+                    "title": "Recently Released",
+                    "id": "recentlyreleased"
+                  }
+                ]
+              },
+              {
+                "title": "Section 7",
+                "visible": true,
+                "description": "Select what to show in section 7. Moonfin will need to be closed and reopened for change to take effect.",
+                "settingName": "homeScreenSection6",
+                "type": "radio",
+                "default": "none",
+                "options": [
+                  {
+                    "title": "Continue Listening",
+                    "id": "resumeaudio"
+                  },
+                  {
+                    "title": "Continue Watching",
+                    "id": "resume"
+                  },
+                  {
+                    "title": "Favorites",
+                    "id": "favorites"
+                  },
+                  {
+                    "title": "Live TV",
+                    "id": "livetv"
+                  },
+                  {
+                    "title": "My List",
+                    "id": "mylist"
+                  },
+                  {
+                    "title": "My Media",
+                    "id": "smalllibrarytiles"
+                  },
+                  {
+                    "title": "Next Up",
+                    "id": "nextup"
+                  },
+                  {
+                    "title": "None",
+                    "id": "none"
+                  },
+                  {
+                    "title": "Recently Added Media",
+                    "id": "latestmedia"
+                  },
+                  {
+                    "title": "Recently Released",
+                    "id": "recentlyreleased"
+                  }
+                ]
+              },
+              {
+                "title": "Section 8",
+                "visible": true,
+                "description": "Select what to show in section 8. Moonfin will need to be closed and reopened for change to take effect.",
+                "settingName": "homeScreenSection7",
+                "type": "radio",
+                "default": "none",
+                "options": [
+                  {
+                    "title": "Continue Listening",
+                    "id": "resumeaudio"
+                  },
+                  {
+                    "title": "Continue Watching",
+                    "id": "resume"
+                  },
+                  {
+                    "title": "Favorites",
+                    "id": "favorites"
+                  },
+                  {
+                    "title": "Live TV",
+                    "id": "livetv"
+                  },
+                  {
+                    "title": "My List",
+                    "id": "mylist"
+                  },
+                  {
+                    "title": "My Media",
+                    "id": "smalllibrarytiles"
+                  },
+                  {
+                    "title": "Next Up",
+                    "id": "nextup"
+                  },
+                  {
+                    "title": "None",
+                    "id": "none"
+                  },
+                  {
+                    "title": "Recently Added Media",
+                    "id": "latestmedia"
+                  },
+                  {
+                    "title": "Recently Released",
+                    "id": "recentlyreleased"
+                  }
+                ]
+              },
+              {
+                "title": "Use Server Home Row Settings",
+                "description": "When enabled, Moonfin will use the home row configuration from your Jellyfin server instead of the settings below. Moonfin will need to be closed and reopened for change to take effect.",
+                "settingName": "homeRows.useServerConfig",
+                "type": "bool",
+                "default": "false"
+              }
+        ]
+      }
         ]
       },
       {
-        "title": "Featured Media Bar",
-        "description": "Featured carousel content and overlay appearance.",
+        "title": "Media Bar",
+        "description": "Featured content, appearance.",
         "icon": "dynamiccontent.png",
         "children": [
           {
@@ -540,6 +859,7 @@
       {
         "title": "Theme Music",
         "description": "Play theme songs while browsing media detail pages",
+        "icon": "musicNote.png",
         "children": [
           {
             "title": "Auto-Play",
@@ -553,6 +873,7 @@
       {
         "title": "Shuffle",
         "description": "Random content playback settings.",
+        "icon": "shuffle.png",
         "children": [
           {
             "title": "Content Type",
@@ -671,32 +992,46 @@
         "default": "true"
       },
       {
-        "title": "MDBList Ratings",
-        "description": "Enable additional ratings from configured sources.",
+        "title": "Metadata & Ratings",
+        "description": "MDBList, TMDB, and ratings settings",
         "icon": "ratings.png",
         "children": [
           {
-            "title": "Enable Ratings",
-            "description": "Pull scores from IMDb, Rotten Tomatoes, and more",
-            "settingName": "plugin.mdblist.enabled",
-            "type": "bool",
-            "default": "true",
-            "icon": "ratings.png"
-          }
-        ]
-      },
-      {
-        "title": "TMDB",
-        "description": "TMDB episode rating integration via the Moonfin server plugin.",
-        "icon": "ratings.png",
-        "children": [
+            "title": "MDBList Ratings",
+            "description": "Enable additional ratings from configured sources.",
+            "icon": "ratings.png",
+            "children": [
+              {
+                "title": "Enable Ratings",
+                "description": "Pull scores from IMDb, Rotten Tomatoes, and more",
+                "settingName": "plugin.mdblist.enabled",
+                "type": "bool",
+                "default": "true",
+                "icon": "ratings.png"
+              }
+            ]
+          },
           {
-            "title": "Episode Ratings",
-            "description": "Show ratings for individual episodes",
-            "settingName": "plugin.tmdb.episodeRatings",
+            "title": "TMDB",
+            "description": "TMDB episode rating integration via the Moonfin server plugin.",
+            "icon": "ratings.png",
+            "children": [
+              {
+                "title": "Episode Ratings",
+                "description": "Show ratings for individual episodes",
+                "settingName": "plugin.tmdb.episodeRatings",
+                "type": "bool",
+                "default": "true",
+                "icon": "ratings.png"
+              }
+            ]
+          },
+          {
+            "title": "Community and Critical Ratings",
+            "description": "Community and critic review ratings from Rotten Tomatoes.",
+            "settingName": "ui.itemdetail.showRatings",
             "type": "bool",
-            "default": "true",
-            "icon": "ratings.png"
+            "default": "true"
           }
         ]
       },
@@ -1166,12 +1501,6 @@
     "default": "true"
   },
   {
-    "title": "Secret",
-    "description": "Nothing here. The settings are in another castle.",
-    "visible": false,
-    "children": []
-  },
-  {
     "title": "User Interface",
     "description": "Settings relating to how the application looks.",
     "children": [
@@ -1382,532 +1711,17 @@
         ]
       },
       {
-        "title": "Home Rows",
-        "description": "Customize the home screen sections",
-        "icon": "homescreen.png",
-        "children": [
-          {
-            "title": "Section 1",
-            "visible": true,
-            "description": "Select what to show in section 1. Moonfin will need to be closed and reopened for change to take effect.",
-            "settingName": "homeScreenSection0",
-            "type": "radio",
-            "default": "resume",
-            "options": [
-              {
-                "title": "Continue Listening",
-                "id": "resumeaudio"
-              },
-              {
-                "title": "Continue Watching",
-                "id": "resume"
-              },
-              {
-                "title": "Favorites",
-                "id": "favorites"
-              },
-              {
-                "title": "Live TV",
-                "id": "livetv"
-              },
-              {
-                "title": "My List",
-                "id": "mylist"
-              },
-              {
-                "title": "My Media",
-                "id": "smalllibrarytiles"
-              },
-              {
-                "title": "Next Up",
-                "id": "nextup"
-              },
-              {
-                "title": "None",
-                "id": "none"
-              },
-              {
-                "title": "Radio Stations",
-                "id": "radiostations"
-              },
-              {
-                "title": "Recently Added Media",
-                "id": "latestmedia"
-              },
-              {
-                "title": "Recently Released",
-                "id": "recentlyreleased"
-              },
-              {
-                "title": "Rewatch",
-                "id": "rewatch"
-              },
-              {
-                "title": "Since You Watched",
-                "id": "sinceyouwatched"
-              }
-            ]
-          },
-          {
-            "title": "Section 2",
-            "visible": true,
-            "description": "Select what to show in section 2. Moonfin will need to be closed and reopened for change to take effect.",
-            "settingName": "homeScreenSection1",
-            "type": "radio",
-            "default": "recentlyreleased",
-            "options": [
-              {
-                "title": "Continue Listening",
-                "id": "resumeaudio"
-              },
-              {
-                "title": "Continue Watching",
-                "id": "resume"
-              },
-              {
-                "title": "Favorites",
-                "id": "favorites"
-              },
-              {
-                "title": "Live TV",
-                "id": "livetv"
-              },
-              {
-                "title": "My List",
-                "id": "mylist"
-              },
-              {
-                "title": "My Media",
-                "id": "smalllibrarytiles"
-              },
-              {
-                "title": "Next Up",
-                "id": "nextup"
-              },
-              {
-                "title": "None",
-                "id": "none"
-              },
-              {
-                "title": "Radio Stations",
-                "id": "radiostations"
-              },
-              {
-                "title": "Recently Added Media",
-                "id": "latestmedia"
-              },
-              {
-                "title": "Recently Released",
-                "id": "recentlyreleased"
-              },
-              {
-                "title": "Rewatch",
-                "id": "rewatch"
-              },
-              {
-                "title": "Since You Watched",
-                "id": "sinceyouwatched"
-              }
-            ]
-          },
-          {
-            "title": "Section 3",
-            "visible": true,
-            "description": "Select what to show in section 3. Moonfin will need to be closed and reopened for change to take effect.",
-            "settingName": "homeScreenSection2",
-            "type": "radio",
-            "default": "nextup",
-            "options": [
-              {
-                "title": "Continue Listening",
-                "id": "resumeaudio"
-              },
-              {
-                "title": "Continue Watching",
-                "id": "resume"
-              },
-              {
-                "title": "Favorites",
-                "id": "favorites"
-              },
-              {
-                "title": "Live TV",
-                "id": "livetv"
-              },
-              {
-                "title": "My List",
-                "id": "mylist"
-              },
-              {
-                "title": "My Media",
-                "id": "smalllibrarytiles"
-              },
-              {
-                "title": "Next Up",
-                "id": "nextup"
-              },
-              {
-                "title": "None",
-                "id": "none"
-              },
-              {
-                "title": "Radio Stations",
-                "id": "radiostations"
-              },
-              {
-                "title": "Recently Added Media",
-                "id": "latestmedia"
-              },
-              {
-                "title": "Recently Released",
-                "id": "recentlyreleased"
-              },
-              {
-                "title": "Rewatch",
-                "id": "rewatch"
-              },
-              {
-                "title": "Since You Watched",
-                "id": "sinceyouwatched"
-              }
-            ]
-          },
-          {
-            "title": "Section 4",
-            "visible": true,
-            "description": "Select what to show in section 4. Moonfin will need to be closed and reopened for change to take effect.",
-            "settingName": "homeScreenSection3",
-            "type": "radio",
-            "default": "latestmedia",
-            "options": [
-              {
-                "title": "Continue Listening",
-                "id": "resumeaudio"
-              },
-              {
-                "title": "Continue Watching",
-                "id": "resume"
-              },
-              {
-                "title": "Favorites",
-                "id": "favorites"
-              },
-              {
-                "title": "Live TV",
-                "id": "livetv"
-              },
-              {
-                "title": "My List",
-                "id": "mylist"
-              },
-              {
-                "title": "My Media",
-                "id": "smalllibrarytiles"
-              },
-              {
-                "title": "Next Up",
-                "id": "nextup"
-              },
-              {
-                "title": "None",
-                "id": "none"
-              },
-              {
-                "title": "Radio Stations",
-                "id": "radiostations"
-              },
-              {
-                "title": "Recently Added Media",
-                "id": "latestmedia"
-              },
-              {
-                "title": "Recently Released",
-                "id": "recentlyreleased"
-              },
-              {
-                "title": "Rewatch",
-                "id": "rewatch"
-              },
-              {
-                "title": "Since You Watched",
-                "id": "sinceyouwatched"
-              }
-            ]
-          },
-          {
-            "title": "Section 5",
-            "visible": true,
-            "description": "Select what to show in section 5. Moonfin will need to be closed and reopened for change to take effect.",
-            "settingName": "homeScreenSection4",
-            "type": "radio",
-            "default": "none",
-            "options": [
-              {
-                "title": "Continue Listening",
-                "id": "resumeaudio"
-              },
-              {
-                "title": "Continue Watching",
-                "id": "resume"
-              },
-              {
-                "title": "Favorites",
-                "id": "favorites"
-              },
-              {
-                "title": "Live TV",
-                "id": "livetv"
-              },
-              {
-                "title": "My List",
-                "id": "mylist"
-              },
-              {
-                "title": "My Media",
-                "id": "smalllibrarytiles"
-              },
-              {
-                "title": "Next Up",
-                "id": "nextup"
-              },
-              {
-                "title": "None",
-                "id": "none"
-              },
-              {
-                "title": "Radio Stations",
-                "id": "radiostations"
-              },
-              {
-                "title": "Recently Added Media",
-                "id": "latestmedia"
-              },
-              {
-                "title": "Recently Released",
-                "id": "recentlyreleased"
-              },
-              {
-                "title": "Rewatch",
-                "id": "rewatch"
-              },
-              {
-                "title": "Since You Watched",
-                "id": "sinceyouwatched"
-              }
-            ]
-          },
-          {
-            "title": "Section 6",
-            "visible": true,
-            "description": "Select what to show in section 6. Moonfin will need to be closed and reopened for change to take effect.",
-            "settingName": "homeScreenSection5",
-            "type": "radio",
-            "default": "none",
-            "options": [
-              {
-                "title": "Continue Listening",
-                "id": "resumeaudio"
-              },
-              {
-                "title": "Continue Watching",
-                "id": "resume"
-              },
-              {
-                "title": "Favorites",
-                "id": "favorites"
-              },
-              {
-                "title": "Live TV",
-                "id": "livetv"
-              },
-              {
-                "title": "My List",
-                "id": "mylist"
-              },
-              {
-                "title": "My Media",
-                "id": "smalllibrarytiles"
-              },
-              {
-                "title": "Next Up",
-                "id": "nextup"
-              },
-              {
-                "title": "None",
-                "id": "none"
-              },
-              {
-                "title": "Radio Stations",
-                "id": "radiostations"
-              },
-              {
-                "title": "Recently Added Media",
-                "id": "latestmedia"
-              },
-              {
-                "title": "Recently Released",
-                "id": "recentlyreleased"
-              },
-              {
-                "title": "Rewatch",
-                "id": "rewatch"
-              },
-              {
-                "title": "Since You Watched",
-                "id": "sinceyouwatched"
-              }
-            ]
-          },
-          {
-            "title": "Section 7",
-            "visible": true,
-            "description": "Select what to show in section 7. Moonfin will need to be closed and reopened for change to take effect.",
-            "settingName": "homeScreenSection6",
-            "type": "radio",
-            "default": "none",
-            "options": [
-              {
-                "title": "Continue Listening",
-                "id": "resumeaudio"
-              },
-              {
-                "title": "Continue Watching",
-                "id": "resume"
-              },
-              {
-                "title": "Favorites",
-                "id": "favorites"
-              },
-              {
-                "title": "Live TV",
-                "id": "livetv"
-              },
-              {
-                "title": "My List",
-                "id": "mylist"
-              },
-              {
-                "title": "My Media",
-                "id": "smalllibrarytiles"
-              },
-              {
-                "title": "Next Up",
-                "id": "nextup"
-              },
-              {
-                "title": "None",
-                "id": "none"
-              },
-              {
-                "title": "Radio Stations",
-                "id": "radiostations"
-              },
-              {
-                "title": "Recently Added Media",
-                "id": "latestmedia"
-              },
-              {
-                "title": "Recently Released",
-                "id": "recentlyreleased"
-              },
-              {
-                "title": "Rewatch",
-                "id": "rewatch"
-              },
-              {
-                "title": "Since You Watched",
-                "id": "sinceyouwatched"
-              }
-            ]
-          },
-          {
-            "title": "Section 8",
-            "visible": true,
-            "description": "Select what to show in section 8. Moonfin will need to be closed and reopened for change to take effect.",
-            "settingName": "homeScreenSection7",
-            "type": "radio",
-            "default": "none",
-            "options": [
-              {
-                "title": "Continue Listening",
-                "id": "resumeaudio"
-              },
-              {
-                "title": "Continue Watching",
-                "id": "resume"
-              },
-              {
-                "title": "Favorites",
-                "id": "favorites"
-              },
-              {
-                "title": "Live TV",
-                "id": "livetv"
-              },
-              {
-                "title": "My List",
-                "id": "mylist"
-              },
-              {
-                "title": "My Media",
-                "id": "smalllibrarytiles"
-              },
-              {
-                "title": "Next Up",
-                "id": "nextup"
-              },
-              {
-                "title": "None",
-                "id": "none"
-              },
-              {
-                "title": "Radio Stations",
-                "id": "radiostations"
-              },
-              {
-                "title": "Recently Added Media",
-                "id": "latestmedia"
-              },
-              {
-                "title": "Recently Released",
-                "id": "recentlyreleased"
-              },
-              {
-                "title": "Rewatch",
-                "id": "rewatch"
-              },
-              {
-                "title": "Since You Watched",
-                "id": "sinceyouwatched"
-              }
-            ]
-          },
-          {
-            "title": "Use Server Home Row Settings",
-            "description": "When enabled, Moonfin will use the home row configuration from your Jellyfin server instead of the settings below. Moonfin will need to be closed and reopened for change to take effect.",
-            "settingName": "homeRows.useServerConfig",
-            "type": "bool",
-            "default": "false"
-          }
-        ]
-      },
-      {
-        "title": "Item Detail Screen",
-        "description": "Settings relating to the appearance of the item detail screen.",
-        "children": [
-          {
-            "title": "Community and Critical Ratings",
-            "description": "Community and critic review ratings from Rotten Tomatoes.",
-            "settingName": "ui.itemdetail.showRatings",
-            "type": "bool",
-            "default": "true"
-          }
-        ]
-      },
-      {
         "title": "Libraries",
         "description": "Settings relating to the appearance of Library pages.",
+        "icon": "library.png"
         "children": [
+          {
+            "title": "Multi-Server Libraries",
+            "description": "Combine items from multiple servers in a single view",
+            "settingName": "ui.home.enableMultiServer",
+            "type": "bool",
+            "default": "false"
+          },
           {
             "title": "Forget Filters",
             "description": "Forget applied library filters when Jellyfin is closed.",

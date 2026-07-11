@@ -1474,11 +1474,10 @@ function reorderSettingsForFlutter(configTree as object) as object
     playback = findSettingsSectionByTitle(configTree, "Playback")
     rememberMe = findSettingsSectionByTitle(configTree, "Remember Me?")
     userInterface = findSettingsSectionByTitle(configTree, "User Interface")
-    secret = findSettingsSectionByTitle(configTree, "Secret")
 
-    navigationBar = findSettingsChildByTitle(moonfinSettings, "Navigation Bar")
+    navigationBar = findSettingsChildByTitle(moonfinSettings, "Navigation")
     homeScreen = findSettingsChildByTitle(moonfinSettings, "Home Screen")
-    featuredMediaBar = findSettingsChildByTitle(moonfinSettings, "Featured Media Bar")
+    featuredMediaBar = findSettingsChildByTitle(moonfinSettings, "Media Bar")
     themeMusic = findSettingsChildByTitle(moonfinSettings, "Theme Music")
     shuffle = findSettingsChildByTitle(moonfinSettings, "Shuffle")
     visualEffects = findSettingsChildByTitle(moonfinSettings, "Visual Effects")
@@ -1486,15 +1485,14 @@ function reorderSettingsForFlutter(configTree as object) as object
 
     colors = findSettingsChildByTitle(userInterface, "Colors")
     general = findSettingsChildByTitle(userInterface, "General")
-    homeRows = findSettingsChildByTitle(userInterface, "Home Rows")
+    libraries = findSettingsChildByTitle(userInterface, "Libraries")
 
     enablePlugin = findSettingsChildByTitle(pluginRootSection, "Enable Plugin")
     pluginSettingsSync = findSettingsChildByTitle(pluginRootSection, "Settings Sync")
-    mdblist = findSettingsChildByTitle(pluginRootSection, "MDBList Ratings")
-    tmdb = findSettingsChildByTitle(pluginRootSection, "TMDB")
-    seerr = findSettingsChildByTitle(pluginRootSection, "Seerr")
-    if not isValid(seerr)
-        seerr = findSettingsChildByTitle(pluginRootSection, "Seerr")
+    ratings = findSettingsChildByTitle(pluginRootSection, "Metadata & Ratings")
+    jellyseerr = findSettingsChildByTitle(pluginRootSection, "Seerr")
+    if not isValid(jellyseerr)
+        jellyseerr = findSettingsChildByTitle(pluginRootSection, "Jellyseerr")
     end if
 
     reordered = []
@@ -1516,29 +1514,22 @@ function reorderSettingsForFlutter(configTree as object) as object
     end if
 
     personalizationChildren = []
-    pushSettingIfValid(personalizationChildren, navigationBar)
-    pushSettingIfValid(personalizationChildren, homeScreen)
     pushSettingIfValid(personalizationChildren, colors)
     pushSettingIfValid(personalizationChildren, general)
-    pushSettingIfValid(personalizationChildren, homeRows)
+    'MISSING FROM CORE: DETAILS SCREEN
+    pushSettingIfValid(personalizationChildren, navigationBar)
+    pushSettingIfValid(personalizationChildren, homeScreen)
+    pushSettingIfValid(personalizationChildren, libraries)
+    pushSettingIfValid(personalizationChildren, featuredMediaBar)
+    pushSettingIfValid(personalizationChildren, visualEffects)
+    pushSettingIfValid(personalizationChildren, themeMusic)
+    pushSettingIfValid(personalizationChildren, shuffle)
     if personalizationChildren.count() > 0
         reordered.push({
             title: "Personalization",
             description: "Navigation, home screen, colors, and interface preferences.",
             icon: "personalization.png",
             children: personalizationChildren
-        })
-    end if
-
-    dynamicChildren = []
-    pushSettingIfValid(dynamicChildren, featuredMediaBar)
-    pushSettingIfValid(dynamicChildren, visualEffects)
-    if dynamicChildren.count() > 0
-        reordered.push({
-            title: "Dynamic Content",
-            description: "Media Bar and visual overlays",
-            icon: "dynamiccontent.png",
-            children: dynamicChildren
         })
     end if
 
@@ -1561,9 +1552,8 @@ function reorderSettingsForFlutter(configTree as object) as object
             children: pluginChildren
         })
     end if
-    pushSettingIfValid(integrationsChildren, mdblist)
-    pushSettingIfValid(integrationsChildren, tmdb)
-    pushSettingIfValid(integrationsChildren, seerr)
+    pushSettingIfValid(integrationsChildren, ratings)
+    pushSettingIfValid(integrationsChildren, jellyseerr)
     if integrationsChildren.count() > 0
         reordered.push({
             title: "Integrations",
@@ -1584,28 +1574,15 @@ function reorderSettingsForFlutter(configTree as object) as object
         })
     end if
 
-    advancedChildren = []
-    pushSettingIfValid(advancedChildren, themeMusic)
-    pushSettingIfValid(advancedChildren, shuffle)
-    pushSettingIfValid(advancedChildren, secret)
-    if advancedChildren.count() > 0
-        reordered.push({
-            title: "Advanced",
-            description: "Theme music, shuffle, and advanced Roku options.",
-            icon: "advanced.png",
-            children: advancedChildren
-        })
-    end if
-
     additionalChildren = []
 
-    moonfinMappedTitles = ["Navigation Bar", "Home Screen", "Featured Media Bar", "Theme Music", "Shuffle", "Visual Effects", "Support Moonfin"]
+    moonfinMappedTitles = ["Navigation", "Home Screen", "Libraries", "Media Bar", "Theme Music", "Shuffle", "Visual Effects", "Support Moonfin"]
     pushUnmappedChildrenByTitle(additionalChildren, moonfinSettings, moonfinMappedTitles)
 
-    pluginMappedTitles = ["Enable Plugin", "Settings Sync", "MDBList Ratings", "TMDB", "Seerr"]
+    pluginMappedTitles = ["Enable Plugin", "Settings Sync", "Metadata & Ratings", "Seerr", "Jellyseerr"]
     pushUnmappedChildrenByTitle(additionalChildren, pluginRootSection, pluginMappedTitles)
 
-    userInterfaceMappedTitles = ["Colors", "General", "Home Rows"]
+    userInterfaceMappedTitles = ["Colors", "General", "Libraries"]
     pushUnmappedChildrenByTitle(additionalChildren, userInterface, userInterfaceMappedTitles)
 
     if additionalChildren.count() > 0
@@ -1616,7 +1593,7 @@ function reorderSettingsForFlutter(configTree as object) as object
         })
     end if
 
-    knownRootTitles = ["Moonfin Settings", "Moonfin Plugin", "Playback", "Remember Me?", "User Interface", "Secret"]
+    knownRootTitles = ["Moonfin Settings", "Moonfin Plugin", "Playback", "Remember Me?", "User Interface", "Auto Sign In"]
     for each rootSection in configTree
         rootTitle = chainLookupReturn(rootSection, "title", "")
         if not isValidAndNotEmpty(rootTitle) then continue for
