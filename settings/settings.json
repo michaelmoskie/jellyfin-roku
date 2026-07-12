@@ -1713,7 +1713,7 @@
       {
         "title": "Libraries",
         "description": "Settings relating to the appearance of Library pages.",
-        "icon": "library.png"
+        "icon": "library.png",
         "children": [
           {
             "title": "Multi-Server Libraries",
