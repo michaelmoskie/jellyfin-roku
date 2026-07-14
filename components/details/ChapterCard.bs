@@ -1,0 +1,22 @@
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.thumb = m.top.findNode("thumb")
+    m.time = m.top.findNode("time")
+    m.name = m.top.findNode("name")
+    m.focusRing = m.top.findNode("focusRing")
+end sub
+
+sub onContentChanged()
+    cont = m.top.itemContent
+    if not isValid(cont) then return
+    m.name.text = cont.name
+    m.time.text = cont.timeText
+    if isValidAndNotEmpty(cont.thumbUrl)
+        m.thumb.uri = cont.thumbUrl
+    end if
+end sub
+
+sub onFocusChanged()
+    m.focusRing.visible = m.top.itemHasFocus
+end sub

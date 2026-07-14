@@ -1,0 +1,130 @@
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.barBg = m.top.findNode("barBg")
+    m.focusPill = m.top.findNode("focusPill")
+    m.labelRow = m.top.findNode("labelRow")
+    m.pillAnim = m.top.findNode("pillAnim")
+    m.pillPosInterp = m.top.findNode("pillPosInterp")
+    m.pillWidthInterp = m.top.findNode("pillWidthInterp")
+    m.labels = []
+    m.tabX = []
+    m.tabW = []
+    m.barHeight = 80
+    m.tabPadX = 26
+    m.barPad = 8
+    m.top.observeField("focusedChild", "onFocusChanged")
+end sub
+
+sub onTabsChanged()
+    m.labelRow.removeChildrenIndex(m.labelRow.getChildCount(), 0)
+    m.labels = []
+    m.tabX = []
+    m.tabW = []
+
+    tabs = m.top.tabs
+    if not isValidAndNotEmpty(tabs) then return
+
+    x = m.barPad
+    for i = 0 to tabs.count() - 1
+        labelText = tabs[i].label
+        label = CreateObject("roSGNode", "Label")
+        label.font = "font:MediumBoldSystemFont"
+        label.text = labelText
+        label.vertAlign = "center"
+        label.horizAlign = "center"
+        label.height = m.barHeight
+
+        lw = label.boundingRect().width
+        if lw <= 0 then lw = Len(labelText) * 15
+        regionW = lw + m.tabPadX * 2
+        label.width = regionW
+        label.translation = [x, 0]
+        m.labelRow.appendChild(label)
+
+        m.labels.push(label)
+        m.tabX.push(x)
+        m.tabW.push(regionW)
+        x += regionW
+    end for
+
+    m.barBg.width = x + m.barPad
+    m.barBg.height = m.barHeight
+
+    if m.top.focusIndex >= tabs.count() then m.top.focusIndex = 0
+    updateHighlight()
+end sub
+
+' Only the focused tab stands out, with the white pill and black text. Every
+' other tab stays muted, including the one whose content is showing.
+sub updateHighlight()
+    hasFocus = m.top.isInFocusChain()
+    for i = 0 to m.labels.count() - 1
+        label = m.labels[i]
+        if hasFocus and i = m.top.focusIndex
+            label.color = "#101114"
+        else
+            label.color = "#FFFFFF"
+        end if
+    end for
+
+    if hasFocus and m.top.focusIndex >= 0 and m.top.focusIndex < m.tabX.count()
+        moveFocusPill(m.top.focusIndex)
+    else
+        m.focusPill.visible = false
+    end if
+end sub
+
+sub moveFocusPill(index as integer)
+    targetX = m.tabX[index]
+    targetW = m.tabW[index]
+
+    if not m.focusPill.visible
+        m.focusPill.translation = [targetX, 0]
+        m.focusPill.width = targetW
+        m.focusPill.height = m.barHeight
+        m.focusPill.visible = true
+    else
+        m.pillPosInterp.keyValue = [m.focusPill.translation, [targetX, 0]]
+        m.pillWidthInterp.keyValue = [m.focusPill.width, targetW]
+        m.pillAnim.control = "start"
+    end if
+end sub
+
+sub onFocusChanged()
+    updateHighlight()
+end sub
+
+sub focusTab(index as integer)
+    if index < 0 or index >= m.labels.count() then return
+    m.top.focusIndex = index
+    if m.top.expanded then m.top.selectedIndex = index
+    updateHighlight()
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+
+    if key = "right"
+        if m.top.focusIndex >= m.labels.count() - 1 then return true
+        focusTab(m.top.focusIndex + 1)
+        return true
+    else if key = "left"
+        if m.top.focusIndex <= 0 then return true
+        focusTab(m.top.focusIndex - 1)
+        return true
+    else if key = "OK"
+        ' With Expanded Tabs off, pressing OK on the open tab collapses it.
+        if not m.top.expanded and m.top.selectedIndex = m.top.focusIndex
+            m.top.selectedIndex = -1
+        else
+            m.top.selectedIndex = m.top.focusIndex
+        end if
+        return true
+    else if key = "up" or key = "down"
+        m.top.escape = key
+        return true
+    end if
+
+    return false
+end function

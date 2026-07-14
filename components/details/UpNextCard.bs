@@ -1,0 +1,45 @@
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.label = m.top.findNode("upNextLabel")
+    m.label.text = tr("Next Up")
+    m.thumb = m.top.findNode("thumb")
+    m.epTitle = m.top.findNode("epTitle")
+    m.progressBar = m.top.findNode("progressBar")
+    m.focusRing = m.top.findNode("focusRing")
+    m.cardBg = m.top.findNode("cardBg")
+    m.top.observeField("focusedChild", "onFocusChanged")
+end sub
+
+sub onDataChanged()
+    m.thumb.uri = m.top.thumbUrl
+    m.epTitle.text = m.top.title
+
+    pct = m.top.progress
+    if pct < 0 then pct = 0
+    if pct > 100 then pct = 100
+    m.progressBar.width = 400 * (pct / 100)
+    m.progressBar.visible = pct > 0
+end sub
+
+sub onFocusChanged()
+    if m.top.isInFocusChain()
+        m.focusRing.visible = true
+        m.cardBg.opacity = 0.20
+    else
+        m.focusRing.visible = false
+        m.cardBg.opacity = 0.08
+    end if
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = "OK"
+        m.top.selected = true
+        return true
+    else if key = "up" or key = "down" or key = "left"
+        m.top.escape = key
+        return true
+    end if
+    return false
+end function

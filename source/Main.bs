@@ -170,6 +170,8 @@ sub Main (args as dynamic) as void
             onRefreshSeriesDetailsDataEvent()
         else if isNodeEvent(msg, "genreItemSelected")
             onGenreItemSelectedEvent(msg)
+        else if isNodeEvent(msg, "studioSelected")
+            onStudioSelectedEvent(msg)
         else if isNodeEvent(msg, "selectedItem")
             onSelectedItemEvent(msg)
         else if isNodeEvent(msg, "shuffleSelectedItem")
@@ -215,7 +217,7 @@ sub Main (args as dynamic) as void
             else
                 onPlaylistPlayAllEvent(msg)
             end if
-        else if isNodeEvent(msg, "shufflePlay") and (msg.getRoSGNode().isSubType("PlaylistDetails") or msg.getRoSGNode().isSubType("MusicTrackListView"))
+        else if isNodeEvent(msg, "shufflePlay") and (msg.getRoSGNode().isSubType("PlaylistDetails") or msg.getRoSGNode().isSubType("MusicTrackListView") or msg.getRoSGNode().isSubType("ModernItemDetails"))
             onPlaylistShuffleEvent(msg)
         else if isNodeEvent(msg, "playArtistSelected")
             onPlayArtistSelectedEvent(msg)

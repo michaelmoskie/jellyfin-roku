@@ -1,0 +1,57 @@
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.bg = m.top.findNode("btnBg")
+    m.icon = m.top.findNode("btnIcon")
+    m.label = m.top.findNode("btnLabel")
+    m.anim = m.top.findNode("expandAnim")
+    m.bgWidthInterp = m.top.findNode("bgWidthInterp")
+    m.labelOpacityInterp = m.top.findNode("labelOpacityInterp")
+    m.collapsedWidth = 80
+    m.labelPad = 36
+    m.circleUri = "pkg:/images/icons/circle.png"
+    m.pillUri = "pkg:/images/icons/pill-focus.9.png"
+    m.anim.observeField("state", "onAnimState")
+end sub
+
+' The pill 9-patch is used while expanding and collapsing so the width slides
+' cleanly, then the resting unfocused state swaps to a true circle.
+sub onAnimState()
+    if isStringEqual(m.anim.state, "stopped") and not m.top.highlighted
+        m.bg.uri = m.circleUri
+    end if
+end sub
+
+sub onIconChanged()
+    m.icon.uri = m.top.iconUri
+end sub
+
+sub onLabelChanged()
+    m.label.text = m.top.labelText
+end sub
+
+' Focused: fill white, darken the icon and grow the pill to reveal the label.
+' Unfocused: dim back down and collapse to a circle.
+sub onHighlightChanged()
+    labelWidth = m.label.boundingRect().width
+    expandedWidth = m.collapsedWidth + labelWidth + m.labelPad
+
+    ' Use the pill 9-patch for the width animation in both directions.
+    m.bg.uri = m.pillUri
+
+    if m.top.highlighted
+        m.bg.blendColor = "#FFFFFF"
+        m.bg.opacity = 1
+        m.icon.blendColor = "#000000FF"
+        m.bgWidthInterp.keyValue = [m.bg.width, expandedWidth]
+        m.labelOpacityInterp.keyValue = [m.label.opacity, 1]
+    else
+        m.bg.blendColor = "#444444"
+        m.bg.opacity = 0.6
+        m.icon.blendColor = "#FFFFFFFF"
+        m.bgWidthInterp.keyValue = [m.bg.width, m.collapsedWidth]
+        m.labelOpacityInterp.keyValue = [m.label.opacity, 0]
+    end if
+
+    m.anim.control = "start"
+end sub

@@ -61,6 +61,35 @@ namespace detailButtons
         return buttonGroup
     end function
 
+    ' Creates a modern pill button that expands to reveal its label when focused.
+    ' Keeps the same buttonAction/buttonIndex contract as createButton so the
+    ' detail screen dispatch works unchanged.
+    function createModernButton(config as object, buttonIndex as integer) as object
+        buttonGroup = CreateObject("roSGNode", "ModernDetailButton")
+        buttonGroup.id = config.id
+        buttonGroup.focusable = true
+        buttonGroup.iconUri = config.icon
+        buttonGroup.labelText = config.label
+        buttonGroup.buttonAction = config.action
+        buttonGroup.buttonIndex = buttonIndex
+        return buttonGroup
+    end function
+
+    ' Highlights one modern button and collapses the rest.
+    sub highlightModern(index as integer, buttonGroups as object)
+        for i = 0 to buttonGroups.count() - 1
+            buttonGroup = buttonGroups[i]
+            if buttonGroup = invalid then continue for
+            buttonGroup.highlighted = (i = index)
+        end for
+    end sub
+
+    sub unhighlightAllModern(buttonGroups as object)
+        for each buttonGroup in buttonGroups
+            if buttonGroup <> invalid then buttonGroup.highlighted = false
+        end for
+    end sub
+
     ' Highlights the button at the given index and unhighlights all others.
     sub highlight(index as integer, buttonGroups as object)
         if index < 0 or index >= buttonGroups.count() then return

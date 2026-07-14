@@ -136,6 +136,8 @@ sub OnScreenShown(isReturning = false as boolean)
     ' Set library name in header
     if isValid(m.top.genreFilter) and isValidAndNotEmpty(m.top.genreFilter.genreName)
         m.libraryName.text = m.top.genreFilter.genreName
+    else if isValid(m.top.studioFilter) and isValidAndNotEmpty(m.top.studioFilter.studioName)
+        m.libraryName.text = m.top.studioFilter.studioName
     else if isValid(m.top.parentItem)
         m.libraryName.text = isValid(m.top.parentItem.name) ? m.top.parentItem.name : m.top.parentItem.title
     end if
@@ -299,8 +301,8 @@ sub loadInitialItems()
         m.sortAscending = isStringEqual(m.sortAscending, "true")
     end if
 
-    ' If we're in genre browse mode, force view to presentation (never "Genres")
-    if isValid(m.top.genreFilter)
+    ' If we're in genre or studio browse mode, force view to presentation (never "Genres")
+    if isValid(m.top.genreFilter) or isValid(m.top.studioFilter)
         if m.view <> "presentation" then m.view = "presentation"
     else
         ' If view is not valid, use default view
@@ -376,6 +378,19 @@ sub loadInitialItems()
 
         if isValidAndNotEmpty(m.top.genreFilter.itemType)
             m.loadItemsTask.itemType = m.top.genreFilter.itemType
+        end if
+    else if isValid(m.top.studioFilter)
+        ' Studio browse: filter the library grid by the selected studio.
+        m.loadItemsTask.view = string.EMPTY
+        m.loadItemsTask.genreIds = string.EMPTY
+        m.loadItemsTask.recursive = true
+        m.loadItemsTask.itemType = `${ItemType.MOVIE},${ItemType.SERIES}`
+
+        if isValidAndNotEmpty(m.top.studioFilter.studioId)
+            m.loadItemsTask.studioIds = m.top.studioFilter.studioId
+        end if
+        if isValidAndNotEmpty(m.top.studioFilter.libraryId)
+            m.loadItemsTask.itemId = m.top.studioFilter.libraryId
         end if
     else if inArray([ItemType.BOXSET, ItemType.PHOTO, ItemType.PHOTOALBUM, ItemType.MUSICVIDEO, ItemType.PLAYLIST, ItemType.FOLDER], m.top.mediaType)
         m.loadItemsTask.recursive = false

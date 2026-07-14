@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="UpNextCard" extends="Group">
+    <children>
+        <Label id="upNextLabel" font="font:SmallestBoldSystemFont" color="#AAAAAA" />
+        <Group id="card" translation="[0, 32]">
+            <Rectangle id="cardBg" width="400" height="292" color="#FFFFFF" opacity="0.08" />
+            <Poster id="thumb" width="400" height="225" loadDisplayMode="scaleToZoom" />
+            <Rectangle id="progressTrack" width="400" height="6" translation="[0, 219]" color="#FFFFFF" opacity="0.25" />
+            <Rectangle id="progressBar" width="0" height="6" translation="[0, 219]" color="#FFFFFF" />
+            <Label id="epTitle" width="376" height="52" translation="[12, 233]" wrap="true"
+                maxLines="2" vertAlign="top" color="#FFFFFF" font="font:SmallSystemFont" />
+            <Poster id="focusRing" width="400" height="292" uri="pkg:/images/hd_focus.9.png" visible="false" />
+        </Group>
+    </children>
+    <interface>
+        <field id="thumbUrl" type="string" onChange="onDataChanged" />
+        <field id="title" type="string" onChange="onDataChanged" />
+        <field id="progress" type="float" value="0" onChange="onDataChanged" />
+        <field id="selected" type="boolean" alwaysNotify="true" />
+        <field id="escape" type="string" alwaysNotify="true" />
+    </interface>
+</component>

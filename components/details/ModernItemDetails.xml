@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="ModernItemDetails" extends="JFScreen">
+    <children>
+        <!-- Cinematic backdrop: art toward the right, scrims darkening the left
+            and bottom so the hero text stays readable -->
+        <Rectangle id="backdropBlack" width="1920" height="1080" color="#000000" />
+        <Poster id="backdrop" width="1920" height="1080" loadDisplayMode="scaleToZoom" opacity="1.0" />
+        <Rectangle id="backdropScrim" width="1920" height="1080" color="#000000" opacity="0.28" />
+        <Poster id="backdropLeftScrim" width="1400" height="1080" uri="pkg:/images/sidebar-edge-gradient.png"
+            blendColor="0x000000" loadDisplayMode="scaleToFill" />
+        <Poster id="backdropBottomScrim" width="1920" height="440" translation="[0, 640]"
+            uri="pkg:/images/seerr_gradient.png" blendColor="0x000000" loadDisplayMode="scaleToFill" opacity="0.85" />
+
+        <!-- Scrollable content -->
+        <Group id="scrollableContent" translation="[0, 0]">
+            <!-- Poster kept for compatibility, hidden in the modern layout -->
+            <Poster id="posterImage" translation="[1540, 140]" width="260" height="390"
+                loadDisplayMode="scaleToFit" visible="false" />
+            <PlayedCheckmark id="playedIndicator" visible="false" />
+
+            <!-- Up Next card (series/episodes), top-right -->
+            <UpNextCard id="upNextCard" translation="[1360, 200]" visible="false" />
+
+            <Group id="container"
+                translation="[96, 130]">
+
+                <!-- Episode header: "SeriesName · S1:E3" (episodes only) -->
+                <Text id="episodeHeader" font="font:SmallSystemFont" width="1350"
+                    color="#AAAAAA" visible="false" />
+
+                <!-- Logo with drop shadow (Group so shadow overlaps, not stacks) -->
+                <Group id="logoGroup" visible="false">
+                    <Poster id="logoShadow" visible="true" loadDisplayMode="scaleToFit"
+                        width="500" height="200" blendColor="0x000000" opacity="0.6"
+                        translation="[3, 3]" />
+                    <Poster id="logoImage" visible="true" loadDisplayMode="scaleToFit"
+                        width="500" height="200" />
+                </Group>
+
+                <!-- Title (shown when no logo available) -->
+                <Text id="title" font="font:LargeBoldSystemFont" width="1350" wrap="true"
+                    maxLines="2" color="#FFFFFF" visible="false" />
+
+                <!-- Metadata row: built dynamically via layoutMetadataRow() -->
+                <Group id="metadataRow">
+                    <Text id="releaseYear" font="font:SmallestSystemFont" color="#CCCCCC" />
+                    <Text id="dot1" font="font:SmallestSystemFont" text=" · " color="#666666"
+                        visible="false" />
+                    <Text id="episodeNumber" font="font:SmallestSystemFont" color="#CCCCCC" />
+                    <Text id="dot2" font="font:SmallestSystemFont" text=" · " color="#666666"
+                        visible="false" />
+                    <Text id="officialRating" font="font:SmallestSystemFont" color="#CCCCCC" />
+                    <Text id="dot3" font="font:SmallestSystemFont" text=" · " color="#666666"
+                        visible="false" />
+                    <Text id="seasonCount" font="font:SmallestSystemFont" color="#CCCCCC" />
+                    <Text id="dot6" font="font:SmallestSystemFont" text=" · " color="#666666"
+                        visible="false" />
+                    <Text id="runtime" font="font:SmallestSystemFont" color="#CCCCCC" />
+                    <Text id="dot4" font="font:SmallestSystemFont" text=" · " color="#666666"
+                        visible="false" />
+                    <Text id="endsAt" font="font:SmallestSystemFont" color="#CCCCCC" />
+                    <Text id="dot5" font="font:SmallestSystemFont" text=" · " color="#666666"
+                        visible="false" />
+                    <Group id="communityRatingGroup">
+                        <Poster id="star" uri="pkg:/images/sharp_star_white_18dp.png"
+                            height="20" width="20" blendColor="#FFD700" visible="false" />
+                        <Text id="communityRating" font="font:SmallestSystemFont" color="#CCCCCC" />
+                    </Group>
+                    <Text id="dot7" font="font:SmallestSystemFont" text=" · " color="#666666"
+                        visible="false" />
+                    <Group id="criticRatingGroup" visible="false">
+                        <Poster id="tomatoIcon" uri="pkg:/images/fresh.png"
+                            height="20" width="20" visible="false" />
+                        <Text id="criticRating" font="font:SmallestSystemFont" color="#CCCCCC" />
+                    </Group>
+                    <Text id="dot8" font="font:SmallestSystemFont" text=" · " color="#666666"
+                        visible="false" />
+                    <Group id="codecRow">
+                        <Group id="codecVideoQualityGroup">
+                            <Poster id="codecVideoQualityBg" uri="pkg:/images/hd_focus.9.png"
+                                loadDisplayMode="scaleToFit" blendColor="#888888" opacity="0.3"
+                                visible="false" />
+                            <Text id="codecVideoQuality" font="font:SmallestSystemFont"
+                                color="#CCCCCC" translation="[10, 0]" />
+                        </Group>
+                        <Group id="codecVideoCodecGroup">
+                            <Poster id="codecVideoCodecBg" uri="pkg:/images/hd_focus.9.png"
+                                loadDisplayMode="scaleToFit" blendColor="#888888" opacity="0.3"
+                                visible="false" />
+                            <Text id="codecVideoCodec" font="font:SmallestSystemFont"
+                                color="#CCCCCC" translation="[10, 0]" />
+                        </Group>
+                        <Group id="codecAudioQualityGroup">
+                            <Poster id="codecAudioQualityBg" uri="pkg:/images/hd_focus.9.png"
+                                loadDisplayMode="scaleToFit" blendColor="#888888" opacity="0.3"
+                                visible="false" />
+                            <Text id="codecAudioQuality" font="font:SmallestSystemFont"
+                                color="#CCCCCC" translation="[10, 0]" />
+                        </Group>
+                        <Group id="codecAudioCodecGroup">
+                            <Poster id="codecAudioCodecBg" uri="pkg:/images/hd_focus.9.png"
+                                loadDisplayMode="scaleToFit" blendColor="#888888" opacity="0.3"
+                                visible="false" />
+                            <Text id="codecAudioCodec" font="font:SmallestSystemFont"
+                                color="#CCCCCC" translation="[10, 0]" />
+                        </Group>
+                    </Group>
+                </Group>
+
+                <!-- MDBList ratings row (plugin) -->
+                <RatingsRow id="ratingsRow" visible="false" />
+
+                <!-- Tagline -->
+                <Text id="tagline" font="font:SmallestSystemFont" wrap="true" maxLines="2"
+                    width="1350" color="#AAAAAA" visible="false" />
+
+                <!-- Overview (focusable for scrolling) -->
+                <ScrollableText id="overview" font="font:SmallestSystemFont"
+                    width="1350" height="180" color="#DDDDDD" visible="false" />
+
+                <!-- Button row (centered across screen) -->
+                <Rectangle id="buttonRowContainer" width="1728" height="140"
+                    color="#00000000">
+                    <Group id="buttonRow" translation="[0, 10]" />
+                </Rectangle>
+
+                <!-- Pill tab bar -->
+                <DetailTabBar id="tabBar" />
+
+                <!-- Bottom metadata columns: GENRES | DIRECTOR | WRITERS | STUDIO -->
+                <Rectangle id="metadataColumnsContainer" width="1728" height="140"
+                    color="#00000000">
+                    <Poster id="metadataColumnsBg" uri="pkg:/images/hd_focus_filled.9.png"
+                        loadDisplayMode="scaleToFit" width="1728" height="140"
+                        blendColor="#444444" opacity="0.6" visible="false" />
+                    <Group id="metadataColumns" translation="[0, 0]">
+                        <Rectangle id="genresColumn" width="430" height="140"
+                            color="#00000000" visible="false">
+                            <Text id="genresHeader" text="GENRES"
+                                font="font:SmallestBoldSystemFont" color="#888888" width="410"
+                                horizAlign="center" translation="[10, 8]" />
+                            <Text id="genres" font="font:SmallestSystemFont" color="#CCCCCC"
+                                width="410" wrap="true" maxLines="3" horizAlign="center"
+                                translation="[10, 32]" />
+                        </Rectangle>
+                        <Rectangle id="divider1" width="1" height="140"
+                            color="#666666" visible="false" />
+                        <Rectangle id="directorColumn" width="430" height="140"
+                            color="#00000000" visible="false">
+                            <Text id="directorHeader" text="DIRECTOR"
+                                font="font:SmallestBoldSystemFont" color="#888888" width="410"
+                                horizAlign="center" translation="[10, 8]" />
+                            <Text id="director" font="font:SmallestSystemFont" color="#CCCCCC"
+                                width="410" wrap="true" maxLines="3" horizAlign="center"
+                                translation="[10, 32]" />
+                        </Rectangle>
+                        <Rectangle id="divider2" width="1" height="140"
+                            color="#666666" visible="false" />
+                        <Rectangle id="writersColumn" width="430" height="140"
+                            color="#00000000" visible="false">
+                            <Text id="writersHeader" text="WRITERS"
+                                font="font:SmallestBoldSystemFont" color="#888888" width="410"
+                                horizAlign="center" translation="[10, 8]" />
+                            <Text id="writers" font="font:SmallestSystemFont" color="#CCCCCC"
+                                width="410" wrap="true" maxLines="3" horizAlign="center"
+                                translation="[10, 32]" />
+                        </Rectangle>
+                        <Rectangle id="divider3" width="1" height="140"
+                            color="#666666" visible="false" />
+                        <Rectangle id="studioColumn" width="430" height="140"
+                            color="#00000000" visible="false">
+                            <Text id="studioHeader" text="STUDIO"
+                                font="font:SmallestBoldSystemFont" color="#888888" width="410"
+                                horizAlign="center" translation="[10, 8]" />
+                            <Text id="studio" font="font:SmallestSystemFont" color="#CCCCCC"
+                                width="410" wrap="true" maxLines="3" horizAlign="center"
+                                translation="[10, 32]" />
+                        </Rectangle>
+                    </Group>
+                </Rectangle>
+
+                <!-- Extras loader, hidden. Its rows feed the tab grid -->
+                <ExtrasRowList id="extrasGrid"
+                    numRows="5"
+                    rowFocusAnimationStyle="floatingFocus"
+                    itemSpacing="[60, 60]"
+                    rowLabelOffset="[[9, 24]]"
+                    showRowLabel="true"
+                    showRowCounter="true"
+                    visible="false"
+                    drawFocusFeedback="true"
+                    itemComponentName="ExtrasItem"
+                    focusBitmapUri="pkg:/images/hd_focus.9.png" />
+
+                <!-- Tab content grid -->
+                <MarkupGrid id="tabGrid"
+                    itemComponentName="ExtrasItem"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="true"
+                    focusBitmapUri="pkg:/images/hd_focus.9.png"
+                    numColumns="6"
+                    numRows="2"
+                    itemSize="[250, 330]"
+                    rowHeights="[330]"
+                    itemSpacing="[30, 30]"
+                    visible="false" />
+
+                <!-- Studios grid (TMDB logos) -->
+                <MarkupGrid id="studioGrid"
+                    itemComponentName="StudioCard"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="false"
+                    numColumns="5"
+                    numRows="3"
+                    itemSize="[270, 150]"
+                    rowHeights="[150]"
+                    itemSpacing="[24, 24]"
+                    visible="false" />
+
+                <!-- Season episodes (full-width rows) -->
+                <MarkupGrid id="episodeRowGrid"
+                    itemComponentName="SeasonEpisodeRow"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="true"
+                    focusBitmapUri="pkg:/images/hd_focus.9.png"
+                    numColumns="1"
+                    numRows="4"
+                    itemSize="[1728, 180]"
+                    rowHeights="[180]"
+                    itemSpacing="[0, 10]"
+                    visible="false" />
+
+                <!-- Music tracks (full-width rows) -->
+                <MarkupGrid id="trackGrid"
+                    itemComponentName="PlaylistItemRow"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="true"
+                    focusBitmapUri="pkg:/images/hd_focus.9.png"
+                    numColumns="1"
+                    numRows="5"
+                    itemSize="[1728, 120]"
+                    rowHeights="[120]"
+                    itemSpacing="[0, 8]"
+                    visible="false" />
+
+                <!-- Artist albums grid -->
+                <MarkupGrid id="artistAlbumGrid"
+                    itemComponentName="GridItemSmall"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="true"
+                    focusBitmapUri="pkg:/images/hd_focus.9.png"
+                    numColumns="5"
+                    numRows="2"
+                    itemSize="[310, 350]"
+                    rowHeights="[350]"
+                    itemSpacing="[24, 24]"
+                    visible="false" />
+
+                <!-- Chapters grid -->
+                <MarkupGrid id="chaptersGrid"
+                    itemComponentName="ChapterCard"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="false"
+                    numColumns="5"
+                    numRows="2"
+                    itemSize="[330, 215]"
+                    rowHeights="[215]"
+                    itemSpacing="[24, 24]"
+                    visible="false" />
+            </Group>
+        </Group>
+
+        <AudioSelector id="audioSelector" visible="false" />
+        <SubtitleSelector id="subtitleSelector" visible="false" />
+        <VersionSelector id="versionSelector" visible="false" />
+        <ThemeMusicPlayer id="themeMusicPlayer" />
+        <FavoriteItemsTask id="favoriteTask" />
+        <PlaystateTask id="playstateTask" />
+
+        <!-- Smooth scroll animation for page transitions -->
+        <Animation id="scrollAnimation" duration="0.5" repeat="false" easeFunction="inOutQuad">
+            <Vector2DFieldInterpolator id="scrollInterpolator"
+                key="[0.0, 1.0]"
+                keyValue="[[0, 0], [0, 0]]"
+                fieldToInterp="scrollableContent.translation" />
+        </Animation>
+    </children>
+    <interface>
+        <field id="buttonSelected" type="string" alwaysNotify="true" />
+        <field id="studioSelected" type="assocarray" alwaysNotify="true" />
+        <field id="selectedItem" type="node" alwaysNotify="true" />
+        <field id="itemContent" type="node" />
+        <field id="itemType" type="string" value="movie" />
+        <field id="trailerAvailable" type="bool" value="false" />
+        <field id="selectedPart" type="assocarray" onChange="onSelectedPartChanged" />
+        <field id="selectedAudioStreamIndex" type="integer" />
+        <field id="selectedVideoStreamId" type="string" />
+        <field id="quickPlayNode" type="node" alwaysNotify="true" />
+        <field id="refreshMovieDetailsData" type="bool" alwaysNotify="true" />
+        <field id="refreshEpisodeDetailsData" type="bool" alwaysNotify="true" />
+        <field id="refreshSeriesDetailsData" type="bool" alwaysNotify="true" />
+        <field id="logoImageURI" type="string" onChange="onLogoImageURIChanged" />
+        <field id="seasonData" type="node" />
+        <field id="seasonSelected" type="node" alwaysNotify="true" />
+        <field id="playSeriesFromStart" type="bool" alwaysNotify="true" />
+        <field id="playSeasonFromStart" type="bool" alwaysNotify="true" />
+        <field id="shufflePlay" type="bool" value="false" />
+        <field id="refreshSeasonDetailsData" type="bool" alwaysNotify="true" />
+        <field id="seasonEpisodesData" type="assocarray" onChange="onSeasonEpisodesLoaded" />
+        <field id="pageContent" type="node" />
+        <field id="albumData" type="node" onChange="onMusicDataChanged" />
+        <field id="listData" type="node" onChange="onMusicDataChanged" />
+        <field id="playAlbumSelected" type="bool" alwaysNotify="true" />
+        <field id="shuffleAlbumSelected" type="bool" alwaysNotify="true" />
+        <field id="instantMixSelected" type="bool" alwaysNotify="true" />
+        <field id="playSong" type="integer" alwaysNotify="true" />
+        <field id="playAll" type="bool" alwaysNotify="true" />
+        <field id="playArtistSelected" type="bool" alwaysNotify="true" />
+        <field id="selectedAlbum" type="node" alwaysNotify="true" />
+        <field id="playlistItemSelected" type="integer" alwaysNotify="true" />
+        <field id="displayResumeButton" type="bool" onChange="onDisplayResumeButtonChange" />
+    </interface>
+</component>

@@ -650,6 +650,42 @@ function CreateHomeGroup()
     return group
 end function
 
+' Opens a library grid filtered to a studio's items.
+function CreateStudioBrowse(studioData as object) as dynamic
+    if not isValid(studioData) or not isValidAndNotEmpty(studioData.id) then return invalid
+
+    browseItem = CreateObject("roSGNode", "ContentNode")
+    browseItem.addField("name", "string", false)
+    browseItem.addField("type", "string", false)
+    browseItem.addField("collectionType", "string", false)
+    browseItem.id = studioData.libraryId
+    browseItem.name = studioData.name
+    browseItem.type = "movies"
+    browseItem.collectionType = "movies"
+
+    group = CreateObject("roSGNode", "VisualLibraryScene")
+    group.mediaType = ItemType.MOVIE
+    group.studioFilter = {
+        studioId: studioData.id,
+        studioName: studioData.name,
+        libraryId: studioData.libraryId
+    }
+    group.parentItem = browseItem
+    group.observeFieldScoped("selectedItem", m.port)
+    group.observeField("quickPlayNode", m.port)
+    group.observeField("genreItemSelected", m.port)
+
+    m.global.sceneManager.callFunc("pushScene", group)
+    return group
+end function
+
+' Picks the classic or modern detail screen based on the user setting.
+function detailScreenComponent() as string
+    style = chainLookupReturn(m.global.session, "user.settings.`ui.itemdetail.style`", "modern")
+    if isStringEqual(style, "classic") then return "ItemDetails"
+    return "ModernItemDetails"
+end function
+
 function CreateMovieDetailsGroup(movie as object) as dynamic
     ' validate movie node
     if not isValid(movie) or not isValid(movie.id) then return invalid
@@ -671,10 +707,11 @@ function CreateMovieDetailsGroup(movie as object) as dynamic
     end if
 
     ' Unified detail screen for both movies and episodes
-    group = CreateObject("roSGNode", "ItemDetails")
+    group = CreateObject("roSGNode", detailScreenComponent())
     itemType = LCase(movieMetaData.json.type)
     group.itemType = itemType
     group.observeField("quickPlayNode", m.port)
+    if group.hasField("studioSelected") then group.observeField("studioSelected", m.port)
 
     group.optionsAvailable = false
     ' push scene asap (to prevent extra button presses when retrieving series/movie info)
@@ -831,9 +868,10 @@ function CreateSeriesDetailsGroup(seriesID as string, seriesServerData = invalid
     end if
 
     ' Build unified ItemDetails view for series
-    group = CreateObject("roSGNode", "ItemDetails")
+    group = CreateObject("roSGNode", detailScreenComponent())
     group.itemType = "series"
     group.observeField("quickPlayNode", m.port)
+    if group.hasField("studioSelected") then group.observeField("studioSelected", m.port)
 
     ' Determine if the resume button needs to be shown
     displayResumeButton = hasResummableEpisode(seriesID)
@@ -904,6 +942,19 @@ function CreateArtistView(artist as object) as dynamic
         group.observeField("playAlbumSelected", m.port)
         group.observeField("shuffleAlbumSelected", m.port)
         group.observeField("instantMixSelected", m.port)
+    else if isStringEqual(detailScreenComponent(), "ModernItemDetails")
+        group = CreateObject("roSGNode", "ModernItemDetails")
+        group.itemType = "musicartist"
+        group.optionsAvailable = false
+        group.observeField("selectedAlbum", m.port)
+        group.observeField("playArtistSelected", m.port)
+        group.observeField("instantMixSelected", m.port)
+        if group.hasField("studioSelected") then group.observeField("studioSelected", m.port)
+        m.global.sceneManager.callFunc("pushScene", group)
+        meta = ItemMetaData(artist.id)
+        group.pageContent = meta
+        group.itemContent = meta
+        group.albumData = musicData
     else
         group = CreateObject("roSGNode", "ArtistDetails")
         m.global.sceneManager.callFunc("pushScene", group)
@@ -928,6 +979,24 @@ function CreateAlbumView(album as object) as dynamic
     if not isValid(album) or not isValid(album.id) then return invalid
 
     startLoadingSpinner()
+
+    if isStringEqual(detailScreenComponent(), "ModernItemDetails")
+        group = CreateObject("roSGNode", "ModernItemDetails")
+        group.itemType = "musicalbum"
+        group.optionsAvailable = false
+        group.observeField("playSong", m.port)
+        group.observeField("instantMixSelected", m.port)
+        group.observeField("playAlbumSelected", m.port)
+        group.observeField("shuffleAlbumSelected", m.port)
+        if group.hasField("studioSelected") then group.observeField("studioSelected", m.port)
+        m.global.sceneManager.callFunc("pushScene", group)
+        meta = ItemMetaData(album.id)
+        group.pageContent = meta
+        group.itemContent = meta
+        group.albumData = MusicSongList(album.id)
+        stopLoadingSpinner()
+        return group
+    end if
 
     group = CreateObject("roSGNode", "AlbumDetails")
     m.global.sceneManager.callFunc("pushScene", group)
@@ -1002,6 +1071,23 @@ sub CreatePlaylistView(playlist as object)
 
     startLoadingSpinner()
 
+    if isStringEqual(detailScreenComponent(), "ModernItemDetails")
+        group = CreateObject("roSGNode", "ModernItemDetails")
+        group.itemType = "playlist"
+        group.optionsAvailable = false
+        group.observeField("playlistItemSelected", m.port)
+        group.observeField("playAll", m.port)
+        group.observeField("shufflePlay", m.port)
+        if group.hasField("studioSelected") then group.observeField("studioSelected", m.port)
+        m.global.sceneManager.callFunc("pushScene", group)
+        meta = ItemMetaData(playlist.id)
+        group.pageContent = meta
+        group.itemContent = meta
+        group.listData = PlaylistItemList(playlist.id)
+        stopLoadingSpinner()
+        return
+    end if
+
     group = CreateObject("roSGNode", "PlaylistDetails")
     m.global.sceneManager.callFunc("pushScene", group)
 
@@ -1029,10 +1115,29 @@ function CreateSeasonDetailsGroup(series as object, season as object) as dynamic
         stopLoadingSpinner()
         return invalid
     end if
+
+    displayResumeButton = hasSeasonEpisodeToResume(series.id, season.id)
+
+    if isStringEqual(detailScreenComponent(), "ModernItemDetails")
+        group = CreateObject("roSGNode", "ModernItemDetails")
+        group.itemType = "season"
+        group.optionsAvailable = false
+        group.displayResumeButton = displayResumeButton
+        group.observeField("quickPlayNode", m.port)
+        group.observeField("playSeasonFromStart", m.port)
+        group.observeFieldScoped("selectedItem", m.port)
+        if group.hasField("studioSelected") then group.observeField("studioSelected", m.port)
+        group.seasonData = seasonMetaData
+        m.global.sceneManager.callFunc("pushScene", group)
+        group.itemContent = seasonMetaData
+        group.seasonEpisodesData = TVEpisodes(series.id, season.id)
+        stopLoadingSpinner()
+        return group
+    end if
+
     ' start building SeasonDetails view
     group = CreateObject("roSGNode", "SeasonDetails")
 
-    displayResumeButton = hasSeasonEpisodeToResume(series.id, season.id)
     group.displayResumeButton = displayResumeButton
     group.optionsAvailable = false
     ' push scene asap (to prevent extra button presses when retriving series/movie info)
@@ -1065,10 +1170,29 @@ function CreateSeasonDetailsGroupByID(seriesID as string, seasonID as string, se
         stopLoadingSpinner()
         return invalid
     end if
+
+    displayResumeButton = hasSeasonEpisodeToResume(seriesID, seasonID)
+
+    if isStringEqual(detailScreenComponent(), "ModernItemDetails")
+        group = CreateObject("roSGNode", "ModernItemDetails")
+        group.itemType = "season"
+        group.optionsAvailable = false
+        group.displayResumeButton = displayResumeButton
+        group.observeField("quickPlayNode", m.port)
+        group.observeField("playSeasonFromStart", m.port)
+        group.observeFieldScoped("selectedItem", m.port)
+        if group.hasField("studioSelected") then group.observeField("studioSelected", m.port)
+        group.seasonData = seasonMetaData
+        m.global.sceneManager.callFunc("pushScene", group)
+        group.itemContent = seasonMetaData
+        group.seasonEpisodesData = TVEpisodes(seriesID, seasonID)
+        stopLoadingSpinner()
+        return group
+    end if
+
     ' start building SeasonDetails view
     group = CreateObject("roSGNode", "SeasonDetails")
 
-    displayResumeButton = hasSeasonEpisodeToResume(seriesID, seasonID)
     group.displayResumeButton = displayResumeButton
 
     group.optionsAvailable = false

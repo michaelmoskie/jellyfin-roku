@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="DetailTabBar" extends="Group">
+    <children>
+        <!-- Single rounded container behind all tabs, tinted to match the
+            unfocused action button circles -->
+        <Poster id="barBg" uri="pkg:/images/icons/navbar.9.png" width="200" height="80"
+            blendColor="#444444" opacity="0.6" />
+        <!-- One focus pill that slides to the focused tab -->
+        <Poster id="focusPill" uri="pkg:/images/icons/pill-focus.9.png" width="100" height="80"
+            blendColor="0xFFFFFF" visible="false" />
+        <Group id="labelRow" />
+        <Animation id="pillAnim" duration="0.15" repeat="false" easeFunction="outCubic">
+            <Vector2DFieldInterpolator id="pillPosInterp" key="[0.0, 1.0]" fieldToInterp="focusPill.translation" />
+            <FloatFieldInterpolator id="pillWidthInterp" key="[0.0, 1.0]" fieldToInterp="focusPill.width" />
+        </Animation>
+    </children>
+    <interface>
+        <!-- Array of { id, label } describing each tab -->
+        <field id="tabs" type="array" onChange="onTabsChanged" />
+        <!-- Index of the tab whose content is shown, -1 when collapsed -->
+        <field id="selectedIndex" type="integer" value="-1" alwaysNotify="true" />
+        <!-- With Expanded Tabs on, focus follows selection -->
+        <field id="expanded" type="boolean" value="true" />
+        <field id="focusIndex" type="integer" value="0" />
+        <!-- Fires the direction when focus leaves the bar -->
+        <field id="escape" type="string" alwaysNotify="true" />
+    </interface>
+</component>

@@ -20,7 +20,7 @@ end sub
 ' @return boolean - True if node is an ItemDetails subtype
 function isDetailScreen(node as object) as boolean
     if not isValid(node) then return false
-    return node.isSubType("ItemDetails")
+    return node.isSubType("ItemDetails") or node.isSubType("ModernItemDetails")
 end function
 
 '
@@ -78,7 +78,7 @@ sub pushScene(newGroup)
         end if
 
         ' If we are moving in to a movie detail view, reset preferred audio track index
-        if newGroup.isSubType("ItemDetails")
+        if isDetailScreen(newGroup)
             m.global.queueManager.callFunc("setPreferredAudioTrackIndex", -1)
             m.global.queueManager.callFunc("setPreferredAudioTrackName", string.EMPTY)
         end if
@@ -155,7 +155,7 @@ sub popScene()
         registerOverhangData(group)
 
         ' If we are moving back to anything other than a movie detail view, reset preferred audio track index
-        if not group.isSubType("ItemDetails")
+        if not isDetailScreen(group)
             m.global.queueManager.callFunc("setPreferredAudioTrackIndex", -1)
             m.global.queueManager.callFunc("setPreferredAudioTrackName", string.EMPTY)
         end if

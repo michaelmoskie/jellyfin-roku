@@ -960,6 +960,30 @@
                 "id": "20"
               }
             ]
+          },
+          {
+            "title": "Detail Screen Style",
+            "description": "Choose between the classic detail layout and a modern cinematic layout with tabs.",
+            "settingName": "ui.itemdetail.style",
+            "type": "radio",
+            "default": "modern",
+            "options": [
+              {
+                "title": "Modern",
+                "id": "modern"
+              },
+              {
+                "title": "Classic",
+                "id": "classic"
+              }
+            ]
+          },
+          {
+            "title": "Expanded Tabs",
+            "description": "Keep the modern detail tabs open and follow focus. Turn off to open a tab only when you select it.",
+            "settingName": "ui.itemdetail.expandedTabs",
+            "type": "bool",
+            "default": "true"
           }
         ]
       },

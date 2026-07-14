@@ -651,7 +651,7 @@ sub onRefreshSeasonDetailsDataEvent()
 
     currentScene = m.global.sceneManager.callFunc("getActiveScene")
 
-    if currentScene.isSubType("ItemDetails") and isStringEqual(chainLookupReturn(currentScene, "itemType", ""), "series")
+    if (currentScene.isSubType("ItemDetails") or currentScene.isSubType("ModernItemDetails")) and isStringEqual(chainLookupReturn(currentScene, "itemType", ""), "series")
         seriesID = chainLookup(currentScene, "itemContent.id")
         if isValid(seriesID)
             ' Determine if the resume button needs to be shown
@@ -851,6 +851,12 @@ sub onGenreItemSelectedEvent(msg)
     group.observeField("genreItemSelected", m.port)
 
     m.global.sceneManager.callFunc("pushScene", group)
+end sub
+
+sub onStudioSelectedEvent(msg)
+    studioData = msg.getData()
+    if not isValid(studioData) then return
+    CreateStudioBrowse(studioData)
 end sub
 
 sub onSelectedItemEvent(msg)
