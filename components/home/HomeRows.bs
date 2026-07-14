@@ -149,10 +149,13 @@ sub updateSize()
     'Set width of Rows to cut off at edge of Safe Zone
     m.top.itemSize = [1703, itemHeight]
 
-    ' spacing between rows (increased to prevent bottom text from being cut off)
-    m.top.itemSpacing = [0, 60]
+    modernRows = isModernHomeRows()
 
-    ' spacing between items in a row
+    ' spacing between rows (modern reserves space for the focused card info block)
+    m.top.itemSpacing = modernRows ? [0, 210] : [0, 60]
+
+    ' spacing between items in a row. Modern keeps cards tight, the focused card
+    ' makes its own room by sliding the following cells aside (reflow).
     m.top.rowItemSpacing = [20, 0]
 
     ' Default size to movie poster (portrait primary images)
@@ -920,12 +923,16 @@ end sub
 sub setRowItemSize()
     if not isValid(m.top.content) then return
 
+    modern = isModernHomeRows()
+
     homeSections = m.top.content.getChildren(-1, 0)
     newSizeArray = CreateObject("roArray", homeSections.count(), false)
     variableWidthArray = CreateObject("roArray", homeSections.count(), false)
 
     for i = 0 to homeSections.count() - 1
-        newSizeArray[i] = isValid(homeSections[i].cursorSize) ? homeSections[i].cursorSize : homeRowItemSizes.MOVIE_POSTER
+        cursor = isValid(homeSections[i].cursorSize) ? homeSections[i].cursorSize : homeRowItemSizes.MOVIE_POSTER
+        if modern then cursor = forceModernPortraitRow(homeSections[i], cursor)
+        newSizeArray[i] = cursor
     end for
 
     m.top.rowItemSize = newSizeArray
@@ -939,6 +946,26 @@ sub setRowItemSize()
         loadingTimerComplete()
     end if
 end sub
+
+' In modern rows every video card is portrait until focused, so wide landscape
+' rows are converted to portrait here. Square art (music, albums) is left alone.
+function forceModernPortraitRow(row as object, cursor as object) as object
+    if not isValid(cursor) or cursor.count() < 2 then return cursor
+    if cursor[0] <> homeRowItemSizes.WIDE_POSTER[0] then return cursor
+
+    portrait = homeRowItemSizes.MOVIE_POSTER
+    row.cursorSize = portrait
+    row.imageWidth = portrait[0]
+    row.usePoster = true
+
+    items = row.getChildren(-1, 0)
+    for each item in items
+        if item.hasField("imageWidth") then item.imageWidth = portrait[0]
+        if item.hasField("usePoster") then item.usePoster = true
+    end for
+
+    return portrait
+end function
 
 ' loadingTimerComplete: Event handler for when loading wait time has expired
 '

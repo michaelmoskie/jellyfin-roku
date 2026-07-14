@@ -17,6 +17,11 @@ sub init()
     m.itemPoster.observeField("loadStatus", "onPosterLoadStatusChanged")
     setColors()
 
+    ' Modern rows slide neighbors aside to make room for the focused landscape
+    ' card. The scene sets modernShift on this item's content node.
+    m.modernEnabled = isModernHomeRows()
+    m.modernObservedNode = invalid
+
     ' Track focus change timing to detect and prevent oscillations
     m.lastFocusChangeTime = 0
     m.focusChangeCount = 0
@@ -54,6 +59,8 @@ sub findNodes()
     m.showProgressBarField = m.top.findNode("showProgressBarField")
     m.scaleGroup = m.top.findNode("scaleGroup")
     m.posterMask = m.top.findNode("posterMask")
+    m.modernShiftAnim = m.top.findNode("modernShiftAnim")
+    m.modernShiftInterp = m.top.findNode("modernShiftInterp")
 end sub
 
 sub initItemText()
@@ -84,6 +91,8 @@ sub itemContentChanged()
     if not isValid(itemData) then return
     localGlobal = m.global
     itemDataType = isValid(itemData.type) ? LCase(itemData.type) : ""
+
+    if m.modernEnabled then setupModernShiftObserver(itemData)
 
     if isValid(m.playedIndicator)
         m.playedIndicator.data = {
@@ -483,7 +492,41 @@ sub focusChanged()
     end if
     ' During oscillation, do nothing - keep whatever scale we had from last stable state
     ' This prevents the visual bounce
-end sub'Hide backdrop and icon when poster loaded
+end sub
+
+' The scene sets modernShift on the focused row's item content nodes so the
+' cells after the focused one slide right, opening room for the landscape card.
+sub setupModernShiftObserver(itemData as object)
+    if isValid(m.modernObservedNode)
+        m.modernObservedNode.unobserveFieldScoped("modernShift")
+    end if
+    if not itemData.hasField("modernShift") then itemData.addField("modernShift", "float", false)
+    itemData.observeFieldScoped("modernShift", "onModernShiftChanged")
+    m.modernObservedNode = itemData
+
+    ' Apply the current shift instantly (no slide) when the cell is (re)bound
+    shift = itemData.modernShift
+    if not isValid(shift) then shift = 0
+    if isValid(m.scaleGroup) then m.scaleGroup.translation = [shift, 0]
+end sub
+
+sub onModernShiftChanged()
+    itemData = m.top.itemContent
+    if not isValid(itemData) or not isValid(m.scaleGroup) then return
+
+    shift = itemData.modernShift
+    if not isValid(shift) then shift = 0
+
+    if isValid(m.modernShiftAnim) and isValid(m.modernShiftInterp)
+        m.modernShiftAnim.control = "stop"
+        m.modernShiftInterp.keyValue = [m.scaleGroup.translation, [shift, 0]]
+        m.modernShiftAnim.control = "start"
+    else
+        m.scaleGroup.translation = [shift, 0]
+    end if
+end sub
+
+'Hide backdrop and icon when poster loaded
 sub onPosterLoadStatusChanged()
     if m.itemPoster.loadStatus = PosterLoadStatus.FAILED
         thisItemType = chainLookupReturn(m.top.itemContent, "json.type", string.EMPTY)

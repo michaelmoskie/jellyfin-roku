@@ -43,6 +43,14 @@ sub init()
 
     m.homeRows = m.top.findNode("homeRows")
 
+    m.modernHomeRows = isModernHomeRows()
+
+    ' The overlay card is the focus indicator in modern rows, so the row list
+    ' does not draw its own portrait focus border underneath it.
+    if m.modernHomeRows and isValid(m.homeRows)
+        m.homeRows.focusBitmapUri = ""
+    end if
+
     ' Initialize media bar enabled state using the shared helper in HomeRows
     m.isMediaBarEnabled = m.homeRows.callFunc("isFeaturedMediaEnabled")
 
@@ -64,6 +72,20 @@ sub init()
 
     m.moviePluginRatings = m.top.findNode("moviePluginRatings")
     m.showPluginRatings = m.top.findNode("showPluginRatings")
+
+    ' Modern rows focused card overlay
+    m.modernFocusCard = m.top.findNode("modernFocusCard")
+    m.mfBg = m.top.findNode("mfBg")
+    m.mfImage = m.top.findNode("mfImage")
+    m.mfInfo = m.top.findNode("mfInfo")
+    m.mfTitle = m.top.findNode("mfTitle")
+    m.mfMeta = m.top.findNode("mfMeta")
+    m.mfRatings = m.top.findNode("mfRatings")
+    m.mfOverview = m.top.findNode("mfOverview")
+    m.mfGrow = m.top.findNode("mfGrow")
+    m.modernCardShown = false
+    m.modernShiftAmount = 320
+    m.prevReflowRow = invalid
 
     m.showMetadataRow = m.top.findNode("showMetadataRow")
     m.showReleaseYear = m.top.findNode("showReleaseYear")
@@ -534,6 +556,7 @@ sub applyMediaBarLayout(mediaBarVisible as boolean)
     m.backdropPrev.loadDisplayMode = "scaleToFill"
 
     if mediaBarVisible
+        hideModernFocusCard()
         m.mediaBar.visible = true
         if (m.global.session.user.settings["ui.home.mediaBarMode"] ?? "moonfin") = "banner"
             ' Banner media bar style
@@ -574,9 +597,10 @@ sub applyMediaBarLayout(mediaBarVisible as boolean)
         ' Media bar off, or focus on homeRows
         m.mediaBar.visible = false
         m.homeRows.visible = true
-        m.homeRows.translation = [111, 450]
+        ' Modern has no top overlay, so the rows sit higher
+        m.homeRows.translation = m.modernHomeRows ? [111, 170] : [111, 450]
 
-        if isValid(m.detailsSection) then m.detailsSection.visible = true
+        if isValid(m.detailsSection) then m.detailsSection.visible = not m.modernHomeRows
         if isValid(m.backdropTint) then m.backdropTint.opacity = 1.0
         if isValid(m.backdrop) then m.backdrop.opacity = 0.3
         m.backdropTargetOpacity = 0.3
@@ -930,6 +954,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
         ' Otherwise go to overhang/sidebar if on first row
         if isValid(currentRowIndex) and currentRowIndex = 0
+            hideModernFocusCard()
             if FocusOverhang(m.top) then return true
             return FocusSidebar(m.top)
         end if
@@ -965,6 +990,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         scene = m.top.getScene()
         sidebar = scene.findNode("sidebar")
         if isValid(sidebar) and sidebar.visible
+            hideModernFocusCard()
             sidebar.setFocus(true)
             return true
         end if
@@ -1136,6 +1162,11 @@ sub onItemFocusChanged()
     focusedItem = m.homeRows.content.getChild(m.homeRows.rowItemFocused[0]).getChild(m.homeRows.rowItemFocused[1])
     if not isValid(focusedItem) then return
 
+    if m.modernHomeRows
+        applyModernReflow(m.homeRows.rowItemFocused[0], m.homeRows.rowItemFocused[1])
+        showModernFocusCard(focusedItem)
+    end if
+
     if isValid(m.itemTitle)
         m.itemTitle.text = focusedItem.title ?? ""
     end if
@@ -1254,16 +1285,165 @@ sub onItemDetailsLoaded()
         end if
     end if
 
+    overview = ""
+    if isValidAndNotEmpty(item.overview)
+        overview = item.overview
+    else if isValidAndNotEmpty(json.Overview)
+        overview = json.Overview
+    end if
+
     if isValid(m.itemOverview)
-        overview = ""
-        if isValidAndNotEmpty(item.overview)
-            overview = item.overview
-        else if isValidAndNotEmpty(json.Overview)
-            overview = json.Overview
-        end if
         m.itemOverview.text = overview
     end if
+
+    if m.modernHomeRows and isValid(m.modernFocusCard)
+        if isValid(m.mfMeta) then m.mfMeta.text = buildModernMeta(json, item)
+        if isValid(m.mfOverview) then m.mfOverview.text = overview
+    end if
 end sub
+
+' Draws the focused card overlay (landscape image plus info) on top of the row.
+' The rest of the info arrives once the details and ratings tasks finish.
+sub showModernFocusCard(focusedItem as object)
+    if not isValid(m.modernFocusCard) then return
+
+    if isValid(m.mfImage) then m.mfImage.uri = homeLandscapeUri(focusedItem)
+    if isValid(m.mfTitle) then m.mfTitle.text = focusedItem.title ?? ""
+    if isValid(m.mfMeta) then m.mfMeta.text = ""
+    if isValid(m.mfOverview) then m.mfOverview.text = ""
+    if isValid(m.mfRatings)
+        m.mfRatings.ratingsData = invalid
+        m.mfRatings.visible = false
+    end if
+
+    m.modernFocusCard.visible = true
+
+    if m.modernCardShown
+        ' Already open, just swap the content without replaying the grow
+        if isValid(m.mfImage) then m.mfImage.width = 480
+        if isValid(m.mfBg) then m.mfBg.width = 480
+        if isValid(m.mfInfo) then m.mfInfo.opacity = 1
+    else
+        m.modernCardShown = true
+        if isValid(m.mfImage) then m.mfImage.width = 180
+        if isValid(m.mfBg) then m.mfBg.width = 180
+        if isValid(m.mfInfo) then m.mfInfo.opacity = 0
+        if isValid(m.mfGrow) then m.mfGrow.control = "start"
+    end if
+end sub
+
+function homeLandscapeUri(node as object) as string
+    if not isValid(node) then return ""
+    thumb = node.LookupCI("thumbnailURL")
+    if isValidAndNotEmpty(thumb) then return thumb
+    wide = node.LookupCI("widePosterURL")
+    if isValidAndNotEmpty(wide) then return wide
+    backdrop = node.LookupCI("backdropURL")
+    if isValidAndNotEmpty(backdrop) then return backdrop
+    poster = node.LookupCI("posterURL")
+    if isValidAndNotEmpty(poster) then return poster
+    return ""
+end function
+
+sub hideModernFocusCard()
+    if isValid(m.mfGrow) then m.mfGrow.control = "stop"
+    if isValid(m.modernFocusCard) then m.modernFocusCard.visible = false
+    m.modernCardShown = false
+end sub
+
+' Slides the items after the focused one to the right so the focused landscape
+' card has room and nothing is hidden behind it. RowList does not clip cells to
+' their slots, so a translated cell shows in the gap it opens.
+sub applyModernReflow(rowIndex as integer, focusedCol as integer)
+    if not isValid(m.homeRows.content) then return
+    if rowIndex < 0 or focusedCol < 0 then return
+
+    ' Reset the previously reflowed row if the focus moved to a different row
+    if isValid(m.prevReflowRow) and m.prevReflowRow <> rowIndex
+        resetRowReflow(m.prevReflowRow)
+    end if
+
+    row = m.homeRows.content.getChild(rowIndex)
+    if not isValid(row) then return
+
+    items = row.getChildren(-1, 0)
+    for i = 0 to items.count() - 1
+        shift = 0
+        if i > focusedCol then shift = m.modernShiftAmount
+        setItemShift(items[i], shift)
+    end for
+
+    m.prevReflowRow = rowIndex
+end sub
+
+sub resetRowReflow(rowIndex as integer)
+    if not isValid(m.homeRows.content) then return
+    row = m.homeRows.content.getChild(rowIndex)
+    if not isValid(row) then return
+    items = row.getChildren(-1, 0)
+    for each item in items
+        setItemShift(item, 0)
+    end for
+end sub
+
+sub setItemShift(node as object, shift as integer)
+    if not isValid(node) then return
+    if not node.hasField("modernShift") then node.addField("modernShift", "float", false)
+    node.setField("modernShift", shift)
+end sub
+
+' Builds a "Year • Rating • Runtime" line, adding the community star and series
+' status when present, mirroring what the classic top overlay shows.
+function buildModernMeta(json as object, item as object) as string
+    parts = []
+
+    if isValid(json.ProductionYear) and json.ProductionYear > 0
+        parts.push(stri(json.ProductionYear).trim())
+    end if
+
+    if isValidAndNotEmpty(json.OfficialRating)
+        parts.push(json.OfficialRating)
+    end if
+
+    runTimeTicks = invalid
+    if type(item.RunTimeTicks) = "LongInteger"
+        runTimeTicks = item.RunTimeTicks
+    else if type(json.RunTimeTicks) = "LongInteger"
+        runTimeTicks = json.RunTimeTicks
+    end if
+
+    if isValid(runTimeTicks)
+        runTimeMinutes = int(int(runTimeTicks / 10000000&) / 60)
+        if runTimeMinutes > 0
+            hours = int(runTimeMinutes / 60)
+            mins = runTimeMinutes mod 60
+            if hours > 0
+                if mins > 0
+                    parts.push(stri(hours).trim() + "h " + stri(mins).trim() + "m")
+                else
+                    parts.push(stri(hours).trim() + "h")
+                end if
+            else
+                parts.push(stri(mins).trim() + "m")
+            end if
+        end if
+    end if
+
+    if isValid(json.CommunityRating) and json.CommunityRating > 0
+        parts.push("★ " + formatRating(json.CommunityRating))
+    end if
+
+    if isValidAndNotEmpty(json.Status) and isStringEqual(json.Type, "Series")
+        parts.push(json.Status)
+    end if
+
+    meta = ""
+    for each part in parts
+        if meta <> "" then meta = meta + "  •  "
+        meta = meta + part
+    end for
+    return meta
+end function
 
 sub populateEpisodeMetadata(json as object, item as object)
     if isValid(m.movieMetadataRow) then m.movieMetadataRow.visible = false
@@ -1577,6 +1757,11 @@ sub onHomeRatingsLoaded(event as object)
     else if m.pendingHomeRatingsType = "show"
         ratingsContainer = m.showPluginRatings
         metadataRow = m.showMetadataRow
+    end if
+
+    if m.modernHomeRows and isValid(m.mfRatings)
+        m.mfRatings.ratingsData = result
+        m.mfRatings.visible = true
     end if
 
     if not isValid(ratingsContainer) then return
