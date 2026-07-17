@@ -1697,6 +1697,7 @@ function reorderSettingsForFlutter(configTree as object) as object
     theme = findSettingsChildByTitle(userInterface, "Theme")
     general = findSettingsChildByTitle(userInterface, "General")
     libraries = findSettingsChildByTitle(userInterface, "Libraries")
+    detailsScreen = findSettingsChildByTitle(userInterface, "Details Screen")
 
     enablePlugin = findSettingsChildByTitle(pluginRootSection, "Enable Plugin")
     pluginSettingsSync = findSettingsChildByTitle(pluginRootSection, "Settings Sync")
@@ -1728,7 +1729,7 @@ function reorderSettingsForFlutter(configTree as object) as object
     pushSettingIfValid(personalizationChildren, theme)
     pushSettingIfValid(personalizationChildren, colors)
     pushSettingIfValid(personalizationChildren, general)
-    'MISSING FROM CORE: DETAILS SCREEN
+    pushSettingIfValid(personalizationChildren, detailsScreen)
     pushSettingIfValid(personalizationChildren, navigationBar)
     pushSettingIfValid(personalizationChildren, homeScreen)
     pushSettingIfValid(personalizationChildren, libraries)
@@ -1794,7 +1795,7 @@ function reorderSettingsForFlutter(configTree as object) as object
     pluginMappedTitles = ["Enable Plugin", "Settings Sync", "Metadata & Ratings", "Seerr", "Jellyseerr"]
     pushUnmappedChildrenByTitle(additionalChildren, pluginRootSection, pluginMappedTitles)
 
-    userInterfaceMappedTitles = ["Colors", "General", "Libraries"]
+    userInterfaceMappedTitles = ["Colors", "General", "Libraries", "Details Screen"]
     pushUnmappedChildrenByTitle(additionalChildren, userInterface, userInterfaceMappedTitles)
 
     if additionalChildren.count() > 0
