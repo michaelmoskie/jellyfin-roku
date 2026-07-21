@@ -1755,7 +1755,7 @@ sub onMultiServerNextUpComplete()
     if sectionExists(sectionName)
         m.top.content.replaceChild(row, getSectionIndex(sectionName))
     else
-        m.top.content.insertChild(row, getSectionIndex(sectionName))
+        m.top.content.insertChild(row, getOriginalSectionIndex("favorites"))
     end if
     setRowItemSize()
 end sub
@@ -2209,39 +2209,7 @@ sub updateFavoritesItems()
         return
     end if
 
-    activeFavoriteTitles = {}
-    for each favoriteRowData in favoriteRows
-        rowTitle = favoriteRowData.LookupCI("title")
-        row = invalid
-        currentIndex = getFavoriteSectionIndexByTitle(rowTitle)
-
-        if currentIndex >= 0
-            row = m.top.content.getChild(currentIndex)
-            if favoriteRowItemsMatch(row, favoriteRowData)
-                updateFavoriteRowMetadata(row, favoriteRowData)
-            else
-                updateFavoriteRowFromData(row, favoriteRowData)
-            end if
-
-            if currentIndex <> insertIndex
-                m.top.content.removeChildIndex(currentIndex)
-                if currentIndex < insertIndex then insertIndex--
-                m.top.content.insertChild(row, insertIndex)
-            end if
-        else
-            row = createFavoriteRowFromData(favoriteRowData)
-            if isValid(row)
-                m.top.content.insertChild(row, insertIndex)
-            end if
-        end if
-
-        if isValid(row)
-            activeFavoriteTitles[normalizeSectionTitle(rowTitle)] = true
-            insertIndex++
-        end if
-    end for
-
-    removeFavoriteSectionsExcept(activeFavoriteTitles)
+    m.top.content.insertChild(row, getOriginalSectionIndex("favorites"))
     setRowItemSize()
 end sub
 
@@ -2568,7 +2536,7 @@ sub updateMyListItems()
         return
     end if
 
-    m.top.content.insertChild(row, getSectionIndex(sectionName))
+    m.top.content.insertChild(row, getOriginalSectionIndex("mylist"))
     setRowItemSize()
 end sub
 
@@ -2707,7 +2675,7 @@ sub updateNextUpItems()
     end if
 
     ' Row does not exist, insert it into the home view
-    m.top.content.insertChild(row, getSectionIndex(sectionName))
+    m.top.content.insertChild(row, getOriginalSectionIndex("nextup"))
     setRowItemSize()
 end sub
 
@@ -3265,6 +3233,6 @@ sub updateCustomDynamicRowItems(event as object)
         return
     end if
 
-    m.top.content.appendChild(row)
+    m.top.content.insertChild(row, getOriginalSectionIndex(rowId))
     setRowItemSize()
 end sub
