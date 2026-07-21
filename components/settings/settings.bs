@@ -1702,10 +1702,8 @@ function reorderSettingsForFlutter(configTree as object) as object
     enablePlugin = findSettingsChildByTitle(pluginRootSection, "Enable Plugin")
     pluginSettingsSync = findSettingsChildByTitle(pluginRootSection, "Settings Sync")
     ratings = findSettingsChildByTitle(pluginRootSection, "Metadata & Ratings")
-    jellyseerr = findSettingsChildByTitle(pluginRootSection, "Seerr")
-    if not isValid(jellyseerr)
-        jellyseerr = findSettingsChildByTitle(pluginRootSection, "Jellyseerr")
-    end if
+    seerr = findSettingsChildByTitle(pluginRootSection, "Seerr")
+    externalLists = findSettingsChildByTitle(pluginRootSection, "External Lists")
 
     reordered = []
 
@@ -1766,7 +1764,8 @@ function reorderSettingsForFlutter(configTree as object) as object
     end if
     pushSettingIfValid(integrationsChildren, ratings)
     pushSettingIfValid(integrationsChildren, seerr)
-
+    pushSettingIfValid(integrationsChildren, externalLists)
+    
     if integrationsChildren.count() > 0
         reordered.push({
             title: "Integrations",
@@ -1792,7 +1791,7 @@ function reorderSettingsForFlutter(configTree as object) as object
     moonfinMappedTitles = ["Navigation", "Home Screen", "Libraries", "Media Bar", "Theme Music", "Shuffle", "Support Moonfin"]
     pushUnmappedChildrenByTitle(additionalChildren, moonfinSettings, moonfinMappedTitles)
 
-    pluginMappedTitles = ["Enable Plugin", "Settings Sync", "Metadata & Ratings", "Seerr", "Jellyseerr"]
+    pluginMappedTitles = ["Enable Plugin", "Settings Sync", "Metadata & Ratings", "Seerr", "External Lists"]
     pushUnmappedChildrenByTitle(additionalChildren, pluginRootSection, pluginMappedTitles)
 
     userInterfaceMappedTitles = ["Colors", "General", "Libraries", "Details Screen"]
