@@ -2151,6 +2151,10 @@ sub boolSettingChanged(selectedSetting as object)
             testPluginConnection()
         end if
     end if
+
+    if isStringEqual(selectedSetting.settingName, "playback.playDefaultAudioTrack")
+        syncSettingToUserConfig(selectedSetting.settingName, newValue)
+    end if
     syncSettingToServer(selectedSetting.settingName, newValue)
 
     refreshCurrentItemValue(selectedSetting)
