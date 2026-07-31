@@ -2391,5 +2391,157 @@
             <translation>A new version is available. Please visit the GitHub releases page to download.</translation>
             <extracomment>Update Dialog - Default message</extracomment>
         </message>
+        <message>
+            <source>Library Image Orientation</source>
+            <translation>Library Image Orientation</translation>
+        </message>
+        <message>
+            <source>Select the poster image orientation for the library views.</source>
+            <translation>Select the poster image orientation for the library views.</translation>
+        </message>
+        <message>
+            <source>Default (Varies By Media Type)</source>
+            <translation>Default (Varies By Media Type)</translation>
+        </message>
+        <message>
+            <source>Landscape (Wide)</source>
+            <translation>Landscape (Wide)</translation>
+        </message>
+        <message>
+            <source>Portrait (Vertical)</source>
+            <translation>Portrait (Vertical)</translation>
+        </message>
+        <message>
+            <source>Skip Unknown</source>
+            <translation>Skip Segment</translation>
+        </message>
+        <message>
+            <source>Skip Commercial</source>
+            <translation>Skip Commercial</translation>
+        </message>
+        <message>
+            <source>Skip Preview</source>
+            <translation>Skip Preview</translation>
+        </message>
+        <message>
+            <source>Skip Recap</source>
+            <translation>Skip Recap</translation>
+        </message>
+        <message>
+            <source>Skip Outro</source>
+            <translation>Skip Outro</translation>
+        </message>
+        <message>
+            <source>Skip Intro</source>
+            <translation>Skip Intro</translation>
+        </message>
+        <message>
+            <source>Go To Genre</source>
+            <translation>Go To Genre</translation>
+        </message>
+        <message>
+            <source>Play Instant Mix</source>
+            <translation>Play Instant Mix</translation>
+        </message>
+        <message>
+            <source>Show Next Episode Details After Finish</source>
+            <translation>Show Next Episode Details After Finish</translation>
+        </message>
+        <message>
+            <source>If auto play next episode is disabled, display the next episode's detail screen after an episode finishes playing. If no next up episode is found, return to the just-played episode's page.</source>
+            <translation>If auto play next episode is disabled, display the next episode's detail screen after an episode finishes playing. If no next up episode is found, return to the just-played episode's page.</translation>
+        </message>
+        <message>
+            <source>Favorites Row</source>
+            <translation>Favorites Row</translation>
+        </message>
+        <message>
+            <source>Settings relating to the favorites row on the home screen.</source>
+            <translation>Settings relating to the favorites row on the home screen.</translation>
+        </message>
+        <message>
+            <source>Sort By Field</source>
+            <translation>Sort By Field</translation>
+        </message>
+        <message>
+            <source>Field to sort the row by.</source>
+            <translation>Field to sort the row by.</translation>
+        </message>
+        <message>
+            <source>Date Created</source>
+            <translation>Date Created</translation>
+        </message>
+        <message>
+            <source>Is Unplayed</source>
+            <translation>Is Unplayed</translation>
+        </message>
+        <message>
+            <source>Sort Order for the row - Ascending,Descending.</source>
+            <translation>Sort Order for the row - Ascending,Descending.</translation>
+        </message>
+        <message>
+            <source>Current Offset</source>
+            <translation>Current Offset</translation>
+        </message>
+        <message>
+            <source>Adjust Subtitle Timing</source>
+            <translation>Adjust Subtitle Timing</translation>
+        </message>
+        <message>
+            <source>Display Episodes In Two Columns</source>
+            <translation>Display Episodes In Two Columns</translation>
+        </message>
+        <message>
+            <source>Screen Settings</source>
+            <translation>Screen Settings</translation>
+        </message>
+        <message>
+            <source>Collections Row Sorting</source>
+            <translation>Collections Row Sorting</translation>
+        </message>
+        <message>
+            <source>Choose sorting for Collections home row</source>
+            <translation>Choose sorting for Collections home row</translation>
+        </message>
+        <message>
+            <source>Genres Row Sorting</source>
+            <translation>Genres Row Sorting</translation>
+        </message>
+        <message>
+            <source>Choose sorting for Genres home row</source>
+            <translation>Choose sorting for Genres home row</translation>
+        </message>
+        <message>
+            <source>Genres Row Items</source>
+            <translation>Genres Row Items</translation>
+        </message>
+        <message>
+            <source>Choose which media types are included in Genres home row</source>
+            <translation>Choose which media types are included in Genres home row</translation>
+        </message>
+        <message>
+            <source>Movies &amp; TV Shows</source>
+            <translation>Movies &amp; TV Shows</translation>
+        </message>
+        <message>
+            <source>Movies Only</source>
+            <translation>Movies Only</translation>
+        </message>
+        <message>
+            <source>TV Shows Only</source>
+            <translation>TV Shows Only</translation>
+        </message>
+        <message>
+            <source>Name</source>
+            <translation>Name</translation>
+        </message>
+        <message>
+            <source>Random</source>
+            <translation>Random</translation>
+        </message>
+        <message>
+            <source>Date Added</source>
+            <translation>Date Added</translation>
+        </message>
     </context>
 </TS>
