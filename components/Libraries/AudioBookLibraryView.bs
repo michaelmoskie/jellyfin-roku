@@ -7,7 +7,7 @@ import "pkg:/source/utils/misc.bs"
 
 sub init()
     m.top.imageDisplayMode = "scaleToZoom"
-    m.top.showItemTitles = m.global.session.user.settings["itemgrid.gridTitles"]
+    m.top.showItemTitles = "showalways"
 
 
     m.options = m.top.findNode("options")
@@ -53,7 +53,7 @@ sub init()
     m.loadItemsTask.observeField("content", "ItemDataLoaded")
     m.loadItemsTask.totalRecordCount = 0
 
-    m.top.gridTitles = m.global.session.user.settings["itemgrid.gridTitles"]
+    m.top.gridTitles = "showalways"
 end sub
 
 'Load initial set of Data

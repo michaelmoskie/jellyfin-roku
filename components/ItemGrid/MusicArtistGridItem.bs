@@ -24,9 +24,7 @@ sub init()
         m.itemPoster.loadDisplayMode = m.topParent.imageDisplayMode
     end if
 
-    m.gridTitles = m.global.session.user.settings["itemgrid.gridTitles"]
-    m.hasPoster = false
-    m.forceTitleVisible = false
+    m.gridTitles = "showalways"
     m.posterText.visible = false
     m.postTextBackground.visible = false
 

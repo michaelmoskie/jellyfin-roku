@@ -54,7 +54,7 @@ sub init()
     m.loadItemsTask.observeField("content", "ItemDataLoaded")
     m.loadItemsTask.totalRecordCount = 0
 
-    m.top.gridTitles = m.global.session.user.settings["itemgrid.gridTitles"]
+    m.top.gridTitles = "showalways"
 end sub
 
 sub setColumnSizes(layout = ImageLayout.PORTRAIT as string)
