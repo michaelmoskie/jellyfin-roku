@@ -2921,13 +2921,6 @@
             ]
           },
           {
-            "title": "Disable Unwatched Episode Count",
-            "description": "If enabled, the number of unwatched episodes in a series/season will be removed.",
-            "settingName": "ui.tvshows.disableUnwatchedEpisodeCount",
-            "type": "bool",
-            "default": "false"
-          },
-          {
             "title": "Use Fallback Font Across App",
             "description": "Changes the font used in the app to the server's configured fallback font.",
             "settingName": "useFallbackFont",
@@ -2964,6 +2957,13 @@
                 "id": "20"
               }
             ]
+          },
+          {
+            "title": "Disable Unwatched Episode Count",
+            "description": "If enabled, the number of unwatched episodes in a series/season will be removed.",
+            "settingName": "ui.tvshows.disableUnwatchedEpisodeCount",
+            "type": "bool",
+            "default": "false"
           },
           {
             "title": "Show What's New Popup",

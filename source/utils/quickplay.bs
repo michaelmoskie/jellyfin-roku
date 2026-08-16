@@ -249,7 +249,6 @@ namespace quickplay
                 "SortOrder": "Descending",
                 "ImageTypeLimit": 1,
                 "UserId": m.global.session.user.id,
-                "EnableRewatching": m.global.session.user.settings["ui.details.enablerewatchingnextup"],
                 "DisableFirstEpisode": false,
                 "EnableTotalRecordCount": false
             })
@@ -269,7 +268,6 @@ namespace quickplay
                 "SortOrder": "Descending",
                 "ImageTypeLimit": 1,
                 "UserId": m.global.session.user.id,
-                "EnableRewatching": m.global.session.user.settings["ui.details.enablerewatchingnextup"],
                 "DisableFirstEpisode": false,
                 "EnableTotalRecordCount": false
             })
@@ -339,7 +337,6 @@ namespace quickplay
             "SortBy": "DatePlayed",
             "SortOrder": "Descending",
             "ImageTypeLimit": "1",
-            "EnableRewatching": m.global.session.user.settings["ui.details.enablerewatchingnextup"],
             "DisableFirstEpisode": "false",
             "EnableTotalRecordCount": "false"
         }
