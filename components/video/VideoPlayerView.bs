@@ -407,6 +407,9 @@ sub stopScrubbing()
         m.scrubInfo.visible = false
     end if
 
+    trickplayImage = m.top.findNode("trickplayImage")
+    if isValid(trickplayImage) then trickplayImage.visible = false
+
     m.top.control = VideoControl.RESUME
     m.pauseOverlay.visible = false
     hideSegmentSkipButton()
@@ -443,6 +446,9 @@ sub onScrubTimer()
 
     m.positionText.text = secondsToHuman(m.scrubPosition, true)
     setVideoEndingTime(m.scrubPosition)
+
+    ' Show the trickplay frame at the scrub position
+    displayTrickplayImage(m.scrubPosition)
 end sub
 
 ' handleHideAction: Handles action to hide OSD menu
@@ -1207,11 +1213,21 @@ sub displaySingleTrickplayImage(trickPosition as integer, whichImage as integer)
     iconColumn = tileIconIndex mod m.trickplayDataFinal.TileWidth
 
     ' Translation values for trickplay images
-    if m.global.session.user.settings["playback.trickplay.displayTrickplayFormat"] = "single"
-        previewPosPercentage = trickPosition / m.osd.progressDuration
-        offsetHoriz = m.progressBarGroup.translation[0] + m.progressBarBackground.width * previewPosPercentage - m.trickplayDataFinal.Width / 2
-    else
-        offsetHoriz = m.progressBarGroup.translation[0] + m.progressBarBackground.width / 2 - (m.trickplayDataFinal.Width * largeTileSizeFactor) / 2 + (tileBuffer + m.trickplayDataFinal.Width * smallTileSizeFactor) * whichImage + (whichImage < 1 ? 0 : m.trickplayDataFinal.Width * largeTileSizeFactor - m.trickplayDataFinal.Width * smallTileSizeFactor)
+    offsetHoriz = 100
+    offsetVert = 900 - m.trickplayDataFinal.Height
+
+    if m.scrubActive
+        if m.top.duration > 0
+            scrubPct = m.scrubPosition / m.top.duration
+            offsetHoriz = 103 + 1714 * scrubPct - m.trickplayDataFinal.Width / 2
+        else
+            offsetHoriz = 103
+        end if
+        offsetVert = 900 - m.trickplayDataFinal.Height
+    else if isValid(m.positionTranslation)
+        ' If we can get translation data for the trickplaybar's thumb icon, use it so the trickplay images can move left/right with seeking
+        if m.positionTranslation.translation[0] = 0 then return
+        offsetHoriz = m.positionTranslation.translation[0] - 50
     end if
     offsetVert = m.progressBarGroup.translation[1] - 25 - m.trickplayDataFinal.Height * tileSizeFactor
 
@@ -1244,28 +1260,9 @@ sub displaySingleTrickplayImage(trickPosition as integer, whichImage as integer)
     end if
 
     ' Move clippingRect to next trickplay image within tileset - offsetting translation by an equal amount so it doesn't move
-    trickplayImage.height = tileSizeFactor * m.trickplayDataFinal.Height * m.trickplayDataFinal.TileHeight
-    trickplayImage.width = tileSizeFactor * m.trickplayDataFinal.Width * m.trickplayDataFinal.TileWidth
-    trickplayImage.translation = `[${offsetHoriz - (iconColumn * m.trickplayDataFinal.Width * tileSizeFactor)},  ${offsetVert - (iconRow * m.trickplayDataFinal.Height * tileSizeFactor)}]`
-    trickplayImage.clippingRect = `[${iconColumn * m.trickplayDataFinal.Width * tileSizeFactor}, ${iconRow * m.trickplayDataFinal.Height * tileSizeFactor}, ${m.trickplayDataFinal.Width * tileSizeFactor}, ${m.trickplayDataFinal.Height * tileSizeFactor}]`
+    trickplayImage.translation = `[${offsetHoriz - (iconColumn * m.trickplayDataFinal.Width)},  ${offsetVert - (iconRow * m.trickplayDataFinal.Height)}]`
+    trickplayImage.clippingRect = `[${iconColumn * m.trickplayDataFinal.Width}, ${iconRow * m.trickplayDataFinal.Height}, ${m.trickplayDataFinal.Width}, ${m.trickplayDataFinal.Height}]`
     trickplayImage.visible = true
-
-end sub
-
-' hideTrickplayImages: ' Hide all trickplay images by setting visible = false for each
-'
-sub hideTrickplayImages()
-    if m.global.session.user.settings["playback.trickplay.displayTrickplayFormat"] = "single"
-        if isValidAndNotEmpty(m.top.findNode("trickplayImage" + str(0)))
-            m.top.findNode("trickplayImage" + str(0)).visible = false
-        end if
-    else
-        for i = -2 to 2
-            if isValidAndNotEmpty(m.top.findNode("trickplayImage" + str(i)))
-                m.top.findNode("trickplayImage" + str(i)).visible = false
-            end if
-        end for
-    end if
 end sub
 
 ' populateChapterMenu: ' Parse chapter data from API and appeand to chapter list menu
