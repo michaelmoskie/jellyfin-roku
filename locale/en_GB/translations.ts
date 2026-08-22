@@ -2896,7 +2896,7 @@
     </message>
     <message>
         <source>Enter the server name or ip address</source>
-        <translation>Enter the server name or IP address</translation>
+        <translation>Enter the server name or ip address</translation>
         <extracomment>Title of KeyboardDialog when manually entering a server URL</extracomment>
     </message>
     <message>
@@ -4107,7 +4107,7 @@
     </message>
     <message>
         <source>Cinema Mode brings the theater experience straight to your living room with the ability to play custom intros before the main feature.</source>
-        <translation>Cinema Mode brings the cinema experience straight to your living room with the ability to play custom intros before the main feature.</translation>
+        <translation>Cinema Mode brings the theatre experience straight to your living room with the ability to play custom intros before the main feature.</translation>
         <extracomment>Settings Menu - Description for option</extracomment>
     </message>
     <message>
@@ -7063,7 +7063,7 @@
     </message>
     <message>
         <source>...or enter server URL manually:</source>
-        <translation>If no server is listed above, you may also enter the server URL manually:</translation>
+        <translation>...or enter server URL manually:</translation>
         <extracomment>Instructions on initial app launch when the user is asked to manually enter a server URL</extracomment>
     </message>
     <message>
@@ -7106,7 +7106,7 @@
     </message>
     <message>
         <source>Support Direct Play of MPEG-2 content (e.g., Live TV). This will prevent transcoding of MPEG-2 content, but uses significantly more bandwidth.</source>
-        <translation>Support Direct Play of MPEG-2 content (e.g., Live TV). This will prevent transcoding of MPEG-2 content but uses significantly more bandwidth.</translation>
+        <translation>Support Direct Play of MPEG-2 content (e.g., Live TV). This will prevent transcoding of MPEG-2 content, but uses significantly more bandwidth.</translation>
         <extracomment>Settings Menu - Description for option</extracomment>
     </message>
     <message>
@@ -7124,7 +7124,7 @@
     </message>
     <message>
         <source>(Dialog will close automatically)</source>
-        <translation>(Dialog will close automatically)</translation>
+        <translation>(Dialogue will close automatically)</translation>
     </message>
     <message>
         <source>Movies (Presentation)</source>
@@ -7176,7 +7176,7 @@
     </message>
     <message>
         <source>Movies</source>
-        <translation>Movies</translation>
+        <translation>Films</translation>
     </message>
     <message>
         <source>Next episode</source>
@@ -7241,7 +7241,7 @@
     </message>
     <message>
         <source>Only display text subtitles to minimize transcoding.</source>
-        <translation>Only display text subtitles to minimize transcoding.</translation>
+        <translation>Only display text subtitles to minimise transcoding.</translation>
         <extracomment>Description of a setting - should we hide subtitles that might transcode</extracomment>
     </message>
     <message>
