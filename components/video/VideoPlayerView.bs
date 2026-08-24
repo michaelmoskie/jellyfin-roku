@@ -1001,11 +1001,6 @@ sub onVideoContentLoaded()
     updateChapterButtonVisibility()
     m.trickplay = videoContent[0].trickplay
     m.top.showID = videoContent[0].showID
-    if isValidAndNotEmpty(videoContent[0].showID) and not m.checkedForNextEpisode
-        m.getNextEpisodeTask.showID = videoContent[0].showID
-        m.getNextEpisodeTask.videoID = m.top.id
-        m.getNextEpisodeTask.control = TaskControl.RUN
-    end if
     m.mediaSegments = videoContent[0].mediaSegments
     m.runtimeticks = videoContent[0].runtimeticks
 
@@ -1086,6 +1081,7 @@ sub onVideoContentLoaded()
     end if
 
     populateChapterMenu()
+    setSiblingData()
 
     ' Allow custom captions for non intro videos unless the video is being transcoded and burn subtitles are enabled
     if not m.LoadMetaDataTask.isIntro
