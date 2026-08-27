@@ -43,6 +43,7 @@
     <timer id="bufferStuckTimer" repeat="true" duration="3" />
     <timer id="bufferCheckTimer" repeat="true" />
     <timer id="scrubTimer" repeat="true" duration="0.3" />
+    <timer id="nextUpTimer" repeat="true" duration="0.1" />
     <OSD id="osd" visible="false" inactiveTimeout="0" />
 
     <Rectangle id="chapterList" visible="false" color="0x00000098" width="400" height="380" translation="[103,210]">
@@ -53,16 +54,9 @@
 
     <Text id="videoEndingTime" font="font:SmallSystemFont" color="0xffffffFF" horizAlign="right" width="200" translation="[1617,900]" visible="false" />
 
-    <Rectangle id="nextUp" visible="false" color="0x000000CC" height="144" width="785" translation="[1000, 920]">
-      <Poster id="nextItemPoster" width="150" height="124" translation="[10, 10]" />
-      <LayoutGroup layoutDirection="vert" horizAlignment="left" itemSpacings="[10, 10]" translation="[180, 15]">
-        <Text text="Next Up" color="#FFFFFF" font="font:SmallBoldSystemFont" horizAlign="left" vertAlign="center" height="35" />
-        <ScrollingText id="nextItemSeriesTitle" maxWidth="300" color="#FFFFFF" font="font:SmallBoldSystemFont" horizAlign="left" vertAlign="top" height="35" />
-        <ScrollingText id="nextItemEpisodeTitle" maxWidth="300" color="#AAAAAA" font="font:SmallBoldSystemFont" horizAlign="left" vertAlign="top" height="35" />
-      </LayoutGroup>
-    </Rectangle>
+    <NextUpOverlay id="nextUp" visible="false" />
 
-    <StandardButton id="skipSegment" visible="false" height="85" width="275" translation="[1500, 950]" />
+    <SkipSegmentOverlay id="skipSegment" visible="false" />
 
     <Group id="scrubInfo" visible="false" translation="[103,900]">
       <Text id="scrubSpeedDisplay" font="font:MediumSystemFont" color="0xffffffFF" horizAlign="right" width="100" translation="[1612,55]" />
