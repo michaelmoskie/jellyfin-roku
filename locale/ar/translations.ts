@@ -1675,10 +1675,6 @@
         <translation>ما الجديد</translation>
     </message>
     <message>
-        <source>Skip</source>
-        <translation>تجاوز</translation>
-    </message>
-    <message>
         <source>Sort by</source>
         <translation>تصنيف بـ</translation>
     </message>
@@ -1809,10 +1805,6 @@
     <message>
         <source>Unhide Users</source>
         <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Unhide Users</source>
-        <translation>إظهار مستخدمين</translation>
     </message>
     <message>
         <source>Play Normally - disabled because of selected force transcoding setting</source>
