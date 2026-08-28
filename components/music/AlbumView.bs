@@ -308,12 +308,7 @@ sub OnScreenShown(_isReturning = false as boolean)
     end if
     m.global.audioPlayer.observeFieldScoped("state", "onAudioMiniPlayerStateChange")
 
-
-    activeNav = getActiveNav(scene)
-
-    if isValid(activeNav) and activeNav.isVisible
-        activeNav.isVisible = false
-    end if
+    hideContentNav(scene)
 
     if isValid(m.top.lastFocus)
         m.top.lastFocus.setFocus(true)
