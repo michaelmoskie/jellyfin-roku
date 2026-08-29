@@ -102,7 +102,8 @@ sub itemContentChanged()
         m.playedIndicator.data = {
             showWatchedCheckmark: not isStringEqual(itemDataType, ItemType.AUDIO),
             played: chainLookupReturn(itemData, "json.UserData.Played", false),
-            unplayedCount: chainLookupReturn(itemData, "json.UserData.UnplayedItemCount", 0)
+            unplayedCount: chainLookupReturn(itemData, "json.UserData.UnplayedItemCount", 0),
+            itemType: chainLookupReturn(itemData, "json.Type", "")
         }
     end if
 
