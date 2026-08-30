@@ -486,7 +486,7 @@ function loadPeople() as object
             itemDetails = getJson(req)
         end if
     else
-        itemDetails = api.users.GetItem(m.global.session.user.id, m.top.itemId)
+        itemDetails = api.items.GetByID(m.top.itemId, { UserId: m.global.session.user.id, Fields: "People" })
     end if
 
     if not isChainValid(itemDetails, "People")

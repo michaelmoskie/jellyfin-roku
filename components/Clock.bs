@@ -76,8 +76,8 @@ end function
 ' @param {object} dateTimeObject - the date and time object to format
 ' @param {boolean} includeSeconds - whether to include seconds in the formatted time
 ' @return {string} current time formatted for either a 12 hour or 24 hour clock
-function formatTimeAsString(dateTimeObject as object) as string
-    return use24HourClock() ? format24HourTime(dateTimeObject) : format12HourTime(dateTimeObject)
+function formatTimeAsString(dateTimeObject as object, includeSeconds = false as boolean) as string
+    return use24HourClock() ? format24HourTime(dateTimeObject, includeSeconds) : format12HourTime(dateTimeObject, includeSeconds)
 end function
 
 ' format12HourTime: Returns a string with the current time formatted for a 12 hour clock
@@ -92,6 +92,7 @@ function format12HourTime(dateTimeObject as object, includeSeconds = false as bo
 
     displayedHour = StrI(currentHour).trim()
     displayedMinute = StrI(currentMinute).trim()
+    displayedSecond = StrI(currentSecond).trim()
     meridian = currentHour < 12 ? "AM" : "PM"
 
     if currentHour = 0

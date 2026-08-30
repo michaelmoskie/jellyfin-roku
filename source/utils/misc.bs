@@ -1,4 +1,5 @@
 import "pkg:/source/enums/ImageType.bs"
+import "pkg:/source/enums/MediaPlaybackState.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/parsedUrl.bs"
 
@@ -1324,7 +1325,25 @@ sub centerButtonRowInContainer(buttonRow as object, buttonCount as integer, butt
     buttonRow.translation = [centerX, currentTranslation[1]]
 end sub
 
+function getEndTimeFromTicks(ticks) as string
+    date = CreateObject("roDateTime")
+    durationSeconds = int(ticks / 10000000.0)
+    date.fromSeconds(date.asSeconds() + durationSeconds)
+    date.toLocalTime()
+    return formatTime(date)
+end function
 
+function serverVersionMeetsMinimumRequirements(systemVersion as string, targetVersion as roArray) as boolean
+    version = systemVersion.split(".")
+    if version.Count() < 3
+        for i = version.Count() to 3 step 1
+            version.push("0")
+        end for
+    end if
+
+    ' Check Major version
+    if targetVersion[0] < version[0].ToInt() then return true
+    if targetVersion[0] > version[0].ToInt() then return false
 
     ' Check Minor version
     if targetVersion[1] < version[1].ToInt() then return true

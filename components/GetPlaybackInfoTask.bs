@@ -10,6 +10,10 @@ sub init()
     m.top.functionName = "getPlaybackInfoTask"
 end sub
 
+function havePlaybackInfo() as boolean
+    return isValid(m.playbackInfo) and isValidAndNotEmpty(m.playbackInfo.MediaSources)
+end function
+
 function ItemPostPlaybackInfo(id as string)
     currentView = m.global.sceneManager.callFunc("getActiveScene")
     currentItem = m.global.queueManager.callFunc("getCurrentItem")

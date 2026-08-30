@@ -2409,29 +2409,22 @@ sub updateFavoritesItems()
     insertIndex = getFirstFavoriteSectionIndex()
 
     if not isValidAndNotEmpty(itemData)
-        removeHomeSection(sectionName)
+        removeFavoriteSections()
         return
     end if
 
-    ' remake row using the new data
-    row = CreateObject("roSGNode", "HomeRow")
-    row.title = sectionName
-    row.imageWidth = getPosterSize(false)[0]
-    row.cursorSize = getPosterSize(false)
+    removeFavoriteSections()
 
-    for each item in itemData
-        usePoster = true
-
-        if lcase(item.type) = "episode" or lcase(item.type) = "audio" or lcase(item.type) = "musicartist"
-            usePoster = false
+    for each rowData in itemData
+        row = createFavoriteRowFromData(rowData)
+        if isValid(row)
+            m.top.content.insertChild(row, insertIndex)
+            insertIndex++
         end if
-
-        item.usePoster = usePoster
-        item.imageWidth = row.imageWidth
-        row.appendChild(item)
     end for
 
-    addOrUpdateHomeRow(row, sectionName, "favorites")
+    setRowItemSize()
+    restoreFavoriteFocusForRefresh()
 end sub
 
 ' createFavoriteRowFromData: Creates a HomeRow for one type-specific Favorites group

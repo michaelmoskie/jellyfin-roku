@@ -139,6 +139,15 @@ sub renderOSDTimeSlots(previewPosition as float)
     m.belowCenter.text = formatOSDTimeSlot("playback.timeBelowCenter", previewPosition)
 end sub
 
+function clampSeek(position as float) as float
+    if position < 0 then return 0
+    if m.top.progressDuration > 0 and position > m.top.progressDuration
+        return m.top.progressDuration
+    end if
+
+    return position
+end function
+
 ' Observer callbacks receive an event argument when they declare a parameter, so this stays bare
 sub updateOSDTime()
     renderOSDTimeSlots(-1)
@@ -746,6 +755,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         else if m.currentButtonGroup = "transport"
             focusOnSeekbar()
         end if
+    end if
 
     ' Look for video seek buttons being pressed and execute the seek action
     if key = "right" or key = "left" or key = "fastforward" or key = "rewind" or key = "OK" or key = "play"
@@ -849,4 +859,3 @@ sub updateProgressBar(live as boolean, updatePosition as integer)
     m.scrubber.translation = [scrubberHorizTrans, m.scrubber.translation[1]]
     m.scrubberOldPosition.translation = [scrubberOldPositionTrans, m.scrubberOldPosition.translation[1]]
 end sub
-

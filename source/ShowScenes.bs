@@ -584,14 +584,12 @@ function CreateMovieDetailsGroup(movie as object) as dynamic
     group.observeField("refreshEpisodeDetailsData", m.port)
     group.observeField("refreshMovieDetailsData", m.port)
 
-    ' local trailers - use appropriate user ID for multi-server
-    trailersUserId = m.global.session.user.id
-    if isValid(movieServerData) then trailersUserId = movieServerData.userId
-    trailerData = api.users.GetLocalTrailers(trailersUserId, movie.id)
+    ' local trailers
+    trailerData = api.items.GetLocalTrailers(movie.id, { userId: m.global.session.user.id })
     group.trailerAvailable = isValidAndNotEmpty(trailerData)
     group.additionalParts = {
         masterID: movie.id,
-        parts: partsData
+        parts: api.videos.GetAdditionalParts(movie.id)
     }
 
     ' Load logo image
@@ -687,6 +685,13 @@ function CreateSeriesDetailsGroup(seriesID as string, seriesServerData = invalid
     if not isValidAndNotEmpty(seriesID) then return invalid
 
     startLoadingSpinner()
+
+    apiSeasonData = api.shows.GetSeasons(seriesID, {
+        userId: m.global.session.user.id,
+        enableImageTypes: `${ImageType.PRIMARY}, ${ImageType.BACKDROP}, ${ImageType.THUMB}`,
+        imageTypeLimit: 1,
+        enableTotalRecordCount: false
+    })
 
     if isValid(seriesServerData)
         seriesMetaData = ItemMetaDataForServer(seriesServerData, seriesID)

@@ -296,7 +296,7 @@ sub processAddToQueueButtonVisibility(audioMiniPlayerVisible = false)
 end sub
 
 sub OnScreenShown(_isReturning = false as boolean)
-    overhang = m.top.getScene().findNode("overhang")
+    scene = m.top.getScene()
 
     audioMiniPlayer = scene.findNode("audioMiniPlayer")
     if isValid(audioMiniPlayer)

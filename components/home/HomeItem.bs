@@ -5,6 +5,7 @@ import "pkg:/source/enums/ItemType.bs"
 import "pkg:/source/enums/PosterLoadStatus.bs"
 import "pkg:/source/enums/SeriesStatus.bs"
 import "pkg:/source/enums/String.bs"
+import "pkg:/source/constants/HomeRowItemSizes.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/misc.bs"
 import "pkg:/source/utils/themeApply.bs"
@@ -167,7 +168,7 @@ sub itemContentChanged()
     if not isValid(m.itemIcon) then initItemIcon()
 
     m.itemPoster.width = itemData.imageWidth
-    m.itemPoster.height = ITEM_IMAGE_HEIGHT
+    m.itemPoster.height = homeRowItemSizes.MOVIE_POSTER[1]
     m.itemPoster.loadDisplayMode = "scaleToZoom"
 
     ' Reposition played indicator to top-right corner of poster
@@ -182,7 +183,7 @@ sub itemContentChanged()
     m.itemText.vertAlign = "bottom"
 
     m.backdrop.width = itemData.imageWidth
-    m.backdrop.height = ITEM_IMAGE_HEIGHT
+    m.backdrop.height = homeRowItemSizes.MOVIE_POSTER[1]
 
     ' A cell keeps whatever the last item left here, so the bar starts hidden and only an
     ' item with progress turns it back on

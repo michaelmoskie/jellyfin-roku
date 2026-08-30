@@ -1734,7 +1734,7 @@ sub onPositionChanged()
     if not isValid(m.dialog)
         ' Do not show Next Episode button for intro videos
         if not m.LoadMetaDataTask.isIntro
-            checkSegmentSkipButton()
+            checkSegmentSkipButton(m.top.position)
             checkNextUp()
         end if
     end if
@@ -2319,22 +2319,19 @@ sub showOSD(focusTarget = "seekbar" as string)
     m.osd.focusTarget = focusTarget
     m.osd.visible = true
     m.osd.hasFocus = true
-    if whichfocus = "videoControls"
-        m.osd.previewPos = m.osd.isSeeking ? m.previewPos : m.top.position
-        m.scrubber.visible = false
-        m.videocontrols.setFocus(true)
-    else if whichfocus = "progressBar"
-        m.scrubber.visible = true
-        m.progressBarGroup.setFocus(true)
-        m.videoControls.setFocus(false)
-        m.videoControls.getChild(m.osd.defaultButtonIndex).focus = false
-        m.top.control = VideoControl.PAUSE
-    end if
     m.skipSegmentButton.setFocus(false)
     m.skipSegmentButton.focus = false
     m.scrubberOldPosition.visible = true
     m.osd.setFocus(true)
     m.pauseOverlay.visible = true
+end sub
+
+sub hideTrickplayImages()
+    for i = -2 to 2
+        suffix = i = 0 ? "" : str(i)
+        trickplayImage = m.top.findNode(`trickplayImage${suffix}`)
+        if isValid(trickplayImage) then trickplayImage.visible = false
+    end for
 end sub
 
 sub onClockTick()

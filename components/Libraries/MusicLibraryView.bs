@@ -53,7 +53,6 @@ sub setupNodes()
     m.dropdownOptionGroup.observeFieldScoped("showOptions", "onShowOptionsChange")
     m.dropdownOptionGroup.observeFieldScoped("exit", "onExit")
     m.dropdownOptionGroup.observeFieldScoped("searchTerm", "onDropdownOptionGroupSearchTermChanged")
-end sub
 
     m.sortButton = m.top.findNode("sortButton")
     m.sortButton.textColor = ColorPalette.WHITE
@@ -78,8 +77,6 @@ end sub
     m.viewButton.focusTextColor = "#000000"
     m.viewButton.background = ColorPalette.DARKGREY
     m.viewButton.focusBackground = ColorPalette.WHITE
-
-
 end sub
 
 sub init()
@@ -1357,4 +1354,4 @@ sub reclaimResources()
 
     m.genreData = createSGNode("ContentNode")
     m.genreList.content = m.genreData
-
+end sub

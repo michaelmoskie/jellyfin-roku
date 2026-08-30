@@ -1,6 +1,8 @@
 import "pkg:/source/api/Image.bs"
 import "pkg:/source/api/Items.bs"
 import "pkg:/source/api/MoonfinPlugin.bs"
+import "pkg:/source/enums/AnimationControl.bs"
+import "pkg:/source/enums/AnimationState.bs"
 import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/enums/ItemType.bs"
 import "pkg:/source/enums/KeyCode.bs"
@@ -946,14 +948,6 @@ sub onMyListLoaded()
     end if
 
     m.global.sceneManager.callFunc("optionDialog", "libraryitem", focusedItem.LookupCI("title"), [], dialogData, paramData)
-end sub
-
-sub setLastFocus(lastFocusElement)
-    group = m.global.sceneManager.callFunc("getActiveScene")
-
-    if isValid(group)
-        group.lastFocus = lastFocusElement
-    end if
 end sub
 
 function audioMiniPlayerIsVisibleInScene()

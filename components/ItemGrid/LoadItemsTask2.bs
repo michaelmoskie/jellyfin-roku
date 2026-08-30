@@ -375,21 +375,20 @@ sub loadItems()
             startsWithZAndGreaterResp = targetAPIRequest(url, params)
             startsWithZAndGreaterData = getJson(startsWithZAndGreaterResp)
 
-                if isValidAndNotEmpty(startsWithZAndGreaterData)
-                    specialCharacterItems = []
+            if isValidAndNotEmpty(startsWithZAndGreaterData)
+                specialCharacterItems = []
 
-                    ' Filter out items starting with Z
-                    for each item in startsWithZAndGreaterData.Items
-                        itemName = LCase(item.name)
-                        if not itemName.StartsWith("z")
-                            specialCharacterItems.Push(item)
-                        end if
-                    end for
+                ' Filter out items starting with Z
+                for each item in startsWithZAndGreaterData.Items
+                    itemName = LCase(item.name)
+                    if not itemName.StartsWith("z")
+                        specialCharacterItems.Push(item)
+                    end if
+                end for
 
-                    ' Append data to results from before A
-                    data.Items.Append(specialCharacterItems)
-                    data.TotalRecordCount += specialCharacterItems.Count()
-                end if
+                ' Append data to results from before A
+                data.Items.Append(specialCharacterItems)
+                data.TotalRecordCount += specialCharacterItems.Count()
             end if
         end if
     end if

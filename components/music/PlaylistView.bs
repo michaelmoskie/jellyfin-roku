@@ -184,6 +184,33 @@ function getFirstUnplayedItem(playlistData) as integer
     return 0
 end function
 
+function shouldShowResume(playlistData as object) as boolean
+    if not isValidAndNotEmpty(playlistData) then return false
+    if playlistData.getChildCount() = 0 then return false
+
+    return getFirstUnplayedItem(playlistData) > 0
+end function
+
+sub addResumeButton()
+    if isValid(m.resume) then m.resume.visible = true
+    m.buttonCount = m.buttonGrp.getChildCount()
+end sub
+
+sub removeResumeButton()
+    if isValid(m.resume) then m.resume.visible = false
+    m.buttonCount = m.buttonGrp.getChildCount()
+end sub
+
+sub enterEpisodeListFullScreen()
+    m.revealEpisodesAnimation.control = AnimationControl.START
+    m.playlist.clippingRect = "[0,0,1920,1080]"
+end sub
+
+sub exitEpisodeListFullScreen()
+    m.revealEpisodesAnimation.control = AnimationControl.STOP
+    m.playlist.clippingRect = m.defaultClippingRect
+end sub
+
 function onKeyEvent(key as string, press as boolean) as boolean
     if isValid(m.buttonGrp)
         if m.buttonGrp.isInFocusChain()

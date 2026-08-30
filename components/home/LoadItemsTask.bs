@@ -1632,8 +1632,9 @@ function getFavoriteRowDefinitions() as object
     ]
 end function
 
-    sortField = m.global.session.user.settings["ui.home.favoritesSortField"] ?? "random"
-    sortOrder = m.global.session.user.settings["ui.home.favoritesSortOrder"] ?? "Ascending"
+function getFavoriteHomeRowLimit() as integer
+    return 24
+end function
 
 function getFavoriteQueryParams(sortField as string, sortOrder as string) as object
     return {
@@ -1739,7 +1740,8 @@ function createFavoriteHomeItems(data as object, favoriteRow as object, sortFiel
             exit for
         end if
 
-        tmp = createSGNode("HomeData")
+        count++
+    end for
 
     if addViewAll
         results.push(createFavoriteViewAllHomeData(favoriteRow, sortField, sortOrder))
