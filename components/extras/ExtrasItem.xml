@@ -1,27 +1,85 @@
 <?xml version="1.0" encoding="utf-8"?>
 <component name="ExtrasItem" extends="JFGroup">
   <children>
-    <LayoutGroup layoutDirection="vert">
-      <Poster id="posterImg" width="234" height="300" translation="[8,243]" failedBitmapUri="pkg:/images/baseline_person_white_48dp.png" />
-      <ScrollingText
+    <Group id="scaleGroup">
+      <!-- Circular cast photo with border (for people) -->
+      <MaskGroup id="photoCircle" visible="false" maskUri="pkg:/images/icons/circle.png" maskSize="[250, 250]" translation="[0, 0]">
+        <Poster
+          id="posterImg"
+          width="250"
+          height="250"
+          loadDisplayMode="scaleToZoom"
+          failedBitmapUri="pkg:/images/baseline_person_white_48dp.png" />
+      </MaskGroup>
+
+      <!-- Rectangular poster for movies/shows (More Like This) -->
+      <Poster
+        id="posterImgRect"
+        visible="false"
+        loadDisplayMode="scaleToZoom"
+        translation="[0, 0]">
+        <PlayedCheckmark id="playedIndicator" translation="[130, 10]" />
+      </Poster>
+
+      <!-- Rectangular focus border overlay -->
+      <Poster id="rectFocusBorder"
+        width="234"
+        height="351"
+        translation="[0, 0]"
+        uri="pkg:/images/hd_focus.9.png"
+        loadDisplayMode="scaleToFit"
+        visible="false" />
+
+      <!-- Episode number prefix (light grey, episodes only) -->
+      <Text
+        id="epNumber"
+        horizAlign="left"
+        vertAlign="top"
+        height="34"
+        translation="[0, 258]"
+        font="font:SmallSystemFont"
+        color="#999999"
+        visible="false" />
+
+      <!-- Text labels below poster -->
+      <ScrollingLabel
         id="pLabel"
         horizAlign="left"
-        vertAlign="bottom"
-        height="48"
-        font="font:SmallestBoldSystemFont"
+        vertAlign="top"
+        height="40"
+        translation="[0, 258]"
+        font="font:SmallSystemFont"
+        color="#FFFFFF"
+        maxWidth="250"
         repeatCount="0" />
-      <ScrollingText
+
+      <!-- Episode duration (light grey, right-aligned, episodes only) -->
+      <Text
+        id="epDuration"
+        horizAlign="right"
+        vertAlign="top"
+        height="34"
+        translation="[0, 258]"
+        font="font:SmallSystemFont"
+        color="#999999"
+        visible="false" />
+
+      <Text
         id="SubTitle"
         horizAlign="left"
-        vertAlign="center"
+        vertAlign="top"
+        width="250"
         height="32"
-        font="font:SmallestBoldSystemFont"
-        color="#777777FF"
-        repeatCount="0" />
-    </LayoutGroup>
+        translation="[0, 298]"
+        font="font:SmallSystemFont"
+        color="#CCCCCC"
+        wrap="true"
+        maxLines="1" />
+    </Group>
   </children>
   <interface>
     <field id="itemContent" type="node" onChange="showContent" />
     <field id="itemHasFocus" type="boolean" onChange="focusChanged" />
+    <field id="drawFocusFeedback" type="boolean" value="true" />
   </interface>
 </component>

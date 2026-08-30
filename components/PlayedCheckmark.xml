@@ -1,26 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
-<component name="PlayedCheckmark" extends="Rectangle">
+<!-- 
+  Refactored from Rectangle to Group with Poster background for better visual consistency.
+  Uses circular PNG for smooth edges instead of cornerRadii (which causes warnings on some firmware).
+-->
+<component name="PlayedCheckmark" extends="Group">
   <children>
+    <Poster
+      id="background"
+      width="40"
+      height="40"
+      uri="pkg:/images/icons/circle.png"
+      blendColor="#0066CCFF"
+      visible="false" />
+
     <Label
       id="checkmark"
-      width="60"
-      height="50"
-      font="font:MediumBoldSystemFont"
+      width="40"
+      height="40"
+      font="font:SmallBoldSystemFont"
       horizAlign="center"
       vertAlign="center"
-      text="✓"
+      translation="[0, 2]"
+      text="&#x2713;"
       visible="false" />
 
     <Label
       id="unplayedNumber"
-      width="60"
-      height="50"
-      font="font:MediumBoldSystemFont"
+      width="40"
+      height="40"
+      font="font:SmallSystemFont"
       horizAlign="center"
       vertAlign="center"
+      translation="[0, 2]"
+      visible="false" />
+
+    <Poster
+      id="favoriteHeart"
+      width="28"
+      height="28"
+      uri="pkg:/images/icons/heart.png"
+      blendColor="#FF0000FF"
       visible="false" />
   </children>
   <interface>
+    <field id="width" type="float" value="40" onChange="onSizeChange" />
+    <field id="height" type="float" value="40" onChange="onSizeChange" />
     <field id="data" type="assocarray" onChange="onDataChange" />
+    <field id="favoriteOffset" type="array" />
   </interface>
 </component>

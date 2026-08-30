@@ -1,29 +1,56 @@
 import "pkg:/source/api/baserequest.bs"
 import "pkg:/source/api/Image.bs"
-import "pkg:/source/enums/AnimationControl.bs"
 import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/enums/ItemType.bs"
 import "pkg:/source/enums/PosterLoadStatus.bs"
 import "pkg:/source/enums/SeriesStatus.bs"
 import "pkg:/source/enums/String.bs"
+import "pkg:/source/constants/HomeRowItemSizes.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/themeApply.bs"
+
+' Font size bounds for the name that stands in for missing artwork
+const PLACEHOLDER_MAX_SIZE = 30
+const PLACEHOLDER_MIN_SIZE = 16
+
+' How far the progress track sits in from each poster edge
+const PROGRESS_INSET = 6
+
+' Room left around a browse tile's logo so it reads as a logo rather than artwork, and the
+' solid ground it sits on. ColorPalette only carries part opaque blacks.
+const BROWSE_TILE_INSET = 24
+const BROWSE_TILE_BACKGROUND = "0x000000FF"
 
 sub init()
     findNodes()
     m.itemPoster.observeField("loadStatus", "onPosterLoadStatusChanged")
     setColors()
+
+    ' Modern rows slide neighbors aside to make room for the focused landscape
+    ' card. The scene sets modernShift on this item's content node.
+    m.modernEnabled = isModernHomeRows()
+    m.modernObservedNode = invalid
+
+    ' Track focus change timing to detect and prevent oscillations
+    m.lastFocusChangeTime = 0
+    m.focusChangeCount = 0
+    m.isInOscillation = false
+    m.lastStableFocusState = false
+    m.initTime = UpTime(0)
+    m.initCooldownPeriod = 0.8 ' Block animations for 800ms after creation (increased to handle focus restoration)
+    themeApply.ApplyToItem(m.top)
 end sub
 
 sub setColors()
     if not isAllValid([m.itemProgress, m.itemProgressBackground, m.backdrop]) then findNodes()
 
     if isValid(m.itemProgress)
-        m.itemProgress.color = chainLookupReturn(m.global.session, "user.settings.colorHomeRowItemProgress", ColorPalette.TRIADBLUE)
+        m.itemProgress.blendColor = chainLookupReturn(m.global.session, "user.settings.colorHomeRowItemProgress", ColorPalette.TRIADBLUE)
     end if
 
     if isValid(m.itemProgressBackground)
-        m.itemProgressBackground.color = chainLookupReturn(m.global.session, "user.settings.colorHomeRowItemProgressBackground", ColorPalette.BLACK90)
+        m.itemProgressBackground.blendColor = chainLookupReturn(m.global.session, "user.settings.colorHomeRowItemProgressBackground", ColorPalette.BLACK90)
     end if
 
     if isValid(m.backdrop)
@@ -34,14 +61,18 @@ end sub
 sub findNodes()
     initItemText()
     initItemPoster()
-    initItemTextExtra()
+    initPosterText()
     initBackdrop()
     initItemIcon()
     m.itemProgress = m.top.findNode("progress")
     m.itemProgressBackground = m.top.findNode("progressBackground")
     m.playedIndicator = m.top.findNode("playedIndicator")
-    m.showProgressBarAnimation = m.top.findNode("showProgressBar")
-    m.showProgressBarField = m.top.findNode("showProgressBarField")
+    m.scaleGroup = m.top.findNode("scaleGroup")
+    m.posterMask = m.top.findNode("posterMask")
+    m.modernShiftAnim = m.top.findNode("modernShiftAnim")
+    m.modernShiftInterp = m.top.findNode("modernShiftInterp")
+    m.modernShiftPosterOpacity = m.top.findNode("modernShiftPosterOpacity")
+    m.modernShiftTextOpacity = m.top.findNode("modernShiftTextOpacity")
 end sub
 
 sub initItemText()
@@ -55,11 +86,40 @@ sub initItemPoster()
     m.itemPoster = m.top.findNode("itemPoster")
 end sub
 
-sub initItemTextExtra()
-    m.itemTextExtra = m.top.findNode("itemTextExtra")
-    if isValid(m.itemTextExtra)
-        m.itemTextExtra.color = chainLookupReturn(m.global.session, "user.settings.colorHomeRowItemSubtitle", ColorPalette.MIDGREY)
+sub initPosterText()
+    m.posterText = m.top.findNode("posterText")
+    if isValid(m.posterText)
+        m.posterText.color = chainLookupReturn(m.global.session, "user.settings.colorHomeRowItemTitle", ColorPalette.WHITE)
     end if
+end sub
+
+' The name stands in for artwork the item does not have. A wide card gets a bigger name
+' than a portrait one, up to a point, so neither ends up unreadable.
+sub setPosterText(itemData as object)
+    if not isValid(m.posterText) then initPosterText()
+    if not isValid(m.posterText) then return
+
+    m.posterText.width = itemData.imageWidth
+    m.posterText.height = m.itemPoster.height
+
+    textSize = Int(itemData.imageWidth / 8)
+    if textSize > PLACEHOLDER_MAX_SIZE then textSize = PLACEHOLDER_MAX_SIZE
+    if textSize < PLACEHOLDER_MIN_SIZE then textSize = PLACEHOLDER_MIN_SIZE
+    m.posterText.font.size = textSize
+
+    title = itemData.LookupCI("title")
+    m.posterText.text = isValidAndNotEmpty(title) ? UCase(title) : string.EMPTY
+
+    showPosterText(m.itemPoster.loadStatus <> PosterLoadStatus.READY)
+end sub
+
+' A tile with an icon of its own says enough already. That is read off the item rather than
+' the node, which still holds whatever the last item in this cell put there.
+sub showPosterText(visible as boolean)
+    if not isValid(m.posterText) then return
+
+    hasIcon = isValidAndNotEmpty(chainLookupReturn(m.top.itemContent, "iconUrl", ""))
+    m.posterText.visible = visible and not hasIcon
 end sub
 
 sub initBackdrop()
@@ -80,11 +140,14 @@ sub itemContentChanged()
     localGlobal = m.global
     itemDataType = isValid(itemData.type) ? LCase(itemData.type) : ""
 
+    if m.modernEnabled then setupModernShiftObserver(itemData)
+
     if isValid(m.playedIndicator)
         m.playedIndicator.data = {
             showWatchedCheckmark: not isStringEqual(itemDataType, ItemType.AUDIO),
             played: chainLookupReturn(itemData, "json.UserData.Played", false),
-            unplayedCount: chainLookupReturn(itemData, "json.UserData.UnplayedItemCount", 0)
+            unplayedCount: chainLookupReturn(itemData, "json.UserData.UnplayedItemCount", 0),
+            itemType: chainLookupReturn(itemData, "json.Type", "")
         }
     end if
 
@@ -98,7 +161,6 @@ sub itemContentChanged()
     setColors()
     initItemIcon()
     initItemText()
-    initItemTextExtra()
 
     ' validate to prevent crash
     if not isValid(m.itemPoster) then initItemPoster()
@@ -106,17 +168,13 @@ sub itemContentChanged()
     if not isValid(m.itemIcon) then initItemIcon()
 
     m.itemPoster.width = itemData.imageWidth
+    m.itemPoster.height = homeRowItemSizes.MOVIE_POSTER[1]
     m.itemPoster.loadDisplayMode = "scaleToZoom"
 
-    m.showProgressBarAnimation.control = AnimationControl.STOP
-    m.itemProgressBackground.width = itemData.imageWidth
-    m.itemProgressBackground.visible = false
-    m.itemProgress.width = 0
-
-    m.itemTextExtra.maxWidth = itemData.imageWidth
-    m.itemTextExtra.visible = true
-    m.itemTextExtra.text = ""
-    m.itemTextExtra.font.size = 22
+    ' Reposition played indicator to top-right corner of poster
+    if isValid(m.playedIndicator)
+        m.playedIndicator.translation = [itemData.imageWidth - 50, 10]
+    end if
 
     m.itemText.maxWidth = itemData.imageWidth
     m.itemText.height = 34
@@ -125,6 +183,13 @@ sub itemContentChanged()
     m.itemText.vertAlign = "bottom"
 
     m.backdrop.width = itemData.imageWidth
+    m.backdrop.height = homeRowItemSizes.MOVIE_POSTER[1]
+
+    ' A cell keeps whatever the last item left here, so the bar starts hidden and only an
+    ' item with progress turns it back on
+    if isValid(m.itemProgressBackground) then m.itemProgressBackground.visible = false
+
+    setPosterText(itemData)
 
     if isAllValid([m.itemIcon, itemData.iconUrl])
         m.itemIcon.uri = itemData.iconUrl
@@ -134,9 +199,6 @@ sub itemContentChanged()
         displayCollectionInfo(itemData)
         return
     end if
-
-    playedIndicatorLeftPosition = m.itemPoster.width - 60
-    m.playedIndicator.translation = [playedIndicatorLeftPosition, 0]
 
     ' "Program" is from clicking on an "On Now" item on the Home Screen
     if itemDataType = ItemType.PROGRAM
@@ -214,67 +276,73 @@ sub itemContentChanged()
         return
     end if
 
-    print `Unhandled Home Item Type ${itemDataType}`
+    if itemDataType = "seerrbrowse" or itemDataType = "seerrshortcut"
+        displayBrowseTileInfo(itemData)
+        return
+    end if
+
 end sub
+
+' A studio or network tile carries a wide logo rather than a poster, so it sits whole and
+' smaller inside the card on a dark ground instead of being cropped to fill it
+sub displayBrowseTileInfo(itemData as object)
+    m.itemText.text = itemData.name
+
+    ' Sizing and fit go on before the uri, since the load takes the mode it is given at the
+    ' time and setting it after leaves the logo cropped to fill the card
+    m.itemPoster.loadDisplayMode = "scaleToFit"
+    m.itemPoster.width = itemData.imageWidth - (BROWSE_TILE_INSET * 2)
+    m.itemPoster.height = m.backdrop.height - (BROWSE_TILE_INSET * 2)
+    m.itemPoster.translation = [BROWSE_TILE_INSET, BROWSE_TILE_INSET]
+    m.itemPoster.uri = itemData.posterURL
+    m.posterMask.maskUri = ""
+    m.posterMask.maskSize = [0, 0]
+    m.backdrop.color = BROWSE_TILE_BACKGROUND
+    m.backdrop.visible = true
+end sub
+
+' A browse tile sizes and grounds its own logo, so the poster handling that crops a poster
+' to fill its card has to leave it alone
+function isBrowseTile() as boolean
+    itemType = LCase(chainLookupReturn(m.top.itemContent, "type", ""))
+
+    return itemType = "seerrbrowse" or itemType = "seerrshortcut"
+end function
 
 sub displayCollectionInfo(itemData as object)
     m.itemText.text = itemData.name
-    if isValidAndNotEmpty(itemData.iconUrl)
-        m.itemIcon.uri = itemData.iconUrl
-    end if
 
     if isValidAndNotEmpty(itemData.widePosterURL)
         m.itemPoster.uri = itemData.widePosterURL
-    else
+    else if isValidAndNotEmpty(itemData.posterURL)
         m.itemPoster.uri = itemData.posterURL
+    else
+        m.itemPoster.uri = string.EMPTY
     end if
 end sub
 
 sub displayPhotoAlbumInfo(itemData as object)
     m.itemText.text = itemData.name
     m.itemPoster.uri = ImageURL(itemData.LookupCI("id"))
-
-    ' subtext
-    if isValid(itemData.json.ChildCount)
-        m.itemTextExtra.text = itemData.json.ChildCount.ToStr().trim() + " items"
-    end if
 end sub
 
 sub displayPhotoInfo(itemData as object)
     m.itemText.text = itemData.name
     m.itemPoster.uri = ImageURL(itemData.LookupCI("id"))
-
-    ' subtext
-    if isValidAndNotEmpty(itemData.json)
-        if isValid(itemData.json.ProductionYear)
-            m.itemTextExtra.text = itemData.json.ProductionYear.ToStr().trim()
-        end if
-
-        if isValidAndNotEmpty(itemData.json.Album)
-            if m.itemTextExtra.text = ""
-                m.itemTextExtra.text = tr("Album") + ": " + itemData.json.Album.trim()
-            else
-                m.itemTextExtra.text = m.itemTextExtra.text + " - " + tr("Album") + ": " + itemData.json.Album.trim()
-            end if
-        end if
-    end if
 end sub
 
 sub displaySeasonInfo(itemData as object)
     m.itemText.text = itemData.json.SeriesName
-    m.itemTextExtra.text = itemData.name
     m.itemPoster.uri = ImageURL(itemData.LookupCI("id"))
 end sub
 
 sub displayTVChannelInfo(itemData as object)
     m.itemText.text = itemData.name
-    m.itemTextExtra.text = itemData.json.AlbumArtist
     m.itemPoster.uri = ImageURL(itemData.LookupCI("id"))
 end sub
 
 sub displayAudioInfo(itemData as object)
     m.itemText.text = itemData.name
-    m.itemTextExtra.text = itemData.json.AlbumArtist
     m.itemPoster.uri = ImageURL(itemData.LookupCI("id"))
 end sub
 
@@ -284,13 +352,11 @@ sub displayAudioBookInfo(itemData as object)
     end if
 
     m.itemText.text = itemData.name
-    m.itemTextExtra.text = itemData.json.AlbumArtist
     m.itemPoster.uri = ImageURL(itemData.LookupCI("id"))
 end sub
 
 sub displayMusicAlbumInfo(itemData as object)
     m.itemText.text = itemData.name
-    m.itemTextExtra.text = itemData.json.AlbumArtist
     m.itemPoster.uri = itemData.posterURL
 end sub
 
@@ -328,39 +394,19 @@ end sub
 sub displaySeriesInfo(itemData as object)
     m.itemText.text = itemData.name
 
-    if itemData.usePoster
-        m.itemPoster.uri = itemData.imageWidth = 180 ? itemData.posterURL : itemData.widePosterURL
-    else
+    ' Prioritize primary image (posterURL) first, then fall back to thumbnail/widePoster
+    if isValidAndNotEmpty(itemData.posterURL)
+        m.itemPoster.uri = itemData.posterURL
+    else if isValidAndNotEmpty(itemData.thumbnailURL)
         m.itemPoster.uri = itemData.thumbnailURL
+    else if isValidAndNotEmpty(itemData.widePosterURL)
+        m.itemPoster.uri = itemData.widePosterURL
     end if
-
-    textExtra = ""
-    if isValid(itemData.json.ProductionYear)
-        textExtra = StrI(itemData.json.ProductionYear).trim()
-    end if
-
-    ' Set Years Run for Extra Text
-    if isValid(itemData.json.Status)
-        if LCase(itemData.json.Status) = SeriesStatus.CONTINUING
-            textExtra = textExtra + " - Present"
-        else if LCase(itemData.json.Status) = SeriesStatus.ENDED and isValid(itemData.json.EndDate)
-            textExtra = textExtra + " - " + LEFT(itemData.json.EndDate, 4)
-        end if
-    end if
-    m.itemTextExtra.text = textExtra
 end sub
 
 sub displayBoxsetInfo(itemData as object)
     m.itemText.text = itemData.name
     m.itemPoster.uri = itemData.posterURL
-
-    ' Set small text to number of items in the collection
-    if isChainValid(itemData, "json.ChildCount")
-        m.itemTextExtra.text = StrI(itemData.json.ChildCount).trim() + " item"
-        if itemData.json.ChildCount > 1
-            m.itemTextExtra.text += "s"
-        end if
-    end if
 end sub
 
 sub displayVideoInfo(itemData as object)
@@ -370,7 +416,12 @@ sub displayVideoInfo(itemData as object)
         drawProgressBar(itemData)
     end if
 
-    m.itemPoster.uri = itemData.imageWidth = 180 ? itemData.posterURL : itemData.thumbnailURL
+    ' For videos, prioritize thumbnail first, then fall back to primary
+    if isValidAndNotEmpty(itemData.thumbnailURL)
+        m.itemPoster.uri = itemData.thumbnailURL
+    else if isValidAndNotEmpty(itemData.posterURL)
+        m.itemPoster.uri = itemData.posterURL
+    end if
 end sub
 
 sub displayMovieInfo(itemData as object)
@@ -380,53 +431,57 @@ sub displayMovieInfo(itemData as object)
         drawProgressBar(itemData)
     end if
 
-    ' Use best image, but fallback to secondary if it's empty
-    if (itemData.imageWidth = 180 and itemData.posterURL <> "") or itemData.thumbnailURL = ""
-        m.itemPoster.uri = itemData.posterURL
+    ' If usePoster is set (e.g. Recently Added), show primary poster first
+    ' Otherwise (e.g. Continue Watching), show thumbnail/backdrop first
+    if itemData.usePoster = true
+        if isValidAndNotEmpty(itemData.posterURL)
+            m.itemPoster.uri = itemData.posterURL
+        else if isValidAndNotEmpty(itemData.thumbnailURL)
+            m.itemPoster.uri = itemData.thumbnailURL
+        end if
     else
-        m.itemPoster.uri = itemData.thumbnailURL
-    end if
-
-    ' Set Release Year and Age Rating for Extra Text
-    textExtra = ""
-    if isValid(itemData.json.ProductionYear)
-        textExtra = StrI(itemData.json.ProductionYear).trim()
-    end if
-
-    if isValid(itemData.json.OfficialRating)
-        if textExtra = ""
-            textExtra = itemData.json.OfficialRating
-        else
-            textExtra = `${textExtra} - ${itemData.json.OfficialRating}`
+        if isValidAndNotEmpty(itemData.thumbnailURL)
+            m.itemPoster.uri = itemData.thumbnailURL
+        else if isValidAndNotEmpty(itemData.posterURL)
+            m.itemPoster.uri = itemData.posterURL
         end if
     end if
-    m.itemTextExtra.text = textExtra
 end sub
 
 sub displayProgramInfo(itemData as object)
     m.itemText.Text = itemData.json.name
-    m.itemTextExtra.Text = itemData.json.ChannelName
     m.itemPoster.uri = itemData.usePoster ? itemData.thumbnailURL : ImageURL(itemData.json.ChannelId)
     m.itemPoster.loadDisplayMode = "scaleToFill"
-
-    if isValid(itemData.FHDItemWidth)
-        realWidth = itemData.FHDItemWidth
-        m.itemPoster.width = realWidth
-        m.itemText.maxWidth = realWidth - 8
-        m.itemTextExtra.width = realWidth - 8
-        m.backdrop.width = realWidth
-    end if
-
-    ' Set Episode title if available
-    if isValid(itemData.json.EpisodeTitle)
-        m.itemTextExtra.text = itemData.json.EpisodeTitle
-    end if
 end sub
 
-sub displayEpisodeInfo(localGlobal as object, itemData as object)
+sub displayEpisodeInfo(_localGlobal as object, itemData as object)
+    ' Format: "Show Name - S1E2 Episode Title"
+    titleText = ""
+
     if isChainValid(itemData, "json.SeriesName")
-        m.itemText.text = itemData.json.SeriesName
+        titleText = itemData.json.SeriesName
     end if
+
+    ' Add Season and Episode Number
+    episodeInfo = ""
+    if isChainValid(itemData, "json.ParentIndexNumber")
+        episodeInfo = "S" + StrI(itemData.json.ParentIndexNumber).trim()
+    end if
+
+    if isChainValid(itemData, "json.IndexNumber")
+        episodeInfo = episodeInfo + "E" + StrI(itemData.json.IndexNumber).trim()
+    end if
+
+    if episodeInfo.len() > 0
+        titleText = titleText + " - " + episodeInfo
+    end if
+
+    ' Add Episode Name
+    if isValidAndNotEmpty(itemData.LookupCI("name"))
+        titleText = titleText + " " + itemData.LookupCI("name")
+    end if
+
+    m.itemText.text = titleText
 
     if isValid(itemData.LookupCI("PlayedPercentage"))
         if itemData.LookupCI("PlayedPercentage") > 0
@@ -434,42 +489,24 @@ sub displayEpisodeInfo(localGlobal as object, itemData as object)
         end if
     end if
 
-    episodeimagesnextupSetting = chainLookup(localGlobal, "session.user.settings.ui-general-episodeimagesnextup")
-
-    ' Default to wide poster image
-    m.itemPoster.uri = itemData.LookupCI("widePosterURL")
-
-    if isValid(episodeimagesnextupSetting)
-        if isStringEqual(episodeimagesnextupSetting, "webclient")
-            useEpisodeImagesInNextUpAndResumeSetting = chainLookup(localGlobal, "session.user.Configuration.useEpisodeImagesInNextUpAndResume")
-            if isValid(useEpisodeImagesInNextUpAndResumeSetting) and useEpisodeImagesInNextUpAndResumeSetting
-                m.itemPoster.uri = itemData.LookupCI("thumbnailURL")
-            else
-                m.itemPoster.uri = itemData.LookupCI("widePosterURL")
-            end if
-        else if isStringEqual(episodeimagesnextupSetting, "show")
+    ' If usePoster is set (e.g. Next Up), show series poster first
+    ' Otherwise (e.g. Continue Watching), show episode screenshot first
+    if itemData.usePoster = true
+        if isValidAndNotEmpty(itemData.LookupCI("posterURL"))
+            m.itemPoster.uri = itemData.LookupCI("posterURL")
+        else if isValidAndNotEmpty(itemData.LookupCI("widePosterURL"))
             m.itemPoster.uri = itemData.LookupCI("widePosterURL")
-        else if isStringEqual(episodeimagesnextupSetting, "episode")
+        else if isValidAndNotEmpty(itemData.LookupCI("thumbnailURL"))
             m.itemPoster.uri = itemData.LookupCI("thumbnailURL")
         end if
-    end if
-
-    ' Set Series and Episode Number for Extra Text
-    extraPrefix = ""
-    if isChainValid(itemData, "json.ParentIndexNumber")
-        extraPrefix = "S" + StrI(itemData.json.ParentIndexNumber).trim()
-    end if
-
-    if isChainValid(itemData, "json.IndexNumber")
-        extraPrefix = extraPrefix + "E" + StrI(itemData.json.IndexNumber).trim()
-    end if
-
-    if extraPrefix.len() > 0
-        extraPrefix = extraPrefix + " - "
-    end if
-
-    if isValid(m.itemTextExtra)
-        m.itemTextExtra.text = extraPrefix + itemData.LookupCI("name")
+    else
+        if isValidAndNotEmpty(itemData.LookupCI("thumbnailURL"))
+            m.itemPoster.uri = itemData.LookupCI("thumbnailURL")
+        else if isValidAndNotEmpty(itemData.LookupCI("widePosterURL"))
+            m.itemPoster.uri = itemData.LookupCI("widePosterURL")
+        else if isValidAndNotEmpty(itemData.LookupCI("posterURL"))
+            m.itemPoster.uri = itemData.LookupCI("posterURL")
+        end if
     end if
 end sub
 
@@ -478,17 +515,99 @@ end sub
 sub drawProgressBar(itemData)
     if not isValid(itemData.LookupCI("imageWidth")) then return
 
-    m.itemProgressBackground.width = itemData.LookupCI("imageWidth")
+    m.itemProgressBackground.width = itemData.LookupCI("imageWidth") - (PROGRESS_INSET * 2)
     m.itemProgressBackground.visible = true
-    m.showProgressBarField.keyValue = [0, m.itemPoster.width * (itemData.PlayedPercentage / 100)]
-    m.showProgressBarAnimation.control = AnimationControl.START
+
+    ' Drawn at its length rather than grown into it, since a row rebinds its cells as it
+    ' scrolls and each one would otherwise replay the fill from nothing
+    m.itemProgress.width = m.itemProgressBackground.width * (itemData.PlayedPercentage / 100)
 end sub
 
 '
 ' Enable title scrolling based on item Focus
 sub focusChanged()
+    currentTime = UpTime(0)
+
+    ' Block ALL animations during initialization cooldown
+    timeSinceInit = currentTime - m.initTime
+    if timeSinceInit < m.initCooldownPeriod
+        m.itemText.repeatCount = m.top.itemHasFocus ? - 1 : 0
+        return
+    end if
+
+    timeSinceLastChange = currentTime - m.lastFocusChangeTime
+
+    ' Detect rapid focus oscillation (multiple changes within 200ms)
+    if timeSinceLastChange < 0.2
+        m.focusChangeCount++
+        if m.focusChangeCount >= 2
+            m.isInOscillation = true
+        end if
+    else
+        ' Reset counter if enough time has passed
+        m.focusChangeCount = 0
+        if m.isInOscillation
+            ' Exiting oscillation - save the stable state
+            m.lastStableFocusState = m.top.itemHasFocus
+        end if
+        m.isInOscillation = false
+    end if
+
+    m.lastFocusChangeTime = currentTime
+
+    ' Always update text scrolling
     m.itemText.repeatCount = m.top.itemHasFocus ? - 1 : 0
-    m.itemTextExtra.repeatCount = m.top.itemHasFocus ? - 1 : 0
+
+    ' Set scale animation center point
+    if isValid(m.scaleGroup)
+        m.scaleGroup.scaleRotateCenter = [90, 158]
+    end if
+
+    ' Only animate if NOT in oscillation
+    if not m.isInOscillation
+        ' Save stable state before animating
+        m.lastStableFocusState = m.top.itemHasFocus
+    end if
+    ' During oscillation, do nothing - keep whatever scale we had from last stable state
+    ' This prevents the visual bounce
+end sub
+
+' The scene sets modernShift on the focused row's item content nodes so the
+' cells after the focused one slide right, opening room for the landscape card.
+sub setupModernShiftObserver(itemData as object)
+    if isValid(m.modernObservedNode)
+        m.modernObservedNode.unobserveFieldScoped("modernShift")
+    end if
+    if not itemData.hasField("modernShift") then itemData.addField("modernShift", "float", false)
+    itemData.observeFieldScoped("modernShift", "onModernShiftChanged")
+    m.modernObservedNode = itemData
+
+    ' Apply the current shift instantly (no slide) when the cell is (re)bound
+    shift = itemData.modernShift
+    if not isValid(shift) then shift = 0
+    if shift = -1 then shift = 0
+    if isValid(m.scaleGroup) then m.scaleGroup.translation = [shift, 0]
+end sub
+
+sub onModernShiftChanged()
+    itemData = m.top.itemContent
+    if not isValid(itemData) or not isValid(m.scaleGroup) then return
+
+    shift = itemData.modernShift
+    if not isValid(shift) then shift = 0
+
+    if isValid(m.modernShiftAnim) and isValid(m.modernShiftInterp)
+        m.modernShiftAnim.control = "stop"
+        m.modernShiftInterp.keyValue = [m.scaleGroup.translation, [shift, 0]]
+
+        targetOpacity = shift = -1 ? 0.0 : 1.0
+        m.modernShiftPosterOpacity.keyValue = [m.itemPoster.opacity, targetOpacity]
+        m.modernShiftTextOpacity.keyValue = [m.itemText.opacity, targetOpacity]
+
+        m.modernShiftAnim.control = "start"
+    else
+        m.scaleGroup.translation = [shift, 0]
+    end if
 end sub
 
 'Hide backdrop and icon when poster loaded
@@ -510,6 +629,13 @@ sub onPosterLoadStatusChanged()
 
             m.itemPoster.uri = artistPrimaryImageURL
             return
+        end if
+
+        if isStringEqual(thisItemType, ItemType.AUDIO) and isValidAndNotEmpty(m.top.itemContent.thumbnailURL)
+            if not isStringEqual(m.itemPoster.uri, m.top.itemContent.thumbnailURL)
+                m.itemPoster.uri = m.top.itemContent.thumbnailURL
+                return
+            end if
         end if
 
         ' If loading the episode poster image failed, try loading the series image
@@ -540,18 +666,35 @@ sub onPosterLoadStatusChanged()
             return
         end if
 
-        ' Poster url has failed. Show blank backdrop
-        m.backdrop.visible = true
-        m.itemIcon.visible = true
-
-        return
+        ' Nothing left to fall back to, so this drops through to the not ready handling
     end if
+
+    if isBrowseTile() then return
 
     if m.itemPoster.loadStatus = PosterLoadStatus.READY and m.itemPoster.uri <> string.EMPTY
         m.backdrop.visible = false
         m.itemIcon.visible = false
+        showPosterText(false)
+
+        posterW = m.itemPoster.width
+
+        if posterW = 180
+            m.posterMask.maskUri   = "pkg:/images/posterVertMask.png"
+            m.posterMask.maskSize  = [180, 270]
+        else if posterW = 464
+            m.posterMask.maskUri   = "pkg:/images/posterWideMask.png"
+            m.posterMask.maskSize  = [464, 270]
+        else if posterW = 261
+            m.posterMask.maskUri   = "pkg:/images/posterSquareMask.png"
+            m.posterMask.maskSize  = [261, 270]
+        else
+            m.posterMask.maskUri   = ""
+            m.posterMask.maskSize  = [0, 0]
+        end if
     else
+        ' Still loading, or out of fallbacks, so the name stands in for the artwork
         m.backdrop.visible = true
         m.itemIcon.visible = true
+        showPosterText(true)
     end if
 end sub

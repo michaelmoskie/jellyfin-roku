@@ -1,0 +1,154 @@
+import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/themeApply.bs"
+import "pkg:/source/utils/themeChrome.bs"
+import "pkg:/source/utils/fontApply.bs"
+
+sub init()
+    m.barBg = m.top.findNode("barBg")
+    m.focusPill = m.top.findNode("focusPill")
+    m.focusRing = m.top.findNode("focusRing")
+    m.labelRow = m.top.findNode("labelRow")
+    m.pillAnim = m.top.findNode("pillAnim")
+    m.pillPosInterp = m.top.findNode("pillPosInterp")
+    m.pillWidthInterp = m.top.findNode("pillWidthInterp")
+    m.labels = []
+    m.tabX = []
+    m.tabW = []
+    m.barHeight = 55
+    m.tabPadX = 22
+    m.barPad = 4
+
+    m.tabFont = m.top.findNode("tabFont").font
+    m.tabFont.size = fontApply.ThemeTextSize(23)
+    m.top.observeField("focusedChild", "onFocusChanged")
+    themeApply.ApplyToItem(m.top)
+end sub
+
+sub onTabsChanged()
+    m.labelRow.removeChildrenIndex(m.labelRow.getChildCount(), 0)
+    m.labels = []
+    m.tabX = []
+    m.tabW = []
+
+    tabs = m.top.tabs
+    if not isValidAndNotEmpty(tabs) then return
+
+    for each tabDef in tabs
+        label = CreateObject("roSGNode", "Label")
+        label.font = m.tabFont
+        label.text = tabDef.label
+        label.vertAlign = "center"
+        label.horizAlign = "center"
+        label.height = m.barHeight
+        m.labelRow.appendChild(label)
+        m.labels.push(label)
+    end for
+
+    ' A theme swaps in a wider font, so the tabs are measured only once the font
+    ' they will actually be drawn in is in place. Measuring first left the longer
+    ' labels trimmed to an ellipsis.
+    fontApply.ApplyThemeFonts(m.labelRow)
+
+    x = m.barPad
+    for each label in m.labels
+        width = label.boundingRect().width
+        if width <= 0 then width = Len(label.text) * 15
+        regionW = width + m.tabPadX * 2
+
+        label.width = regionW
+        label.translation = [x, m.barPad]
+        m.tabX.push(x)
+        m.tabW.push(regionW)
+        x += regionW
+    end for
+
+    m.barBg.width = x + m.barPad
+    m.barBg.height = m.barHeight + m.barPad * 2
+
+    if m.top.focusIndex >= tabs.count() then m.top.focusIndex = 0
+    updateHighlight()
+end sub
+
+' Only the focused tab stands out, on the thumb the other clients slide along
+' the track. Every other tab stays muted, including the one whose content is
+' showing.
+sub updateHighlight()
+    hasFocus = m.top.isInFocusChain()
+    for i = 0 to m.labels.count() - 1
+        label = m.labels[i]
+        if hasFocus and i = m.top.focusIndex
+            label.color = "#FFFFFF"
+        else
+            label.color = "#FFFFFFBF"
+        end if
+    end for
+
+    if hasFocus and m.top.focusIndex >= 0 and m.top.focusIndex < m.tabX.count()
+        moveFocusPill(m.top.focusIndex)
+    else
+        m.focusPill.visible = false
+        m.focusRing.visible = false
+    end if
+
+    themeApply.ApplyToItem(m.top)
+end sub
+
+sub moveFocusPill(index as integer)
+    targetX = m.tabX[index]
+    targetW = m.tabW[index]
+
+    m.focusRing.translation = [targetX, m.barPad]
+    m.focusRing.width = targetW
+    m.focusRing.height = m.barHeight
+    m.focusRing.blendColor = themeChrome.Token("inputBorderFocused", "#FFFFFF")
+    m.focusRing.visible = true
+
+    if not m.focusPill.visible
+        m.focusPill.translation = [targetX, m.barPad]
+        m.focusPill.width = targetW
+        m.focusPill.height = m.barHeight
+        m.focusPill.visible = true
+    else
+        m.pillPosInterp.keyValue = [m.focusPill.translation, [targetX, m.barPad]]
+        m.pillWidthInterp.keyValue = [m.focusPill.width, targetW]
+        m.pillAnim.control = "start"
+    end if
+end sub
+
+sub onFocusChanged()
+    updateHighlight()
+end sub
+
+sub focusTab(index as integer)
+    if index < 0 or index >= m.labels.count() then return
+    m.top.focusIndex = index
+    if m.top.expanded then m.top.selectedIndex = index
+    updateHighlight()
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+
+    if key = "right"
+        if m.top.focusIndex >= m.labels.count() - 1 then return true
+        focusTab(m.top.focusIndex + 1)
+        return true
+    else if key = "left"
+        if m.top.focusIndex <= 0 then return FocusSidebar(m.top)
+        focusTab(m.top.focusIndex - 1)
+        return true
+    else if key = "OK"
+        ' With Expanded Tabs off, pressing OK on the open tab collapses it.
+        if not m.top.expanded and m.top.selectedIndex = m.top.focusIndex
+            m.top.selectedIndex = -1
+        else
+            m.top.selectedIndex = m.top.focusIndex
+        end if
+        return true
+    else if key = "up" or key = "down"
+        m.top.escape = key
+        return true
+    end if
+
+    return false
+end function

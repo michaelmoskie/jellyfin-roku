@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="MediaBarTask" extends="Task">
+    <interface>
+        <field id="userId" type="string" />
+        <field id="contentType" type="string" value="both" />
+        <field id="sourceType" type="string" value="library" />
+        <field id="selectedLibraryIds" type="string" value="[]" />
+        <field id="selectedCollectionIds" type="string" value="[]" />
+        <field id="excludedGenreIds" type="string" value="[]" />
+        <field id="mediaBarData" type="assocarray" />
+        <field id="featuredCount" type="integer" value="15" />
+    </interface>
+</component>

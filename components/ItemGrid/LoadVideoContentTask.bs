@@ -18,6 +18,26 @@ sub init()
     m.top.functionName = "loadItems"
 end sub
 
+' Helper function to get playback info using appropriate server
+function getPlaybackInfo(id as string, mediaSourceId = "" as string, audioTrackIndex = -1 as integer, subtitleTrackIndex = SubtitleSelection.NOTSET as integer, startTimeTicks = 0 as longinteger, options = {} as object) as object
+    serverUrl = m.top.serverUrl
+    serverUserId = m.top.serverUserId
+    serverAuthToken = m.top.serverAuthToken
+
+    useMultiServer = isValidAndNotEmpty(serverUrl) and isValidAndNotEmpty(serverUserId) and isValidAndNotEmpty(serverAuthToken)
+
+    if useMultiServer
+        serverData = {
+            serverUrl: serverUrl,
+            userId: serverUserId,
+            authToken: serverAuthToken
+        }
+        return ItemPostPlaybackInfoForServer(serverData, id, mediaSourceId, audioTrackIndex, subtitleTrackIndex, startTimeTicks, options)
+    else
+        return ItemPostPlaybackInfo(id, mediaSourceId, audioTrackIndex, subtitleTrackIndex, startTimeTicks, options)
+    end if
+end function
+
 sub loadItems()
     ' Reset intro tracker in case task gets reused
     m.top.isIntro = false
@@ -71,7 +91,24 @@ end function
 
 sub LoadItems_AddVideoContent(video as object, mediaSourceId as dynamic, audio_stream_idx = 1 as integer)
 
-    meta = ItemMetaData(video.id)
+    ' Check if we have multi-server info
+    serverUrl = m.top.serverUrl
+    serverUserId = m.top.serverUserId
+    serverAuthToken = m.top.serverAuthToken
+
+    useMultiServer = isValidAndNotEmpty(serverUrl) and isValidAndNotEmpty(serverUserId) and isValidAndNotEmpty(serverAuthToken)
+
+
+    if useMultiServer
+        serverData = {
+            serverUrl: serverUrl,
+            userId: serverUserId,
+            authToken: serverAuthToken
+        }
+        meta = ItemMetaDataForServer(serverData, video.id)
+    else
+        meta = ItemMetaData(video.id)
+    end if
 
     if not isValid(meta)
         video.errorMsg = "Error loading metadata"
@@ -161,12 +198,13 @@ sub LoadItems_AddVideoContent(video as object, mediaSourceId as dynamic, audio_s
     if video.content.contenttype = 4
         if not hasOutroSegment
             if isValid(meta.json.RunTimeTicks)
-                if m.global.session.user.settings["playback.nextupbuttonseconds"].ToInt() <> 0
+                nextUpSeconds = (m.global.session.user.settings["playback.nextupbuttonseconds"] ?? "30").ToInt()
+                if nextUpSeconds <> 0
                     outroSegment = {
                         EndTicks: meta.json.RunTimeTicks,
                         Id: "",
                         ItemId: "",
-                        StartTicks: meta.json.RunTimeTicks - (m.global.session.user.settings["playback.nextupbuttonseconds"].ToInt() * 10000000),
+                        StartTicks: meta.json.RunTimeTicks - (nextUpSeconds * 10000000),
                         Type: "Outro"
                     }
 
@@ -216,7 +254,7 @@ sub LoadItems_AddVideoContent(video as object, mediaSourceId as dynamic, audio_s
 
             addNextEpisodesToQueue(video.showID, additionalPartsCount, episodeQueueLimit)
         else
-            gotoNextEpisodeAfterCurrentEnds = chainLookupReturn(m.global.session, "user.settings.`playback.showNextUpAfterFinish`", false)
+            gotoNextEpisodeAfterCurrentEnds = m.global.session.user.settings["playback.showNextUpAfterFinish"] ?? false
             if gotoNextEpisodeAfterCurrentEnds
                 addEpisodeToShowAtFinish(video.showID)
             end if
@@ -236,12 +274,20 @@ sub LoadItems_AddVideoContent(video as object, mediaSourceId as dynamic, audio_s
     end if
 
     ' PlayStart requires the time to be in seconds
-    video.content.PlayStart = int(playbackPosition / 10000000)
+    playStartSec = int(playbackPosition / 10000000)
+    if playStartSec > 0
+        resumeRewindSec = val(m.global.session.user.settings["playback.resumeRewind"] ?? "0")
+        if resumeRewindSec > 0
+            playStartSec = playStartSec - resumeRewindSec
+            if playStartSec < 0 then playStartSec = 0
+        end if
+    end if
+    video.content.PlayStart = playStartSec
 
     if not isValid(mediaSourceId) then mediaSourceId = video.id
     if meta.live then mediaSourceId = ""
 
-    m.playbackInfo = ItemPostPlaybackInfo(video.id, mediaSourceId, audio_stream_idx, m.top.selectedSubtitleIndex, playbackPosition)
+    m.playbackInfo = getPlaybackInfo(video.id, mediaSourceId, audio_stream_idx, m.top.selectedSubtitleIndex, playbackPosition)
     if not isValid(m.playbackInfo)
         video.errorMsg = "Error loading playback info"
         video.content = invalid
@@ -249,13 +295,21 @@ sub LoadItems_AddVideoContent(video as object, mediaSourceId as dynamic, audio_s
     end if
 
     ' If forceTranscode setting is enabled, but we haven't set the transcode codec yet, set it now and update Playback Info
-    if isStringEqual(PlaybackMethod.FORCETRANSCODEDISABLEREMUX, chainLookupReturn(m.global.session, "user.settings.`playback.media.forceTranscode`", PlaybackMethod.PLAYNORMALLY))
-        setTranscodeCodec(video, PlaybackMethod.FORCETRANSCODEDISABLEREMUX, mediaSourceId, audio_stream_idx, m.top.selectedSubtitleIndex, playbackPosition)
-    else if meta.live
-        forceTranscode = chainLookupReturn(m.global.session, "user.settings.`playback.media.forceTranscodeLiveTV`", PlaybackMethod.PLAYNORMALLY)
+    if isStringEqual(PlaybackMethod.FORCETRANSCODEDISABLEREMUX, m.global.session.user.settings["playback.media.forceTranscode"] ?? PlaybackMethod.PLAYNORMALLY)
+        if isStringEqual(m.global.queueManager.callFunc("getTranscodeCodec"), string.EMPTY)
+            for i = 0 to m.playbackInfo.MediaSources[0].MediaStreams.Count() - 1
+                if m.playbackInfo.MediaSources[0].MediaStreams[i].Type = "Video"
+                    m.global.queueManager.callFunc("setForceTranscode", PlaybackMethod.FORCETRANSCODEDISABLEREMUX, m.playbackInfo.MediaSources[0].MediaStreams[i].Codec)
+                    exit for
+                end if
+            end for
 
-        if not isStringEqual(forceTranscode, PlaybackMethod.PLAYNORMALLY)
-            setTranscodeCodec(video, forceTranscode, mediaSourceId, audio_stream_idx, m.top.selectedSubtitleIndex, playbackPosition)
+            m.playbackInfo = getPlaybackInfo(video.id, mediaSourceId, audio_stream_idx, m.top.selectedSubtitleIndex, playbackPosition)
+            if not isValid(m.playbackInfo)
+                video.errorMsg = "Error loading playback info"
+                video.content = invalid
+                return
+            end if
         end if
     end if
 
@@ -263,7 +317,19 @@ sub LoadItems_AddVideoContent(video as object, mediaSourceId as dynamic, audio_s
 
     ' Use either the user's selected subtitles, or the default track
     if m.top.selectedSubtitleIndex = SubtitleSelection.NOTSET
-        video.SelectedSubtitle = m.playbackInfo.MediaSources[0].LookupCI("DefaultSubtitleStreamIndex")
+        defaultSubtitleIndex = SubtitleSelection.NONE
+        if isValidAndNotEmpty(m.playbackInfo.MediaSources)
+            defaultSubtitleIndex = m.playbackInfo.MediaSources[0].LookupCI("DefaultSubtitleStreamIndex") ?? SubtitleSelection.NONE
+        end if
+
+        ' Ignore the server's default track if the user only wants text subtitles and it isn't one
+        if defaultSubtitleIndex <> SubtitleSelection.NONE and m.global.session.user.settings["playback.subs.onlytext"] = true
+            if not isSubtitleStreamText(defaultSubtitleIndex)
+                defaultSubtitleIndex = SubtitleSelection.NONE
+            end if
+        end if
+
+        video.SelectedSubtitle = defaultSubtitleIndex
     else
         video.SelectedSubtitle = m.top.selectedSubtitleIndex
     end if
@@ -316,13 +382,38 @@ sub LoadItems_AddVideoContent(video as object, mediaSourceId as dynamic, audio_s
 
     ' Direct play video
     attemptDirectPlaySetting = chainLookupReturn(m.global.session, "user.settings.attemptDirectPlay", false)
+    fully_external = false
+    subtitle_idx = m.top.selectedSubtitleIndex
 
     if video.directPlaySupported or (attemptDirectPlaySetting and not m.top.mustTranscode and not meta.live)
         video.isTranscoded = false
         addVideoContentURL(video, mediaSourceId, audio_stream_idx)
-        setCertificateAuthority(video.content)
-        video.content = authRequest(video.content)
-        return
+    else
+        if m.playbackInfo.MediaSources[0].TranscodingUrl = invalid
+            ' If server does not provide a transcode URL, display a message to the user
+            m.global.sceneManager.callFunc("userMessage", tr("Error Getting Playback Information"), tr("An error was encountered while playing this item. Server did not provide required transcoding data."))
+            video.errorMsg = "Error getting playback information"
+            video.content = invalid
+            return
+        end if
+
+        ' If transcoding and burnInSubtitlesIfTrancoding is enabled, zero out SubtitleProfiles
+        if chainLookupReturn(m.global, "session.user.settings.`playback.subs.burnin`", true)
+            m.playbackInfo = getPlaybackInfo(video.id, mediaSourceId, audio_stream_idx, subtitle_idx, playbackPosition, {
+                emptySubtitleProfiles: true
+            })
+        end if
+
+        ' Get transcoding reason
+        video.transcodeReasons = getTranscodeReasons(m.playbackInfo.MediaSources[0].TranscodingUrl)
+        ' Build URL using correct server for multi-server items
+        serverUrl = m.top.serverUrl
+        if isValidAndNotEmpty(serverUrl)
+            video.content.url = buildURLForServer(serverUrl, m.playbackInfo.MediaSources[0].TranscodingUrl)
+        else
+            video.content.url = buildURL(m.playbackInfo.MediaSources[0].TranscodingUrl)
+        end if
+        video.isTranscoded = true
     end if
 
     ' Stream media From URL
@@ -345,7 +436,7 @@ sub LoadItems_AddVideoContent(video as object, mediaSourceId as dynamic, audio_s
     video.subtitlesBurnedIn = false
 
     ' If transcoding and burnInSubtitlesIfTrancoding is enabled, zero out SubtitleProfiles
-    if chainLookupReturn(m.global, "session.user.settings.`playback.subs.burnin`", true) and meta.live = false and shouldBurnInSelectedSubtitle(m.playbackInfo, m.top.selectedSubtitleIndex)
+    if chainLookupReturn(m.global, "session.user.settings.`playback.subs.burnin`", true) and meta.live = false
         m.playbackInfo = ItemPostPlaybackInfo(video.id, mediaSourceId, audio_stream_idx, m.top.selectedSubtitleIndex, playbackPosition, {
             emptySubtitleProfiles: true
         })
@@ -360,7 +451,24 @@ sub LoadItems_AddVideoContent(video as object, mediaSourceId as dynamic, audio_s
     video.isTranscoded = true
 
     setCertificateAuthority(video.content)
-    video.content = authRequest(video.content)
+
+    if not fully_external
+        ' Use multi-server auth if applicable
+        serverUrl = m.top.serverUrl
+        serverUserId = m.top.serverUserId
+        serverAuthToken = m.top.serverAuthToken
+
+        if isValidAndNotEmpty(serverUrl) and isValidAndNotEmpty(serverAuthToken)
+            serverData = {
+                serverUrl: serverUrl,
+                userId: serverUserId,
+                authToken: serverAuthToken
+            }
+            video.content = authRequestForServer(video.content, serverData)
+        else
+            video.content = authRequest(video.content)
+        end if
+    end if
 end sub
 
 sub setTranscodeCodec(video as object, forceTranscode as string, mediaSourceId as dynamic, audio_stream_idx as integer, subtitle_idx as integer, playbackPosition as longinteger)
@@ -386,7 +494,28 @@ function isHTTPStream() as boolean
     return true
 end function
 
+' isSubtitleStreamText: Reports if the subtitle stream with the given server-side index is text based
+'
+' @param {integer} subtitleIndex - server-side index of the subtitle stream
+' @return {boolean} true when the stream is a text subtitle stream, false when it isn't or can't be found
+function isSubtitleStreamText(subtitleIndex as integer) as boolean
+    if not isValidAndNotEmpty(m.playbackInfo.MediaSources) then return false
+    if not isValidAndNotEmpty(m.playbackInfo.MediaSources[0].MediaStreams) then return false
+
+    for each stream in m.playbackInfo.MediaSources[0].MediaStreams
+        if stream.Index = subtitleIndex
+            return stream.IsTextSubtitleStream = true
+        end if
+    end for
+
+    return false
+end function
+
 sub addVideoContentURL(video, mediaSourceId, audio_stream_idx)
+    ' Get multi-server info if available
+    serverUrl = m.top.serverUrl
+    useMultiServer = isValidAndNotEmpty(serverUrl)
+
     protocol = LCase(m.playbackInfo.MediaSources[0].Protocol)
     if protocol <> "file"
         uri = ParsedUrl(m.playbackInfo.MediaSources[0].Path)
@@ -394,7 +523,11 @@ sub addVideoContentURL(video, mediaSourceId, audio_stream_idx)
             ' if the domain of the URI is local to the server,
             ' create a new URI by appending the received path to the server URL
             ' later we will substitute the users provided URL for this case
-            video.content.url = buildURL(uri.path)
+            if useMultiServer
+                video.content.url = buildURLForServer(serverUrl, uri.path)
+            else
+                video.content.url = buildURL(uri.path)
+            end if
         else
             video.content.url = m.playbackInfo.MediaSources[0].Path
         end if
@@ -410,7 +543,11 @@ sub addVideoContentURL(video, mediaSourceId, audio_stream_idx)
             params.MediaSourceId = mediaSourceId
         end if
 
-        video.content.url = buildURL(Substitute("Videos/{0}/stream", video.id), params)
+        if useMultiServer
+            video.content.url = buildURLForServer(serverUrl, Substitute("Videos/{0}/stream", video.id), params)
+        else
+            video.content.url = buildURL(Substitute("Videos/{0}/stream", video.id), params)
+        end if
     end if
 end sub
 
@@ -516,8 +653,9 @@ function getContainerType(meta as object) as string
     return container
 end function
 
-' Add next episodes to the playback queue
 sub addNextEpisodesToQueue(showID, additionalPartsCount as integer, queueLimit as integer)
+    ' Cap next episodes limit to 15 to conserve memory on Roku devices
+    if queueLimit > 15 then queueLimit = 15
     ' Don't queue next episodes if we already have a playback queue
     maxQueueCount = additionalPartsCount + 1
 
@@ -545,19 +683,54 @@ sub addNextEpisodesToQueue(showID, additionalPartsCount as integer, queueLimit a
     end if
 
     url = Substitute("Shows/{0}/Episodes", showID)
-    urlParams = { "UserId": m.global.session.user.id }
-    urlParams.Append({ "StartItemId": videoID })
-    urlParams.Append({ "Limit": queueLimit + 1 })
-    urlParams.Append({ "isMissing": false })
+    urlParams = {
+        "UserId": m.global.session.user.id,
+        "isMissing": false,
+        "Fields": "PrimaryImageAspectRatio,BasicSyncInfo"
+    }
     resp = APIRequest(url, urlParams)
     data = getJson(resp)
 
-    if isValid(data) and data.Items.Count() > 1
-        for i = 1 to data.Items.Count() - 1
-            data.Items[i].startingPoint = 0
-            m.global.queueManager.callFunc("push", data.Items[i])
-        end for
+    if not isChainValid(data, "Items") or data.Items.Count() = 0 then return
+    episodes = data.Items
+
+    targetIndex = -1
+    for i = 0 to episodes.Count() - 1
+        ep = episodes[i]
+        epId = ep.id ?? ep.Id
+        if not isValidAndNotEmpty(epId) and isValid(ep.json)
+            epId = ep.json.id ?? ep.json.Id
+        end if
+        if isStringEqual(LCase(epId), LCase(videoID))
+            targetIndex = i
+            exit for
+        end if
+    end for
+
+    if targetIndex < 0 then return
+
+    ' Calculate queue window (up to 5 previous episodes and up to queueLimit next episodes)
+    startIndex = targetIndex - 5
+    if startIndex < 0 then startIndex = 0
+
+    endIndex = targetIndex + queueLimit
+    if endIndex >= episodes.Count() then endIndex = episodes.Count() - 1
+
+    windowQueue = []
+    if m.top.isIntro
+        introItem = m.global.queueManager.callFunc("getItemByIndex", 0)
+        if isValid(introItem) then windowQueue.push(introItem)
     end if
+
+    for i = startIndex to endIndex
+        windowQueue.push(episodes[i])
+    end for
+
+    m.global.queueManager.callFunc("set", windowQueue)
+
+    newPosition = targetIndex - startIndex
+    if m.top.isIntro then newPosition = newPosition + 1
+    m.global.queueManager.callFunc("setPosition", newPosition)
 end sub
 
 ' Add episode to show at finish of current episode
@@ -596,7 +769,9 @@ end sub
 function sortSubtitles(MediaStreams)
     tracks = { "forced": [], "default": [], "normal": [], "text": [] }
     'Too many args for using substitute
-    prefered_lang = m.global.session.user.configuration.SubtitleLanguagePreference
+    prefered_lang = getPreferredLanguage("playback.subs.language") ?? ""
+    fallback_lang = getPreferredLanguage("playback.subs.fallbackLanguage") ?? ""
+    preferSdh = toBoolean(m.global.session.user.settings["playback.preferSdhSubtitles"] ?? false)
     for each stream in MediaStreams
         if stream.type = "Subtitle"
 
@@ -604,6 +779,9 @@ function sortSubtitles(MediaStreams)
             if isValid(stream.DeliveryUrl)
                 url = buildURL(stream.DeliveryUrl)
             end if
+
+            ' stream is rebuilt below without these fields, so read them while they are still here
+            isSdhTrack = toBoolean(chainLookupReturn(stream, "IsHearingImpaired", false)) or instr(1, LCase(chainLookupReturn(stream, "displaytitle", "")), "sdh") > 0
 
             stream = {
                 "Track": { "Language": stream.language, "Description": stream.displaytitle, "TrackName": url },
@@ -623,7 +801,11 @@ function sortSubtitles(MediaStreams)
                 trackType = "normal"
             end if
 
-            if prefered_lang <> "" and prefered_lang = stream.Track.Language
+            matchesLanguage = prefered_lang = "" or prefered_lang = stream.Track.Language
+            if not matchesLanguage and fallback_lang <> ""
+                matchesLanguage = fallback_lang = stream.Track.Language
+            end if
+            if matchesLanguage and (prefered_lang <> "" or fallback_lang <> "" or (preferSdh and isSdhTrack))
                 tracks[trackType].unshift(stream)
 
                 if stream.IsTextSubtitleStream
@@ -647,8 +829,8 @@ end function
 
 function FindPreferredAudioStream(streams as dynamic) as integer
     preferredAudioTrackIndex = m.global.queueManager.callFunc("getPreferredAudioTrackIndex")
-    preferredLanguage = m.global.session.user.Configuration.AudioLanguagePreference
-    playDefault = chainLookupReturn(m.global.session, "user.Configuration.PlayDefaultAudioTrack", false)
+    preferredLanguage = getPreferredLanguage("playback.audioPreferredLanguage")
+    playDefault = chainLookupReturn(m.global.session, "user.settings.`playback.playDefaultAudioTrack`", false)
 
     ' Do we already have the MediaStreams or not?
     if not isValidAndNotEmpty(streams)
@@ -673,6 +855,19 @@ function FindPreferredAudioStream(streams as dynamic) as integer
 
     firstAudioTrack = -1
 
+    preferAudioDesc = toBoolean(m.global.session.user.settings["playback.preferAudioDescription"] ?? false)
+    if preferAudioDesc
+        for i = 0 to streams.Count() - 1
+            if LCase(streams[i].Type) = "audio"
+                if toBoolean(chainLookupReturn(streams[i], "IsAudioDescription", false)) or instr(1, LCase(chainLookupReturn(streams[i], "DisplayTitle", "")), "audio description") > 0
+                    if not isValid(preferredLanguage) or isStringEqual(chainLookupReturn(streams[i], "Language", invalid), preferredLanguage)
+                        return i
+                    end if
+                end if
+            end if
+        end for
+    end if
+
     ' No user selection and not configured to play the default, how about a preferred language?
     if isValid(preferredLanguage)
         for i = 0 to streams.Count() - 1
@@ -680,6 +875,20 @@ function FindPreferredAudioStream(streams as dynamic) as integer
                 if firstAudioTrack < 0 then firstAudioTrack = i
 
                 if isStringEqual(chainLookupReturn(streams[i], "Language", invalid), preferredLanguage)
+                    return i
+                end if
+            end if
+        end for
+    end if
+
+    ' Nothing in the preferred language, so try the fallback before giving up
+    fallbackLanguage = getPreferredLanguage("playback.audioFallbackLanguage")
+    if isValid(fallbackLanguage)
+        for i = 0 to streams.Count() - 1
+            if LCase(streams[i].Type) = "audio"
+                if firstAudioTrack < 0 then firstAudioTrack = i
+
+                if isStringEqual(chainLookupReturn(streams[i], "Language", invalid), fallbackLanguage)
                     return i
                 end if
             end if

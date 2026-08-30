@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="ChapterCard" extends="Group">
+    <children>
+        <Rectangle id="thumbBg" width="300" height="169" color="#1A1D22" />
+        <Poster id="thumb" width="300" height="169" loadDisplayMode="scaleToZoom" />
+        <Rectangle id="timeBg" width="72" height="28" translation="[220, 133]" color="#000000" opacity="0.7" />
+        <Label id="time" width="72" height="28" translation="[220, 133]" horizAlign="center"
+            vertAlign="center" color="#FFFFFF" font="font:SmallestSystemFont" />
+        <Label id="name" width="300" height="30" translation="[0, 176]" color="#CCCCCC"
+            font="font:SmallSystemFont" />
+        <Poster id="focusRing" width="300" height="169" uri="pkg:/images/hd_focus.9.png" visible="false" />
+    </children>
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChanged" />
+        <field id="itemHasFocus" type="boolean" onChange="onFocusChanged" />
+        <field id="drawFocusFeedback" type="boolean" value="false" />
+    </interface>
+</component>

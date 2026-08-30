@@ -1,54 +1,144 @@
 <?xml version="1.0" encoding="utf-8"?>
 <component name="SigninScene" extends="JFScreen">
   <children>
-    <Text
-      text="Sign In"
-      horizAlign="center"
-      font="font:LargeSystemFont"
-      height="100"
+    <!-- Background -->
+    <Poster
+      id="background"
+      uri="pkg:/images/bg_login_gradient.png"
       width="1920"
-      translation="[0, 100]" />
+      height="1080"
+      translation="[0, 0]" />
 
-    <Poster uri="pkg:/images/baseline_person_white_48dp.png" id="overlayCurrentUserProfileImage" width="256" height="256" loadDisplayMode="scaleToZoom" translation="[832, 190]" />
-
-    <Rectangle id="errorContainer" visible="false" width="600" height="60" translation="[660, 386]">
-      <Text id="errorMessage" text="" wrap="true" width="600" font="font:MediumSystemFont" horizAlign="center" translation="[10, 15]" />
+    <Rectangle translation="[710, 70]" width="500" height="113" color="0x00000000">
+      <Poster
+        id="logo"
+        uri="pkg:/images/logo.png"
+        width="500"
+        height="113" />
     </Rectangle>
 
-    <Rectangle id="signInFormContainer" color="#101420" width="870" height="280" translation="[525, 466]">
-      <FormList id="configOptions" translation="[60, 40]" itemSpacing="[0, 50]" />
-    </Rectangle>
+    <Poster
+      id="signInGroup"
+      translation="[360, 215]"
+      width="1200"
+      height="600"
+      uri="pkg:/images/surface.9.png">
 
-    <CheckList
-      id="saveCredentials"
-      checkedState="[true]"
-      translation="[560, 771]"
-      focusFootprintBitmapUri=""
-      drawFocusFeedback="false">
-      <ContentNode role="content">
-        <ContentNode title="Save Credentials?" />
-      </ContentNode>
-    </CheckList>
+      <Rectangle id="errorContainer" visible="false" width="600" height="60" translation="[305, 625]">
+        <Text id="errorMessage" text="" wrap="true" width="600" font="font:SmallSystemFont" horizAlign="center" color="0xffe0e0" translation="[10, 13]" />
+      </Rectangle>
 
-    <StandardButton
-      id="submit"
-      text="Submit"
-      height="85"
-      width="350"
-      translation="[595,900]" />
+      <Label
+        text="Sign In"
+        horizAlign="center"
+        width="1200"
+        height="35"
+        font="font:MediumBoldSystemFont"
+        color="0xFFFFFFFF"
+        translation="[0, 45]" />
 
-    <StandardButton
-      id="quickConnect"
-      text="Quick Connect"
-      height="85"
-      width="350"
-      translation="[975,900]" />
+      <Label id="connectingTo"
+        text="Connecting to -----"
+        horizAlign="center"
+        width="1200"
+        height="35"
+        font="font:TinySystemFont"
+        color="0x9CA3AFFF"
+        translation="[0, 90]" />
+
+      <StandardButton
+        id="quickConnect"
+        text="Quick Connect"
+        height="72"
+        width="270"
+        translation="[318, 145]"
+        fontSize="30"
+        outline="true"
+        outlineUri="pkg:/images/playback/outline41.9.png" />
+
+      <StandardButton
+        id="passwordTab"
+        text="Password"
+        height="72"
+        width="270"
+        translation="[612, 145]"
+        fontSize="30"
+        outline="true"
+        outlineUri="pkg:/images/playback/outline41.9.png" />
+
+      <Rectangle id="signInFormContainer" color="#ffffff00" width="1120" height="280" translation="[40, 170]">
+
+        <FormList id="configOptions" translation="[36, 65]" itemSpacing="[0, 20]" />
+
+        <StandardButton
+          id="submit"
+          text="Sign In"
+          height="84"
+          width="548"
+          translation="[572, 335]"
+          fontSize="30"
+          outline="true"
+          outlineUri="pkg:/images/playback/outline41.9.png" />
+
+        <StandardButton
+          id="back"
+          text="Back"
+          height="84"
+          width="548"
+          translation="[0, 335]"
+          fontSize="30"
+          outline="true"
+          outlineUri="pkg:/images/playback/outline41.9.png" />
+      </Rectangle>
+
+      <Group id="quickConnectGroup" visible="false" translation="[40, 170]">
+        <Label
+          text="Enter this code on your server's web dashboard:"
+          width="1120"
+          height="35"
+          font="font:SmallestSystemFont"
+          color="0xFFFFFFFF"
+          horizAlign="center"
+          translation="[0, 55]" />
+        <Label
+          id="quickConnectCode"
+          text=""
+          width="1120"
+          height="80"
+          font="font:LargestSystemFont"
+          color="0x00A4DCFF"
+          horizAlign="center"
+          translation="[0, 110]" />
+        <Spinner scale="[0.4, 0.4]" translation="[535, 220]" />
+        <Label
+          id="quickConnectStatus"
+          text="Waiting for authorization..."
+          width="1120"
+          height="35"
+          font="font:TinySystemFont"
+          color="0x9CA3AFFF"
+          horizAlign="center"
+          translation="[0, 290]" />
+        <StandardButton
+          id="quickConnectBack"
+          text="Back"
+          height="84"
+          width="1120"
+          translation="[0, 335]"
+          fontSize="30"
+          outline="true"
+          outlineUri="pkg:/images/playback/outline41.9.png" />
+      </Group>
+
+    </Poster>
 
     <Timer id="quickConnectTimer" duration="3" repeat="true" />
   </children>
   <interface>
     <field id="user" type="string" onchange="onUserChange" value="" />
-    <field id="profileImageUri" type="string" onchange="onProfileImageUriChange" value="" alwaysNotify="true" />
     <field id="alert" type="string" onchange="onAlertChange" value="" />
+    <field id="quickConnectJson" type="assocarray" />
+    <field id="quickConnectAuthenticated" type="boolean" alwaysNotify="true" />
+    <field id="showQuickConnect" type="boolean" onchange="onShowQuickConnect" />
   </interface>
 </component>

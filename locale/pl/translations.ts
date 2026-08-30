@@ -2621,5 +2621,25 @@
         <source>Are you sure you want to exit Jellyfin?</source>
         <translation>Czy na pewno chcesz opuścić Jellyfin?</translation>
     </message>
+    <message>
+        <source>Your search returned more than 50 tags. Rework your search to reduce the number of matching tags.</source>
+        <translation>Twoje wyszukiwanie zwróciło ponad 50 tagów. Zmień wyszukiwanie, aby zmniejszyć liczbę pasujących tagów.</translation>
+    </message>
+    <message>
+        <source>Search Tags</source>
+        <translation>Wyszukaj tagi</translation>
+    </message>
+    <message>
+        <source>Your search returned no tags.</source>
+        <translation>Wyszukiwanie nie zwróciło żadnych tagów.</translation>
+    </message>
+    <message>
+        <source>Search Term</source>
+        <translation>Wyszukaj określenie</translation>
+    </message>
+    <message>
+        <source>Starts With</source>
+        <translation>Zaczyna się od</translation>
+    </message>
 </context>
 </TS>

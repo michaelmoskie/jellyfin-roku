@@ -1,15 +1,15 @@
 ## Channel Details
 
-title=jellyfin
-major_version=3
-minor_version=2
-build_version=2
+title=Moonfin
+major_version=1
+minor_version=5
+build_version=1
 
 ### Main Menu Icons / Channel Poster Artwork
 
-mm_icon_focus_fhd=pkg:/images/channel-poster_fhd_dev.png
-mm_icon_focus_hd=pkg:/images/channel-poster_hd_dev.png
-mm_icon_focus_sd=pkg:/images/channel-poster_sd_dev.png
+mm_icon_focus_fhd=pkg:/images/channel-poster_fhd.png
+mm_icon_focus_hd=pkg:/images/channel-poster_hd.png
+mm_icon_focus_sd=pkg:/images/channel-poster_sd.png
 
 ### Splash Screen + Loading Screen Artwork
 
@@ -24,6 +24,7 @@ ui_resolutions=fhd
 confirm_partner_button=1
 
 supports_input_launch=1
+rsg_version=1.3
 
 bs_const=printReg=false
 

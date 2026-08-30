@@ -71,9 +71,56 @@ function ItemPostPlaybackInfo(id as string, mediaSourceId = "" as string, audioT
     return postJson(req, FormatJson(body))
 end function
 
+function ItemPostPlaybackInfoForServer(serverData as object, id as string, mediaSourceId = "" as string, audioTrackIndex = -1 as integer, subtitleTrackIndex = SubtitleSelection.NOTSET as integer, startTimeTicks = 0 as longinteger, options = {} as object)
+    if not isValid(serverData) then return invalid
+
+    transcodeCodec = string.EMPTY
+
+    if isStringEqual(m.global.queueManager.callFunc("getForceTranscode"), PlaybackMethod.FORCETRANSCODEDISABLEREMUX)
+        transcodeCodec = m.global.queueManager.callFunc("getTranscodeCodec")
+    end if
+
+    burnInSubtitles = chainLookupReturn(m.global, "session.user.settings.`playback.subs.burnin`", true)
+    body = {
+        "DeviceProfile": getDeviceProfile(transcodeCodec),
+        "AlwaysBurnInSubtitleWhenTranscoding": burnInSubtitles
+    }
+    params = {
+        "UserId": serverData.userId,
+        "StartTimeTicks": startTimeTicks,
+        "IsPlayback": true,
+        "AutoOpenLiveStream": true,
+        "MaxStreamingBitrate": "140000000",
+        "MaxStaticBitrate": "140000000"
+    }
+
+    if chainLookupReturn(options, "emptySubtitleProfiles", false)
+        body.DeviceProfile.SubtitleProfiles = []
+    end if
+
+    if mediaSourceId <> ""
+        params.MediaSourceId = mediaSourceId
+    else
+        params.EnableDirectPlay = false
+    end if
+
+    if audioTrackIndex > -1 then params.AudioStreamIndex = audioTrackIndex
+
+    ' Only pass SubtitleStreamIndex if user has selected something
+    if subtitleTrackIndex <> SubtitleSelection.NOTSET
+        params.SubtitleStreamIndex = subtitleTrackIndex
+    end if
+
+    req = APIRequestForServer(serverData.serverUrl, serverData.userId, serverData.authToken, Substitute("Items/{0}/PlaybackInfo", id), params)
+    if not isValid(req) then return invalid
+
+    req.SetRequest("POST")
+    return postJson(req, FormatJson(body))
+end function
+
+' Search across all libraries
 function searchMedia(query as string)
     if query <> ""
-        ' Everything except Live TV shows (but including TV Channels)
         data = api.items.Get({
             "userid": m.global.session.user.id,
             "searchTerm": query,
@@ -94,14 +141,11 @@ function searchMedia(query as string)
         })
 
         if isValid(data) and isValid(people)
-            ' we've got both regular stuff and people
             data.Items.Append(people.Items)
         else if isValid(people)
-            ' we only have people
             data = people
         end if
 
-        ' Separate query so that we can get all programs just like the Web Client
         liveTv = api.items.Get({
             "userid": m.global.session.user.id,
             "searchTerm": query,
@@ -118,20 +162,22 @@ function searchMedia(query as string)
         })
 
         if isValid(data) and isValid(liveTv)
-            ' we've got both regular stuff and live tv
             data.Items.Append(liveTv.Items)
         else if isValid(liveTv)
-            ' we only have live tv
             data = liveTv
         else if not isValid(data)
-            ' we have neither
-            return []
+            return { Items: [], TotalRecordCount: 0 }
         end if
 
         results = []
         for each item in data.Items
             tmp = CreateObject("roSGNode", "SearchData")
-            tmp.image = PosterImage(item.id)
+
+            imgNode = CreateObject("roSGNode", "ImageData")
+            imgNode.imagetype = ImageType.PRIMARY
+            imgNode.url = ImageURL(item.id, ImageType.PRIMARY, { "maxWidth": 400, "maxHeight": 250, "quality": "90" })
+            tmp.image = imgNode
+
             tmp.id = item.LookupCI("id")
             tmp.title = item.LookupCI("name")
             tmp.AlbumArtist = item.LookupCI("AlbumArtist")
@@ -153,16 +199,13 @@ function searchMedia(query as string)
         data.Items = results
         return data
     end if
-    return []
+    return { Items: [], TotalRecordCount: 0 }
 end function
 
 ' MetaData about an item
 function ItemMetaData(id as string)
-    url = Substitute("Items/{0}", id)
-    resp = APIRequest(url, {
-        userid: m.global.session.user.id,
-        fields: "Chapters,Trickplay"
-    })
+    url = Substitute("Users/{0}/Items/{1}", m.global.session.user.id, id)
+    resp = APIRequest(url, { "fields": "Chapters,Trickplay,Taglines" })
     data = getJson(resp)
     if not isValidAndNotEmpty(data) then return invalid
 
@@ -279,10 +322,103 @@ function ItemMetaData(id as string)
         ' for this data type at the moment, so just return the json.
         return data
     else
-        print "Items.brs::ItemMetaData processed unhandled type: " data.type
         ' Return json if we don't know what it is
         return data
     end if
+end function
+
+function ItemMetaDataForServer(serverData as object, id as string)
+    if not isValid(serverData) then return invalid
+    if not isValid(serverData.serverUrl) then return invalid
+    if not isValid(serverData.userId) then return invalid
+    if not isValid(serverData.authToken) then return invalid
+
+    url = Substitute("Users/{0}/Items/{1}", serverData.userId, id)
+    req = APIRequestForServer(serverData.serverUrl, serverData.userId, serverData.authToken, url, { "fields": "Chapters,Trickplay,Taglines" })
+    if not isValid(req) then return invalid
+
+    data = getJson(req)
+    if data = invalid then return invalid
+
+    data._serverUrl = serverData.serverUrl
+    data._userId = serverData.userId
+    data._authToken = serverData.authToken
+    if isValid(serverData.serverId) then data._serverId = serverData.serverId
+    if isValid(serverData.serverName) then data._serverName = serverData.serverName
+
+    imgParams = {}
+    if data.type <> "Audio"
+        if data.UserData <> invalid and data.UserData.PlayedPercentage <> invalid
+            param = { "PercentPlayed": data.UserData.PlayedPercentage }
+            imgParams.Append(param)
+        end if
+    end if
+
+    baseUrl = serverData.serverUrl
+    if baseUrl.right(1) = "/"
+        baseUrl = baseUrl.left(baseUrl.len() - 1)
+    end if
+
+    if data.type = "Movie" or data.type = "MusicVideo"
+        tmp = CreateObject("roSGNode", "MovieData")
+        tmp.image = PosterImageForServer(baseUrl, data.id, imgParams)
+        tmp.json = data
+        return tmp
+    else if data.type = "Series"
+        tmp = CreateObject("roSGNode", "SeriesData")
+        tmp.image = PosterImageForServer(baseUrl, data.id, {})
+        tmp.json = data
+        return tmp
+    else if data.type = "Episode"
+        tmp = CreateObject("roSGNode", "TVEpisodeData")
+        tmp.image = PosterImageForServer(baseUrl, data.id, imgParams)
+        tmp.json = data
+        return tmp
+    else if data.type = "Recording"
+        tmp = CreateObject("roSGNode", "RecordingData")
+        tmp.image = PosterImageForServer(baseUrl, data.id, imgParams)
+        tmp.json = data
+        return tmp
+    else if data.type = "BoxSet" or data.type = "Playlist"
+        tmp = CreateObject("roSGNode", "CollectionData")
+        tmp.image = PosterImageForServer(baseUrl, data.id, imgParams)
+        tmp.json = data
+        return tmp
+    else if data.type = "Season"
+        tmp = CreateObject("roSGNode", "TVSeasonData")
+        tmp.image = PosterImageForServer(baseUrl, data.id, {})
+        tmp.json = data
+        return tmp
+    else if data.type = "Video"
+        tmp = CreateObject("roSGNode", "VideoData")
+        tmp.image = PosterImageForServer(baseUrl, data.id, {})
+        tmp.json = data
+        return tmp
+    else if data.type = "Person"
+        tmp = CreateObject("roSGNode", "PersonData")
+        tmp.image = PosterImageForServer(baseUrl, data.id, { "MaxWidth": "300", "MaxHeight": "450" })
+        tmp.json = data
+        return tmp
+    else
+        ' Return json if we don't know what it is
+        return data
+    end if
+end function
+
+function PosterImageForServer(serverBaseUrl as string, id as string, params = {} as object) as dynamic
+    if not isValidAndNotEmpty(id) then return invalid
+
+    imgUrl = serverBaseUrl + "/Items/" + id + "/Images/Primary"
+    paramString = "?maxWidth=400&quality=90"
+
+    for each key in params
+        paramString = paramString + "&" + key + "=" + params[key].toStr()
+    end for
+
+    tmp = CreateObject("roSGNode", "ImageData")
+    tmp.imagetype = "Primary"
+    tmp.url = imgUrl + paramString
+    return tmp
 end function
 
 ' Music Artist Data
@@ -665,6 +801,64 @@ function TVEpisodes(showId as string, seasonId as string) as dynamic
     return data
 end function
 
+function TVEpisodesForServer(serverData as object, showId as string, seasonId as string) as dynamic
+    if not isValid(serverData) then return invalid
+    if not isValid(serverData.serverUrl) then return invalid
+    if not isValid(serverData.userId) then return invalid
+    if not isValid(serverData.authToken) then return invalid
+
+    url = Substitute("Shows/{0}/Episodes", showId)
+    params = {
+        "seasonId": seasonId,
+        "UserId": serverData.userId,
+        "fields": "MediaStreams,MediaSources,UserData"
+    }
+
+    req = APIRequestForServer(serverData.serverUrl, serverData.userId, serverData.authToken, url, params)
+    if not isValid(req) then return invalid
+
+    data = getJson(req)
+    if data = invalid or data.Items = invalid then return invalid
+
+    baseUrl = serverData.serverUrl
+    if baseUrl.right(1) = "/"
+        baseUrl = baseUrl.left(baseUrl.len() - 1)
+    end if
+
+    results = []
+    for each item in data.Items
+        tmp = CreateObject("roSGNode", "TVEpisodeData")
+        tmp.image = PosterImageForServer(baseUrl, item.id, { "maxWidth": 400, "maxheight": 250 })
+        if isValid(tmp.image)
+            tmp.image.posterDisplayMode = "scaleToZoom"
+        end if
+
+        item._serverUrl = serverData.serverUrl
+        item._userId = serverData.userId
+        item._authToken = serverData.authToken
+        if isValid(serverData.serverId) then item._serverId = serverData.serverId
+        if isValid(serverData.serverName) then item._serverName = serverData.serverName
+
+        tmp.json = item
+
+        tmpMetaData = ItemMetaDataForServer(serverData, item.id)
+        if isChainValid(tmpMetaData, "json.UserData")
+            if not isChainValid(tmp, "json.UserData")
+                tmp.json.UserData = tmpMetaData.json.UserData
+            else if not isValid(tmp.json.UserData.PlaybackPositionTicks) and isValid(tmpMetaData.json.UserData.PlaybackPositionTicks)
+                tmp.json.UserData.PlaybackPositionTicks = tmpMetaData.json.UserData.PlaybackPositionTicks
+            end if
+        end if
+
+        if isValid(tmpMetaData) and isValid(tmpMetaData.overview)
+            tmp.overview = tmpMetaData.overview
+        end if
+        results.push(tmp)
+    end for
+    data.Items = results
+    return data
+end function
+
 ' Returns a list of extra features for a TV Show season
 ' Accepts a string that is a TV Show season id
 function TVSeasonExtras(seasonId as string) as dynamic
@@ -675,17 +869,10 @@ function TVSeasonExtras(seasonId as string) as dynamic
     results = []
     for each item in data
         tmp = CreateObject("roSGNode", "TVEpisodeData")
-        tmp.image = PosterImage(item.id, { "maxWidth": 400, "maxheight": 250 })
+        tmp.image = ImageURL(item.id, ImageType.PRIMARY, { "maxWidth": 400, "maxHeight": 250 })
         tmp.json = item
-
-        ' Force item type to Video so episode auto queue is not attempted
         tmp.type = "Video"
-        tmpMetaData = ItemMetaData(item.id)
-
-        ' Validate meta data
-        if isValid(tmpMetaData) and isValid(tmpMetaData.overview)
-            tmp.overview = tmpMetaData.overview
-        end if
+        tmp.overview = item.LookupCI("overview")
         results.push(tmp)
     end for
 

@@ -43,7 +43,7 @@ sub init()
 
     m.sectionScroller = m.top.findNode("sectionScroller")
     m.sectionScroller.observeField("displayedIndex", "onSectionScrollerChange")
-    m.overhang = m.top.getScene().findNode("overhang")
+    m.overhang = getActiveNav(m.top.getScene())
 
     ' Load background image
     m.LoadBackdropImageTask = CreateObject("roSGNode", "LoadItemsTask")
@@ -74,7 +74,7 @@ sub onSimilarArtistLoaded()
         return
     end if
 
-    similarArtistData = CreateObject("roSGNode", "ContentNode")
+    similarArtistData = createSGNode("ContentNode")
     similarArtistData.appendChildren(data)
 
     m.similarArtist.content = similarArtistData
@@ -92,7 +92,7 @@ sub onSectionScrollerChange()
     m.overhang.isVisible = (m.sectionScroller.displayedIndex = 0)
 end sub
 
-sub OnScreenShown()
+sub OnScreenShown(_isReturning = false as boolean)
     m.sectionScroller.focus = true
 
     if m.sectionScroller.displayedIndex = 0
@@ -118,41 +118,15 @@ sub OnScreenHidden()
 end sub
 
 sub onAlbumsEscape()
-    if m.albums.escape = "up"
-        m.sectionNavigation.selected = m.sectionScroller.displayedIndex - 1
-    else if m.albums.escape = "left"
-        m.sectionNavigation.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.sectionNavigation
-    else if m.albums.escape = "down"
-        if m.sectionScroller.displayedIndex + 1 < m.sectionNavigation.getChildCount()
-            m.sectionNavigation.selected = m.sectionScroller.displayedIndex + 1
-        end if
-    end if
+    handleSectionNavigationEscape(m.albums.escape, m.sectionNavigation, m.sectionScroller)
 end sub
 
 sub onAppearsOnEscape()
-    if m.appearsOn.escape = "up"
-        m.sectionNavigation.selected = m.sectionScroller.displayedIndex - 1
-    else if m.appearsOn.escape = "left"
-        m.sectionNavigation.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.sectionNavigation
-    else if m.appearsOn.escape = "down"
-        if m.sectionScroller.displayedIndex + 1 < m.sectionNavigation.getChildCount()
-            m.sectionNavigation.selected = m.sectionScroller.displayedIndex + 1
-        end if
-    end if
+    handleSectionNavigationEscape(m.appearsOn.escape, m.sectionNavigation, m.sectionScroller)
 end sub
 
 sub onSimilarArtistEscape()
-    if m.similarArtist.escape = "up"
-        m.sectionNavigation.selected = m.sectionScroller.displayedIndex - 1
-    else if m.similarArtist.escape = "left"
-        m.sectionNavigation.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.sectionNavigation
-    end if
+    handleSectionNavigationEscape(m.similarArtist.escape, m.sectionNavigation, m.sectionScroller)
 end sub
 
 ' Setup playback buttons, default to Play button selected
@@ -214,7 +188,6 @@ end sub
 
 sub setScreenTitle(json)
     if isValid(json)
-        m.top.overhangTitle = json.name
     end if
 end sub
 
@@ -280,8 +253,8 @@ sub dscrShowFocus()
 end sub
 
 sub createFullDscrDlg()
-    if isAllValid([m.top.overhangTitle, m.dscr.text])
-        m.global.sceneManager.callFunc("standardDialog", m.top.overhangTitle, { data: ["<p>" + m.dscr.text + "</p>"] })
+    if isAllValid([m.artistName, m.dscr.text])
+        m.global.sceneManager.callFunc("standardDialog", m.artistName, { data: ["<p>" + m.dscr.text + "</p>"] })
     end if
 end sub
 

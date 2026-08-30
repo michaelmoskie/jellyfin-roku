@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="GenresScreen" extends="JFScreen">
+    <children>
+        <!-- Page title -->
+        <Text id="pageTitle" translation="[96, 20]" font="font:LargeBoldSystemFont" color="#FFFFFF" />
+
+        <!-- Genre card grid -->
+        <MarkupGrid id="genreGrid"
+            translation="[96, 100]"
+            itemComponentName="GenreCard"
+            numColumns="4"
+            numRows="3"
+            itemSize="[418, 235]"
+            rowHeights="[235]"
+            itemSpacing="[40, 30]"
+            drawFocusFeedback="true"
+            focusBitmapUri="pkg:/images/hd_focus.9.png"
+            visible="true" />
+
+        <!-- Loading Spinner -->
+        <LayoutGroup id="loadingGroup" translation="[960, 540]" layoutDirection="vert" horizAlignment="center" visible="false">
+            <Spinner id="loadingSpinner" />
+            <Text id="loadingLabel" text="Loading genres..." font="font:MediumSystemFont" color="#FFFFFF" translation="[0, 20]" />
+        </LayoutGroup>
+
+        <!-- Empty State -->
+        <LayoutGroup id="emptyStateGroup" translation="[960, 400]" layoutDirection="vert" horizAlignment="center" visible="false">
+            <Poster id="emptyIcon" uri="pkg:/images/icons/movies.png" width="80" height="80" blendColor="#666666" />
+            <Text id="emptyLabel" text="No items found" font="font:LargeBoldSystemFont" color="#FFFFFF" translation="[0, 20]" horizAlign="center" />
+            <Text id="emptySubLabel" text="Your library appears to be empty" font="font:MediumSystemFont" color="#888888" translation="[0, 10]" horizAlign="center" />
+        </LayoutGroup>
+    </children>
+    <interface>
+        <field id="selectedItem" type="node" alwaysNotify="true" />
+        <field id="quickPlayNode" type="node" alwaysNotify="true" />
+    </interface>
+</component>

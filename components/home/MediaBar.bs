@@ -1,0 +1,1838 @@
+import "pkg:/source/api/Image.bs"
+import "pkg:/source/api/MoonfinPlugin.bs"
+import "pkg:/source/enums/KeyCode.bs"
+import "pkg:/source/utils/config.bs"
+import "pkg:/source/utils/fontApply.bs"
+import "pkg:/source/utils/galleryGlow.bs"
+import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/themeApply.bs"
+import "pkg:/source/utils/themeChrome.bs"
+
+' Geometry for the aya frame, taken from the other clients, which write their
+' layout in the same 1920x1080 pixels this screen uses
+const AYA_FRAME_WIDTH = 1760
+const AYA_TITLE_SIZE = 34
+const AYA_INDICATOR_TOP = 22
+const AYA_INDICATOR_RIGHT = 24
+const AYA_INDICATOR_WIDTH = 10
+const AYA_INDICATOR_ACTIVE_WIDTH = 16
+const AYA_INDICATOR_GAP = 5
+const AYA_FOCUS_SCALE = 1.006
+
+' The gallery panels, sized the way the other clients size theirs
+const GALLERY_NARROW_COLUMN = 92
+const GALLERY_WIDE_COLUMN = 1478
+const GALLERY_CAST_LIMIT = 5
+
+' The makd column, sized the way the other clients size theirs
+const MAKD_TEXT_LEFT = 60
+' A docked sidebar covers the first 90 pixels, so the column steps clear of it
+const MAKD_TEXT_LEFT_DOCKED = 104
+' The logo is held a little above the middle, matching the other clients
+const MAKD_LOGO_TOP = 394
+const MAKD_PAD_BOTTOM = 44
+const MAKD_LIFT_WITH_LOGO = 162
+const MAKD_LIFT_NO_LOGO = 130
+const MAKD_BLOCK_GAP = 14
+const MAKD_META_GAP = 15
+const MAKD_META_DOT_MARGIN = 9
+const MAKD_META_INK = "#FFFFFFE6"
+const MAKD_META_DOT_INK = "#FFFFFF80"
+const MAKD_GENRES_LIMIT = 3
+const MAKD_DOT_SIZE = 7
+const MAKD_DOT_ACTIVE_SIZE = 9
+const MAKD_DOT_GAP = 8
+const MAKD_DOTS_PAD_X = 14
+const MAKD_DOTS_PAD_Y = 10
+const MAKD_DOTS_RIGHT = 20
+const MAKD_DOTS_BOTTOM = 24
+
+' Home puts this component here, and the styles that draw against the screen
+' reach back up by it. It is a constant rather than a read of the node, which
+' still answers zero while init runs
+const MEDIA_BAR_TOP = 223
+
+' The moonfin hero, sized the way the other clients size theirs. A docked
+' sidebar pushes the logo and the info box clear of it, and with the navbar on
+' top the logo drops below it instead
+const FEATURED_LOGO_TOP = 81
+const FEATURED_LOGO_TOP_TOPBAR = 130
+const FEATURED_LOGO_LEFT = 58
+const FEATURED_LOGO_LEFT_DOCKED = 186
+const FEATURED_LOGO_WIDTH = 406
+const FEATURED_LOGO_HEIGHT = 174
+const FEATURED_SHADOW_OFFSET = 3
+const FEATURED_TITLE_SIZE = 41
+const FEATURED_EDGE = 36
+const FEATURED_EDGE_DOCKED = 104
+const FEATURED_BOX_BOTTOM = 1028
+const FEATURED_BOX_PAD_X = 23
+const FEATURED_BOX_PAD_Y = 17
+const FEATURED_META_SIZE = 17
+const FEATURED_META_GAP = 9
+const FEATURED_META_INK = "#FFFFFFE6"
+const FEATURED_META_DOT_INK = "#FFFFFF80"
+const FEATURED_BADGE_SIZE = 16
+const FEATURED_BADGE_PAD_X = 7
+const FEATURED_BADGE_PAD_Y = 1
+const FEATURED_GENRES_LIMIT = 3
+const FEATURED_RATING_ICON = 28
+const FEATURED_RATING_GAP = 14
+const FEATURED_RATINGS_GAP = 9
+const FEATURED_OVERVIEW_GAP = 12
+const FEATURED_OVERVIEW_SIZE = 20
+const FEATURED_OVERVIEW_SPACING = 8
+const FEATURED_DOTS_BOTTOM = 12
+const FEATURED_DOT_SIZE = 12
+const FEATURED_DOT_ACTIVE_SIZE = 14
+const FEATURED_DOT_GAP = 12
+const FEATURED_DOTS_PAD_X = 17
+const FEATURED_DOTS_PAD_Y = 9
+
+' The banner card, sized the way the other clients size theirs. It starts below
+' the navbar, which floats across the top of the screen and would otherwise cut
+' through the top edge of the card
+const BANNER_CARD_TOP = 130
+const BANNER_CARD_HEIGHT = 424
+const BANNER_CARD_LEFT = 60
+' A docked sidebar covers the first 90 pixels, so the card steps clear of it
+const BANNER_CARD_LEFT_DOCKED = 104
+const BANNER_CARD_RIGHT = 1860
+const BANNER_PAD_X = 44
+const BANNER_PAD_BOTTOM = 28
+const BANNER_LOGO_GAP = 10
+const BANNER_BLOCK_GAP = 8
+const BANNER_DOTS_TOP = 18
+const BANNER_DOTS_RIGHT = 26
+const BANNER_DOT_SIZE = 8
+const BANNER_DOT_ACTIVE_WIDTH = 22
+const BANNER_DOT_GAP = 6
+const BANNER_MAX_DOTS = 7
+
+sub init()
+    m.logoImage = m.top.findNode("logoImage")
+    m.logoShadow = m.top.findNode("logoShadow")
+    m.titleText = m.top.findNode("titleText")
+    m.overviewLabel = m.top.findNode("overviewLabel")
+    m.leftArrow = m.top.findNode("leftArrow")
+    m.rightArrow = m.top.findNode("rightArrow")
+    m.indicatorDots = m.top.findNode("indicatorDots")
+    m.pauseIndicator = m.top.findNode("pauseIndicator")
+    m.infoOverlayContent = m.top.findNode("infoOverlayContent")
+    m.infoBackground = m.top.findNode("infoBackground")
+    m.dotsBackground = m.top.findNode("dotsBackground")
+
+    ' Arrow background elements
+    m.leftArrowBg = m.top.findNode("leftArrowBg")
+    m.rightArrowBg = m.top.findNode("rightArrowBg")
+
+    m.ratingsRow = m.top.findNode("ratingsRow")
+
+    m.galleryGroup = m.top.findNode("galleryGroup")
+    m.galleryGrid = m.top.findNode("galleryGrid")
+    m.galleryGlow = m.top.findNode("galleryGlow")
+
+    m.bookshelfGroup = m.top.findNode("bookshelfGroup")
+    m.bookshelfGrid = m.top.findNode("bookshelfGrid")
+
+    m.ayaGroup = m.top.findNode("ayaGroup")
+    m.ayaBackdrop = m.top.findNode("ayaBackdrop")
+    m.ayaBackdropNext = m.top.findNode("ayaBackdropNext")
+    m.ayaLogo = m.top.findNode("ayaLogo")
+    m.ayaTitle = m.top.findNode("ayaTitle")
+    m.ayaIndicators = m.top.findNode("ayaIndicators")
+    m.ayaFocusRing = m.top.findNode("ayaFocusRing")
+
+    m.makdGroup = m.top.findNode("makdGroup")
+    m.makdLogo = m.top.findNode("makdLogo")
+    m.makdText = m.top.findNode("makdText")
+    m.makdTitle = m.top.findNode("makdTitle")
+    m.makdMeta = m.top.findNode("makdMeta")
+    m.makdRatings = m.top.findNode("makdRatings")
+    m.makdOverview = m.top.findNode("makdOverview")
+    m.makdDots = m.top.findNode("makdDots")
+    m.makdDotsBg = m.top.findNode("makdDotsBg")
+    m.makdDotRow = m.top.findNode("makdDotRow")
+
+    m.featuredGradient = m.top.findNode("featuredGradient")
+    m.metadataRow = m.top.findNode("metadataRow")
+
+    m.bannerGroup = m.top.findNode("bannerGroup")
+    m.bannerMask = m.top.findNode("bannerMask")
+    m.bannerCardBg = m.top.findNode("bannerCardBg")
+    m.bannerBackdrop = m.top.findNode("bannerBackdrop")
+    m.bannerGradient = m.top.findNode("bannerGradient")
+    m.bannerContent = m.top.findNode("bannerContent")
+    m.bannerLogo = m.top.findNode("bannerLogo")
+    m.bannerTitle = m.top.findNode("bannerTitle")
+    m.bannerMeta = m.top.findNode("bannerMeta")
+    m.bannerRatings = m.top.findNode("bannerRatings")
+    m.bannerDots = m.top.findNode("bannerDots")
+    m.bannerFocus = m.top.findNode("bannerFocus")
+
+    m.bannerTitle.font.size = 38
+    m.bannerMeta.font.size = 20
+    m.bannerDots.itemSpacings = [BANNER_DOT_GAP]
+
+    m.makdTitle.font.size = 56
+    m.makdOverview.font.size = 22
+    m.makdOverview.lineSpacing = 10
+    m.top.findNode("makdMetaFont").font.size = 17
+    m.ayaSlideIn = m.top.findNode("ayaSlideIn")
+    m.ayaSlideIn.observeField("state", "onAyaSlideInComplete")
+
+    m.global.observeFieldScoped("mediaBarModeChanged", "onMediaBarModeChanged")
+    applyCurrentStyle()
+
+    ' Content fade animations
+    m.contentFadeOut = m.top.findNode("contentFadeOut")
+    m.contentFadeIn = m.top.findNode("contentFadeIn")
+    m.infoBgFadeInInterp = m.top.findNode("infoBgFadeInInterp")
+    m.logoShadowFadeInInterp = m.top.findNode("logoShadowFadeInInterp")
+    m.pendingDisplayIndex = -1
+    if isValid(m.contentFadeOut)
+        m.contentFadeOut.observeFieldScoped("state", "onContentFadeOutComplete")
+    end if
+
+    ' Initialize state
+    m.mediaBarItems = []
+    m.currentIndex = 0
+    m.isPaused = false
+    m.clearBackdrop = false
+
+    ' Gallery mode state
+    m.galleryPages = []
+    m.galleryPageContentNodes = []
+    m.galleryCurrentPage = 0
+    m.galleryActiveIndex = 0
+    m.galleryTotalPages = 0
+
+    ' Bookshelf mode state
+    m.bookshelfContentNode = invalid
+    m.bookshelfActiveIndex = 0
+
+    ' Make component focusable
+    m.top.focusable = true
+
+    ' Observe visibility changes to refresh display when shown
+    m.top.observeFieldScoped("visible", "onVisibilityChanged")
+
+    ' Observe focus changes to ensure backdrop is set on initial focus
+    m.top.observeFieldScoped("hasFocus", "onFocusChanged")
+    m.top.observeField("focusedChild", "onMediaBarFocusChanged")
+
+    ' Observe overlay settings changes
+    if isValid(m.global)
+        m.global.observeFieldScoped("overlaySettingsChanged", "onOverlaySettingsChanged")
+    end if
+
+    ' Apply UI overlay settings
+    applyOverlaySettings()
+
+    ' Load media items
+    loadMediaBarItems()
+
+    themeApply.ApplyToItem(m.top)
+end sub
+
+' React to media bar mode changes by re-applying style and refreshing display
+sub onMediaBarModeChanged(_event as object)
+    applyCurrentStyle()
+    applyOverlaySettings()
+    refreshMediaBarBackdropUrls()
+
+    if m.mediaBarItems.count() > 0
+        if m.mediaBarMode = "gallery"
+            setupGalleryPages()
+            showGalleryPage(0)
+            m.top.currentBackdrop = ""
+            if m.mediaBarItems.count() > 1
+                startAutoAdvanceTimer()
+            end if
+        else if m.mediaBarMode = "bookshelf"
+            setupBookshelfPages()
+            showBookshelfPage()
+            m.top.currentBackdrop = "pkg:/images/bookshelfBg.png"
+            if m.mediaBarItems.count() > 1
+                startAutoAdvanceTimer()
+            end if
+        else
+            if m.indicatorDots.getChildCount() = 0
+                createIndicatorDots()
+            end if
+            showMediaBarItem(m.currentIndex)
+            m.top.currentBackdrop = m.mediaBarItems[m.currentIndex].backdropUrl
+        end if
+    end if
+end sub
+
+' Configure visibility, translations, and font sizes for current media bar mode
+sub applyCurrentStyle()
+    mode = m.global.session.user.settings["ui.home.mediaBarMode"] ?? "moonfin"
+    m.mediaBarMode = mode
+    m.ayaGroup.visible = false
+    m.makdGroup.visible = false
+    m.bannerGroup.visible = false
+    m.featuredGradient.visible = false
+    if mode = "off" or mode = ""
+        m.galleryGroup.visible = false
+        m.bookshelfGroup.visible = false
+        m.infoOverlayContent.visible = false
+        m.logoImage.visible = false
+        m.logoShadow.visible = false
+        m.titleText.visible = false
+        m.infoBackground.visible = false
+        m.dotsBackground.visible = false
+        m.indicatorDots.visible = false
+        m.overviewLabel.visible = false
+        m.pauseIndicator.visible = false
+        if isValid(m.autoAdvanceTimer) then m.autoAdvanceTimer.control = "stop"
+    end if
+
+    if mode <> "moonfin" and mode <> "makd" and mode <> "gallery" and mode <> "banner" and mode <> "bookshelf" and mode <> "aya" ' Only accept available styles
+        mode = "moonfin"
+        m.mediaBarMode = mode
+    end if
+
+    if mode = "moonfin"
+        m.galleryGroup.visible = false
+        m.bookshelfGroup.visible = false
+        m.featuredGradient.visible = true
+        m.infoOverlayContent.visible = true
+        m.infoBackground.visible = true
+        m.overviewLabel.visible = true
+        m.dotsBackground.visible = true
+        m.indicatorDots.visible = true
+
+        layoutFeatured()
+
+        m.pauseIndicator.translation = "[1772, 808]"
+    else if mode = "makd"
+        if isValid(m.contentFadeOut) then m.contentFadeOut.control = "stop"
+        if isValid(m.contentFadeIn) then m.contentFadeIn.control = "stop"
+        m.pendingDisplayIndex = -1
+
+        m.logoShadow.visible = false
+        m.logoImage.visible = false
+        m.titleText.visible = false
+        m.infoBackground.visible = false
+        m.infoOverlayContent.visible = false
+        m.dotsBackground.visible = false
+        m.indicatorDots.visible = false
+        m.overviewLabel.visible = false
+
+        m.galleryGroup.visible = false
+        m.bookshelfGroup.visible = false
+        m.makdGroup.visible = true
+
+        m.pauseIndicator.translation = "[1772, 808]"
+    else if mode = "bookshelf"
+        m.infoBottomAnchor = 720
+
+        if isValid(m.contentFadeOut) then m.contentFadeOut.control = "stop"
+        if isValid(m.contentFadeIn) then m.contentFadeIn.control = "stop"
+        m.pendingDisplayIndex = -1
+
+        m.logoShadow.visible = false
+        m.logoImage.visible = false
+        m.titleText.visible = false
+        m.infoBackground.visible = false
+        m.infoOverlayContent.visible = false
+        m.leftArrow.visible = false
+        m.leftArrowBg.visible = false
+        m.rightArrow.visible = false
+        m.rightArrowBg.visible = false
+        m.dotsBackground.visible = false
+        m.indicatorDots.visible = false
+        m.overviewLabel.visible = false
+
+        m.galleryGroup.visible = false
+
+        m.bookshelfGroup.visible = true
+
+        m.dotsY = 810
+        m.dotsBgY = 793
+        ' Paused Indicator
+        m.pauseIndicator.translation = "[1772, 808]"
+    else if mode = "gallery"
+        m.infoBottomAnchor = 720
+
+        if isValid(m.contentFadeOut) then m.contentFadeOut.control = "stop"
+        if isValid(m.contentFadeIn) then m.contentFadeIn.control = "stop"
+        m.pendingDisplayIndex = -1
+
+        m.logoShadow.visible = false
+        m.logoImage.visible = false
+        m.titleText.visible = false
+        m.infoBackground.visible = false
+        m.infoOverlayContent.visible = false
+        m.leftArrow.visible = false
+        m.leftArrowBg.visible = false
+        m.rightArrow.visible = false
+        m.rightArrowBg.visible = false
+        m.dotsBackground.visible = false
+        m.indicatorDots.visible = false
+        m.overviewLabel.visible = false
+
+        m.galleryGroup.visible = true
+        m.bookshelfGroup.visible = false
+
+        m.dotsY = 810
+        m.dotsBgY = 793
+        ' Paused Indicator
+        m.pauseIndicator.translation = "[1722, 808]"
+    else if mode = "aya"
+        if isValid(m.contentFadeOut) then m.contentFadeOut.control = "stop"
+        if isValid(m.contentFadeIn) then m.contentFadeIn.control = "stop"
+        m.pendingDisplayIndex = -1
+
+        m.logoShadow.visible = false
+        m.logoImage.visible = false
+        m.titleText.visible = false
+        m.infoBackground.visible = false
+        m.infoOverlayContent.visible = false
+        m.leftArrow.visible = false
+        m.leftArrowBg.visible = false
+        m.rightArrow.visible = false
+        m.rightArrowBg.visible = false
+        m.dotsBackground.visible = false
+        m.indicatorDots.visible = false
+        m.overviewLabel.visible = false
+
+        m.galleryGroup.visible = false
+        m.bookshelfGroup.visible = false
+        m.ayaGroup.visible = true
+
+        m.ayaTitle.font.size = AYA_TITLE_SIZE
+        onMediaBarFocusChanged()
+
+        m.pauseIndicator.translation = "[1772, 808]"
+    else if mode = "banner"
+        if isValid(m.contentFadeOut) then m.contentFadeOut.control = "stop"
+        if isValid(m.contentFadeIn) then m.contentFadeIn.control = "stop"
+        m.pendingDisplayIndex = -1
+
+        m.logoShadow.visible = false
+        m.logoImage.visible = false
+        m.titleText.visible = false
+        m.infoBackground.visible = false
+        m.infoOverlayContent.visible = false
+        m.dotsBackground.visible = false
+        m.indicatorDots.visible = false
+        m.overviewLabel.visible = false
+
+        m.galleryGroup.visible = false
+        m.bookshelfGroup.visible = false
+        m.bannerGroup.visible = true
+        m.bannerFocus.blendColor = themeChrome.IsActive() ? themeChrome.Accent() : "#00A4DC"
+        onMediaBarFocusChanged()
+
+        m.pauseIndicator.translation = "[1686, 253]"
+    end if
+
+    updateInfoBackgroundSize()
+    updateDotsBackgroundSize()
+    updateArrowVisibility()
+end sub
+
+sub updateArrowVisibility()
+    sidebarActive = isValid(dockedSidebar())
+
+    showArrows = false
+    if isValid(m.mediaBarItems) and (m.mediaBarMode = "moonfin" or m.mediaBarMode = "makd")
+        showArrows = m.mediaBarItems.count() > 1
+    end if
+
+    m.rightArrow.visible = showArrows
+    if isValid(m.rightArrowBg) then m.rightArrowBg.visible = showArrows
+
+    showLeft = showArrows and not sidebarActive
+    m.leftArrow.visible = showLeft
+    if isValid(m.leftArrowBg) then m.leftArrowBg.visible = showLeft
+end sub
+
+' Rebuild backdrop URLs for all items after mode change affects URL params
+sub refreshMediaBarBackdropUrls()
+    for each item in m.mediaBarItems
+        item.backdropUrl = buildBackdropUrl(item)
+    end for
+end sub
+
+' Handle focus changes - ensure backdrop is set when component gets focus
+sub onFocusChanged(event as object)
+    hasFocus = event.getData()
+
+    if hasFocus and m.mediaBarItems.count() > 0
+        ' Immediately refresh display when focus is gained
+        refreshDisplay()
+        updateArrowVisibility()
+        ' Resume auto-advance timer
+        if isValid(m.autoAdvanceTimer)
+            m.autoAdvanceTimer.control = "start"
+        end if
+    else
+        if m.clearBackdrop
+            ' Clear backdrop when focus is lost (if allowed)
+            m.top.currentBackdrop = "" ' Clear backdrop on focus loss
+            m.clearBackdrop = false ' reset flag
+        end if
+        ' Stop auto-advance timer when losing focus (e.g., navigating to navbar)
+        if isValid(m.autoAdvanceTimer)
+            m.autoAdvanceTimer.control = "stop"
+        end if
+    end if
+end sub
+
+' Handle visibility changes - refresh display when component becomes visible
+sub onVisibilityChanged(event as object)
+    isVisible = event.getData()
+
+    if isVisible and m.mediaBarItems.count() > 0
+        refreshDisplay()
+    end if
+end sub
+
+' Mode-aware display refresh
+sub refreshDisplay()
+    if m.mediaBarItems.count() = 0 then return
+    if m.mediaBarMode = "gallery"
+        showGalleryPage(m.galleryCurrentPage)
+    else if m.mediaBarMode = "bookshelf"
+        showBookshelfPage()
+    else
+        displayMediaBarItem(m.currentIndex)
+    end if
+end sub
+
+' Handle overlay settings changes
+sub onOverlaySettingsChanged(_event as object)
+    applyOverlaySettings()
+end sub
+
+' Apply opacity and color settings to overlay elements
+sub applyOverlaySettings()
+    if not isValid(m.global) or not isValid(m.global.session) then return
+
+    opacitySetting = m.global.session.user.settings["ui.overlayOpacity"] ?? invalid
+    opacity = isValid(opacitySetting) ? opacitySetting.toFloat() : 0.5
+
+    ' Store for use in fade animations
+    m.overlayOpacity = opacity
+
+    color = formatOverlayColor(m.global.session.user.settings["ui.overlayColor"] ?? "", "0x475569FF")
+
+    for each element in [m.infoBackground, m.dotsBackground, m.leftArrowBg, m.rightArrowBg]
+        if isValid(element)
+            element.opacity = opacity
+            element.blendColor = color
+        end if
+    end for
+end sub
+
+' Fetch and prepare media items
+sub loadMediaBarItems()
+    m.mediaBarTask = createObject("roSGNode", "MediaBarTask")
+    m.mediaBarTask.userId = m.global.session.user.id
+    m.mediaBarTask.contentType = m.global.session.user.settings["ui.home.mediaBarContentType"] ?? "both"
+    m.mediaBarTask.sourceType = m.global.session.user.settings["ui.home.mediaBarSourceType"] ?? "library"
+    m.mediaBarTask.selectedLibraryIds = m.global.session.user.settings["ui.home.mediaBarLibraryIds"] ?? "[]"
+    m.mediaBarTask.featuredCount = m.global.session.user.settings["ui.home.featuredMediaItems"] ?? 15
+    m.mediaBarTask.selectedCollectionIds = m.global.session.user.settings["ui.home.mediaBarCollectionIds"] ?? "[]"
+    m.mediaBarTask.excludedGenreIds = m.global.session.user.settings["ui.home.mediaBarExcludedGenres"] ?? "[]"
+    m.mediaBarTask.observeFieldScoped("mediaBarData", "onMediaBarDataLoaded")
+    m.mediaBarTask.control = "RUN"
+end sub
+
+' Handle data loaded from task
+sub onMediaBarDataLoaded(event as object)
+    data = event.getData()
+    if not isValid(data)
+        return
+    end if
+
+    ' Clean up task observer now that we have the data
+    if isValid(m.mediaBarTask)
+        m.mediaBarTask.unobserveFieldScoped("mediaBarData")
+    end if
+
+    allItems = isChainValid(data, "items") ? data.items : []
+
+    m.mediaBarItems = []
+    for each item in allItems
+        processed = processItem(item)
+        buildItemUrls(processed)
+        m.mediaBarItems.push(processed)
+    end for
+
+    ' Initialize display if we have items
+    if m.mediaBarItems.count() > 0
+        if m.mediaBarMode = "gallery"
+            setupGalleryPages()
+            showGalleryPage(0)
+            if m.mediaBarItems.count() > 1
+                startAutoAdvanceTimer()
+            end if
+        else if m.mediaBarMode = "bookshelf"
+            setupBookshelfPages()
+            showBookshelfPage()
+            m.top.currentBackdrop = "pkg:/images/bookshelfBg.png"
+            if m.mediaBarItems.count() > 1
+                startAutoAdvanceTimer()
+            end if
+        else
+            createIndicatorDots()
+            if m.mediaBarItems.count() > 1
+                updateArrowVisibility()
+                startAutoAdvanceTimer()
+            end if
+            ' Display first item (single backdrop update)
+            displayMediaBarItem(0)
+        end if
+    end if
+end sub
+
+' Process item data into display format
+function processItem(item as object) as object
+    processed = {
+        id: item.id,
+        title: item.name,
+        itemType: item.type,
+        overview: item.overview,
+        year: item.productionYear,
+        rating: item.officialRating,
+        runtime: invalid,
+        runtimeDisplay: "",
+        communityRating: item.communityRating,
+        communityRatingDisplay: "",
+        genres: [],
+        backdropTag: "",
+        logoUrl: "",
+        director: "",
+        hasLogo: false,
+        tmdbId: "",
+        people: invalid
+    }
+
+    if isChainValid(item, "backdropImageTags") and item.backdropImageTags.count() > 0
+        processed.backdropTag = item.backdropImageTags[0]
+    end if
+
+    if isChainValid(item, "imageTags.Logo")
+        processed.hasLogo = true
+    end if
+
+    if isChainValid(item, "providerIds")
+        processed.tmdbId = moonfinPlugin.GetTmdbId(item.providerIds)
+    end if
+
+    if isValid(item.runTimeTicks)
+        minutes = int(item.runTimeTicks / 600000000)
+        processed.runtime = minutes
+        if minutes >= 60
+            hours = int(minutes / 60)
+            mins = minutes mod 60
+            processed.runtimeDisplay = hours.toStr() + "h " + mins.toStr() + "m"
+        else
+            processed.runtimeDisplay = minutes.toStr() + " min"
+        end if
+    end if
+
+    if isValid(item.communityRating) and moonfinPlugin.IsRatingSourceEnabled("stars")
+        processed.communityRatingDisplay = moonfinPlugin.formatDecimal(item.communityRating, 1)
+    end if
+
+    if isChainValid(item, "genres") and item.genres.count() > 0
+        processed.genres = item.genres
+    end if
+
+    if isChainValid(item, "People") and item.People.count() > 0
+        peopleList = []
+        directors = []
+        for each person in item.People
+            personType = LCase(person.Type)
+            if personType = "director"
+                directors.push(person.Name)
+            else if personType <> "writer" and peopleList.count() < GALLERY_CAST_LIMIT
+                peopleList.push(person.Name)
+            end if
+        end for
+        if peopleList.count() > 0
+            processed.people = peopleList.join(", ")
+        end if
+        if directors.count() > 0
+            processed.director = directors.join(", ")
+        end if
+    end if
+
+    return processed
+end function
+
+' Build a single backdrop image URL with mode-specific sizing and quality
+function buildBackdropUrl(item as object) as string
+    if not isValid(item.backdropTag) or item.backdropTag = "" then return ""
+    if m.mediaBarMode = "makd"
+        return ImageURL(item.id, "Backdrop", {maxHeight: 1080, maxWidth: 1920, quality: 60, blur: 15, Tag: item.backdropTag})
+    else if m.mediaBarMode = "bookshelf"
+        return ImageURL(item.id, "Primary", {maxHeight: 850, maxWidth: 420, quality: 90})
+    else
+        return ImageURL(item.id, "Backdrop", {maxHeight: 1080, maxWidth: 1920, quality: 90, Tag: item.backdropTag})
+    end if
+end function
+
+' Build backdrop and logo URLs for a single media item
+sub buildItemUrls(item as object)
+    item.backdropUrl = buildBackdropUrl(item)
+    if item.hasLogo
+        item.logoUrl = ImageURL(item.id, "Logo", {maxHeight: 150, maxWidth: 500, quality: 100})
+    end if
+end sub
+
+' Create a ContentNode from an item dict with optional extra fields
+function createItemContentNode(item as object, extraFields = {} as object) as object
+    child = createObject("roSGNode", "ContentNode")
+    fields = {
+        title: item.title,
+        backdropUrl: item.backdropUrl,
+        logoUrl: item.logoUrl,
+        overview: item.overview,
+        starring: item.people,
+        director: item.director,
+        genres: item.genres,
+        year: item.year,
+        rating: item.rating,
+        runtimeDisplay: item.runtimeDisplay,
+        communityRatingDisplay: item.communityRatingDisplay,
+        itemType: item.itemType
+    }
+    for each key in extraFields
+        fields[key] = extraFields[key]
+    end for
+    child.addFields(fields)
+    return child
+end function
+
+' Split items into pages of 5 for gallery display
+sub setupGalleryPages()
+    pageSize = 5
+    m.galleryPages = []
+    m.galleryPageContentNodes = []
+    allItems = m.mediaBarItems
+
+    for pageIndex = 0 to (allItems.count() - 1) step pageSize
+        finish = pageIndex + pageSize - 1
+        if finish >= allItems.count() then finish = allItems.count() - 1
+        page = []
+        content = createObject("roSGNode", "ContentNode")
+        for i = pageIndex to finish
+            item = allItems[i]
+            page.push(item)
+            child = createItemContentNode(item, { isActive: false, itemNumber: i + 1 })
+            content.appendChild(child)
+        end for
+        m.galleryPages.push(page)
+        m.galleryPageContentNodes.push(content)
+    end for
+
+    m.galleryTotalPages = m.galleryPages.count()
+    m.galleryCurrentPage = 0
+    m.galleryActiveIndex = 0
+end sub
+
+' Show a specific gallery page
+sub showGalleryPage(pageIndex as integer)
+    if pageIndex < 0 or pageIndex >= m.galleryTotalPages then return
+
+    pageContent = m.galleryPageContentNodes[pageIndex]
+
+    for i = 0 to pageContent.getChildCount() - 1
+        pageContent.getChild(i).isActive = false
+    end for
+
+    active = pageContent.getChild(m.galleryActiveIndex)
+    active.isActive = true
+    m.galleryGlow.blendColor = galleryGlow.ForGenres(active.genres)
+
+    m.galleryGrid.content = pageContent
+    setGalleryColumnWidths(m.galleryActiveIndex)
+end sub
+
+' Set column widths based on active index
+sub setGalleryColumnWidths(activeIndex as integer)
+    widths = [GALLERY_NARROW_COLUMN, GALLERY_NARROW_COLUMN, GALLERY_NARROW_COLUMN, GALLERY_NARROW_COLUMN, GALLERY_NARROW_COLUMN]
+    widths[activeIndex] = GALLERY_WIDE_COLUMN
+    m.galleryGrid.columnWidths = widths
+end sub
+
+' Navigate between gallery items
+sub galleryAdvance(direction as integer)
+    if m.galleryTotalPages = 0 then return
+    itemsOnPage = m.galleryPages[m.galleryCurrentPage].count()
+
+    if direction > 0
+        if m.galleryActiveIndex < itemsOnPage - 1
+            m.galleryActiveIndex++
+        else
+            m.galleryCurrentPage = (m.galleryCurrentPage + 1) mod m.galleryTotalPages
+            m.galleryActiveIndex = 0
+        end if
+    else
+        if m.galleryActiveIndex > 0
+            m.galleryActiveIndex--
+        else
+            m.galleryCurrentPage = m.galleryCurrentPage - 1
+            if m.galleryCurrentPage < 0 then m.galleryCurrentPage = m.galleryTotalPages - 1
+            m.galleryActiveIndex = m.galleryPages[m.galleryCurrentPage].count() - 1
+        end if
+    end if
+
+    showGalleryPage(m.galleryCurrentPage)
+end sub
+
+' Get the currently active item in gallery mode
+function getGalleryActiveItem() as object
+    if m.galleryTotalPages = 0 then return invalid
+    page = m.galleryPages[m.galleryCurrentPage]
+    if m.galleryActiveIndex < page.count()
+        return page[m.galleryActiveIndex]
+    end if
+    return invalid
+end function
+
+' Build the bookshelf ContentNode with spine colours and initial column widths
+sub setupBookshelfPages()
+    allItems = m.mediaBarItems
+    totalItems = allItems.count()
+    if totalItems = 0 then return
+
+    blendColors = [
+        "0xBF441BFF",  ' orange
+        "0xae792dFF",  ' gold
+        "0xD98934FF",  ' yellow
+        "0x870F19FF",  ' burgundy
+        "0x7A5334FF",  ' brown
+        "0x592B2BFF",  ' purpleish brown
+        "0x30A49CFF",  ' cyan/light blue
+        "0x6C7851FF"     ' army green
+    ]
+
+    content = createObject("roSGNode", "ContentNode")
+    for i = 0 to totalItems - 1
+        item = allItems[i]
+
+        colorIndex = Rnd(8) - 1
+
+        child = createItemContentNode(item, { isActive: (i = 0), itemNumber: i + 1, blendColor: blendColors[colorIndex] })
+        content.appendChild(child)
+    end for
+
+    m.bookshelfContentNode = content
+    m.bookshelfActiveIndex = m.currentIndex
+
+    m.bookshelfGrid.numColumns = totalItems
+
+    updateBookshelfLayout(m.bookshelfActiveIndex)
+end sub
+
+' Render the current bookshelf page, marking the active item and recentering
+sub showBookshelfPage()
+    m.bookshelfGroup.visible = true
+
+    pageContent = m.bookshelfContentNode
+    totalItems = pageContent.getChildCount()
+
+    for i = 0 to totalItems - 1
+        pageContent.getChild(i).isActive = (i = m.bookshelfActiveIndex)
+    end for
+
+    m.bookshelfGrid.content = pageContent
+
+    updateBookshelfLayout(m.bookshelfActiveIndex)
+end sub
+
+' Navigate between gallery items
+sub bookshelfAdvance(direction as integer)
+    totalItems = m.mediaBarItems.count()
+    if totalItems <= 1 then return
+
+    if direction > 0
+        m.bookshelfActiveIndex = (m.bookshelfActiveIndex + 1) mod totalItems
+    else
+        m.bookshelfActiveIndex = m.bookshelfActiveIndex - 1
+        if m.bookshelfActiveIndex < 0 then m.bookshelfActiveIndex = totalItems - 1
+    end if
+    m.currentIndex = m.bookshelfActiveIndex
+    showBookshelfPage()
+end sub
+
+sub updateBookshelfLayout(activeIndex as integer)
+    totalItems = m.mediaBarItems.count()
+    if totalItems = 0 then return
+
+    ' Set column widths: wide for active item, narrow for the rest
+    widths = []
+        for i = 0 to totalItems - 1
+            if i = activeIndex
+                widths.push(690)
+            else
+                widths.push(60)
+            end if
+        end for
+        m.bookshelfGrid.columnWidths = widths
+
+    ' Translate the bookshelf group to the active book is horizontally centered
+    spineWidth = 60
+    bookWidth = 778
+    spacing = 5
+    screenCenterX = 960
+
+    itemX = activeIndex * (spineWidth + spacing)
+    centerX = itemX + bookWidth / 2
+    offsetX = screenCenterX - centerX
+
+    m.bookshelfGroup.translation = [offsetX, 30]
+end sub
+
+' One dot per item, left plain here since updateIndicatorDots sizes and colours
+' them around the current one
+sub createIndicatorDots()
+    m.indicatorDots.removeChildrenIndex(m.indicatorDots.getChildCount(), 0)
+
+    for i = 0 to m.mediaBarItems.count() - 1
+        dot = m.indicatorDots.createChild("Poster")
+        dot.uri = "pkg:/images/icons/circle.png"
+        dot.loadDisplayMode = "scaleToFit"
+    end for
+
+    updateIndicatorDots()
+    updateDotsBackgroundSize()
+end sub
+
+' Update the background size for indicator dots
+sub updateDotsBackgroundSize()
+    if not isValid(m.indicatorDots) or not isValid(m.dotsBackground) then return
+
+    numDots = m.indicatorDots.getChildCount()
+    if numDots = 0 then return
+
+    totalDotsWidth = (numDots - 1) * FEATURED_DOT_SIZE + FEATURED_DOT_ACTIVE_SIZE
+    totalSpacingWidth = (numDots - 1) * FEATURED_DOT_GAP
+    calculatedWidth = totalDotsWidth + totalSpacingWidth + (FEATURED_DOTS_PAD_X * 2)
+
+    screenCenter = 960
+
+    m.indicatorDots.translation = [screenCenter - (totalDotsWidth + totalSpacingWidth) / 2, m.dotsY]
+
+    if not m.dotsBackground.visible then return
+
+    m.dotsBackground.width = calculatedWidth
+    m.dotsBackground.translation = [screenCenter - calculatedWidth / 2, m.dotsBgY]
+end sub
+
+' Update indicator dots to show current slide
+sub updateIndicatorDots()
+    numDots = m.indicatorDots.getChildCount()
+    if numDots = 0 then return
+
+    for i = 0 to numDots - 1
+        dot = m.indicatorDots.getChild(i)
+        isCurrent = i = m.currentIndex
+        size = isCurrent ? FEATURED_DOT_ACTIVE_SIZE : FEATURED_DOT_SIZE
+        dot.blendColor = isCurrent ? "#FFFFFF" : "#FFFFFF80"
+        dot.width = size
+        dot.height = size
+    end for
+end sub
+
+' Display media bar item with crossfade
+sub displayMediaBarItem(index as integer)
+    if index < 0 or index >= m.mediaBarItems.count() then return
+
+    ' These draw their own copy of the item rather than the overlay the other
+    ' styles crossfade
+    if m.mediaBarMode = "makd" or m.mediaBarMode = "banner"
+        showMediaBarItem(index)
+        return
+    end if
+
+    if m.mediaBarMode = "aya"
+        showMediaBarItem(index)
+        return
+    end if
+
+    ' If this is not the first display and we have fade animations, do a crossfade
+    if m.currentIndex <> index or m.pendingDisplayIndex >= 0
+        if isValid(m.contentFadeOut) and isValid(m.infoOverlayContent) and m.infoOverlayContent.opacity > 0
+            m.pendingDisplayIndex = index
+            m.contentFadeOut.control = "start"
+            ' Still update backdrop immediately so it crossfades in parallel
+            item = m.mediaBarItems[index]
+            if item.backdropUrl <> ""
+                m.top.currentBackdrop = item.backdropUrl
+            end if
+            return
+        end if
+    end if
+
+    showMediaBarItem(index)
+end sub
+
+' The sidebar sits over the left of the screen when it is docked, so anything
+' drawn there has to allow for it
+function dockedSidebar() as dynamic
+    scene = m.top.getScene()
+    if not isValid(scene) then return invalid
+
+    sidebar = scene.findNode("sidebar")
+    if isValid(sidebar) and sidebar.visible then return sidebar
+
+    return invalid
+end function
+
+sub renderFeaturedRatings(pluginRatings as object)
+    entries = []
+    if isValid(m.featuredCommunity) then entries.push(m.featuredCommunity)
+    for each rating in pluginRatings
+        entries.push(rating)
+    end for
+
+    m.ratingsRow.ratingsData = { data: entries }
+end sub
+
+' The hero fills the screen, so everything in it is placed against the screen
+' rather than against this component, which sits well down the page. Only the
+' sidebar moves any of it, so the run of items goes by without laying out again
+sub layoutFeatured()
+    docked = isValid(dockedSidebar())
+    if isValid(m.featuredDocked) and m.featuredDocked = docked then return
+
+    m.featuredDocked = docked
+
+    m.featuredGradient.translation = [0, -MEDIA_BAR_TOP]
+    m.featuredGradient.width = 1920
+    m.featuredGradient.height = 1080
+
+    logoLeft = docked ? FEATURED_LOGO_LEFT_DOCKED : FEATURED_LOGO_LEFT
+    ' Without a sidebar the navbar runs across the top, so the logo clears it
+    logoTop = docked ? FEATURED_LOGO_TOP : FEATURED_LOGO_TOP_TOPBAR
+
+    m.logoImage.width = FEATURED_LOGO_WIDTH
+    m.logoImage.height = FEATURED_LOGO_HEIGHT
+    m.logoImage.translation = [logoLeft, logoTop - MEDIA_BAR_TOP]
+
+    m.logoShadow.width = FEATURED_LOGO_WIDTH
+    m.logoShadow.height = FEATURED_LOGO_HEIGHT
+    m.logoShadow.translation = [logoLeft + FEATURED_SHADOW_OFFSET, logoTop + FEATURED_SHADOW_OFFSET - MEDIA_BAR_TOP]
+
+    m.titleText.font.size = FEATURED_TITLE_SIZE
+    m.titleText.width = FEATURED_LOGO_WIDTH
+    m.titleText.translation = [logoLeft, logoTop - MEDIA_BAR_TOP]
+
+    edge = docked ? FEATURED_EDGE_DOCKED : FEATURED_EDGE
+    boxWidth = 1920 - (edge * 2)
+
+    m.infoBackground.width = boxWidth
+    m.infoBackground.translation = [edge, m.infoBackground.translation[1]]
+    m.infoBottomAnchor = FEATURED_BOX_BOTTOM - MEDIA_BAR_TOP
+
+    m.infoOverlayContent.itemSpacings = [FEATURED_RATINGS_GAP, FEATURED_OVERVIEW_GAP]
+    m.infoOverlayContent.translation = [edge + FEATURED_BOX_PAD_X, m.infoOverlayContent.translation[1]]
+    m.metadataRow.itemSpacings = [FEATURED_META_GAP]
+
+    m.ratingsRow.labelFont = "font:SmallBoldSystemFont"
+    m.ratingsRow.iconHeight = FEATURED_RATING_ICON
+    m.ratingsRow.ratingSpacing = FEATURED_RATING_GAP
+
+    m.overviewLabel.width = boxWidth - (FEATURED_BOX_PAD_X * 2)
+    m.overviewLabel.font.size = FEATURED_OVERVIEW_SIZE
+    m.overviewLabel.lineSpacing = FEATURED_OVERVIEW_SPACING
+
+    m.top.findNode("featuredMetaFont").font.size = FEATURED_META_SIZE
+    m.top.findNode("featuredBadgeFont").font.size = FEATURED_BADGE_SIZE
+
+    m.indicatorDots.itemSpacings = [FEATURED_DOT_GAP]
+    pillHeight = FEATURED_DOT_ACTIVE_SIZE + (FEATURED_DOTS_PAD_Y * 2)
+    m.dotsBackground.height = pillHeight
+    m.dotsBgY = 1080 - FEATURED_DOTS_BOTTOM - pillHeight - MEDIA_BAR_TOP
+    m.dotsY = m.dotsBgY + FEATURED_DOTS_PAD_Y
+end sub
+
+sub buildFeaturedMeta(item as object)
+    m.metadataRow.removeChildrenIndex(m.metadataRow.getChildCount(), 0)
+
+    metaFont = m.top.findNode("featuredMetaFont").font
+    badgeFont = m.top.findNode("featuredBadgeFont").font
+
+    parts = []
+    if isValid(item.year) and item.year > 0 then parts.push({ text: item.year.toStr() })
+
+    rating = item.rating ?? ""
+    if rating <> "" then parts.push({ text: rating, badge: true })
+
+    runtime = item.runtimeDisplay ?? ""
+    if not isStringEqual(item.itemType ?? "", "Series") and runtime <> "" and runtime <> "0m"
+        parts.push({ text: runtime })
+    end if
+
+    if isValidAndNotEmpty(item.genres)
+        shown = 0
+        for each genre in item.genres
+            parts.push({ text: genre })
+            shown++
+            if shown = FEATURED_GENRES_LIMIT then exit for
+        end for
+    end if
+
+    for i = 0 to parts.count() - 1
+        part = parts[i]
+        if isValid(part.badge)
+            addFeaturedBadge(part.text, badgeFont)
+        else
+            label = m.metadataRow.createChild("Label")
+            label.font = metaFont
+            label.color = FEATURED_META_INK
+            label.text = part.text
+        end if
+
+        if i = parts.count() - 1 then continue for
+
+        dot = m.metadataRow.createChild("Label")
+        dot.font = metaFont
+        dot.color = FEATURED_META_DOT_INK
+        dot.text = "•"
+    end for
+end sub
+
+sub addFeaturedBadge(text as string, badgeFont as object)
+    holder = m.metadataRow.createChild("Group")
+
+    border = holder.createChild("Poster")
+    border.uri = "pkg:/images/mediabar/metabadge4.9.png"
+    border.loadDisplayMode = "scaleToFit"
+    border.blendColor = "#FFFFFF"
+    border.opacity = 0.4
+
+    label = holder.createChild("Label")
+    label.font = badgeFont
+    label.color = FEATURED_META_INK
+    label.text = text
+    label.translation = [FEATURED_BADGE_PAD_X, FEATURED_BADGE_PAD_Y]
+
+    rect = label.boundingRect()
+    border.width = rect.width + (FEATURED_BADGE_PAD_X * 2)
+    border.height = rect.height + (FEATURED_BADGE_PAD_Y * 2)
+end sub
+
+sub showBannerItem(item as object)
+    layoutBannerCard()
+
+    m.bannerBackdrop.uri = item.backdropUrl ?? ""
+
+    hasLogo = isValidAndNotEmpty(item.logoUrl)
+    m.bannerLogo.uri = hasLogo ? item.logoUrl : ""
+    m.bannerLogo.visible = hasLogo
+
+    m.bannerTitle.text = item.title
+    m.bannerTitle.visible = not hasLogo
+
+    m.bannerMeta.text = bannerMetaText(item)
+    m.bannerMeta.visible = m.bannerMeta.text <> ""
+
+    m.bannerCommunity = communityRatingEntry(item)
+    renderBannerRatings([])
+    if moonfinPlugin.IsRatingsEnabled() then fetchMediaBarRatings(item)
+
+    layoutBannerContent()
+    updateBannerDots()
+end sub
+
+function bannerMetaText(item as object) as string
+    parts = []
+    if isValid(item.year) and item.year > 0 then parts.push(item.year.toStr())
+
+    runtime = item.runtimeDisplay ?? ""
+    if not isStringEqual(item.itemType ?? "", "Series") and runtime <> "" and runtime <> "0m"
+        parts.push(runtime)
+    end if
+
+    rating = item.rating ?? ""
+    if rating <> "" then parts.push(rating)
+
+    return parts.join(`  ${fontApply.ThemeSeparator()}  `)
+end function
+
+sub renderBannerRatings(pluginRatings as object)
+    entries = []
+    if isValid(m.bannerCommunity) then entries.push(m.bannerCommunity)
+    for each rating in pluginRatings
+        entries.push(rating)
+    end for
+
+    m.bannerRatings.ratingsData = { data: entries }
+end sub
+
+' The card runs to the right edge of the screen from wherever the sidebar leaves
+' off, so its width is settled before anything is laid out inside it. Only the
+' sidebar moves it, so the run of items goes by without resizing the mask
+sub layoutBannerCard()
+    left = isValid(dockedSidebar()) ? BANNER_CARD_LEFT_DOCKED : BANNER_CARD_LEFT
+    if isValid(m.bannerCardLeft) and m.bannerCardLeft = left then return
+
+    m.bannerCardLeft = left
+    width = BANNER_CARD_RIGHT - left
+
+    m.bannerGroup.translation = [left, BANNER_CARD_TOP - MEDIA_BAR_TOP]
+    m.bannerMask.maskSize = [width, BANNER_CARD_HEIGHT]
+
+    for each layer in [m.bannerCardBg, m.bannerBackdrop, m.bannerGradient, m.bannerFocus]
+        layer.width = width
+        layer.height = BANNER_CARD_HEIGHT
+    end for
+
+    textWidth = width - (BANNER_PAD_X * 2)
+    m.bannerTitle.width = textWidth
+    m.bannerMeta.width = textWidth
+
+    m.bannerCardWidth = width
+end sub
+
+' The block sits on the bottom of the card, so it is stacked and then lifted by
+' its own height
+sub layoutBannerContent()
+    yPos = 0
+
+    if m.bannerLogo.visible
+        m.bannerLogo.translation = [0, yPos]
+        yPos += m.bannerLogo.height + BANNER_LOGO_GAP
+    end if
+
+    if m.bannerTitle.visible
+        m.bannerTitle.translation = [0, yPos]
+        yPos += m.bannerTitle.boundingRect().height + BANNER_BLOCK_GAP
+    end if
+
+    if m.bannerMeta.visible
+        m.bannerMeta.translation = [0, yPos]
+        yPos += m.bannerMeta.boundingRect().height + BANNER_BLOCK_GAP
+    end if
+
+    m.bannerRatings.translation = [0, yPos]
+    if m.bannerRatings.visible then yPos += m.bannerRatings.boundingRect().height
+
+    m.bannerContent.translation = [BANNER_PAD_X, BANNER_CARD_HEIGHT - BANNER_PAD_BOTTOM - yPos]
+end sub
+
+' Only a handful of dots fit, so the run is shown through a window that keeps
+' the current one in the middle
+sub updateBannerDots()
+    count = m.mediaBarItems.count()
+    if count <= 1
+        m.bannerDots.visible = false
+        return
+    end if
+
+    shown = count < BANNER_MAX_DOTS ? count : BANNER_MAX_DOTS
+    start = m.currentIndex - Int(shown / 2)
+    if start > count - shown then start = count - shown
+    if start < 0 then start = 0
+
+    if m.bannerDots.getChildCount() <> shown
+        m.bannerDots.removeChildrenIndex(m.bannerDots.getChildCount(), 0)
+        for i = 0 to shown - 1
+            dot = m.bannerDots.createChild("Poster")
+            dot.uri = "pkg:/images/banner/dot4.9.png"
+            dot.loadDisplayMode = "scaleToFit"
+            dot.height = BANNER_DOT_SIZE
+        end for
+    end if
+
+    rowWidth = 0
+    for i = 0 to shown - 1
+        dot = m.bannerDots.getChild(i)
+        isCurrent = start + i = m.currentIndex
+        dot.width = isCurrent ? BANNER_DOT_ACTIVE_WIDTH : BANNER_DOT_SIZE
+        dot.blendColor = isCurrent ? "#FFFFFF" : "#FFFFFF66"
+        rowWidth += dot.width
+    end for
+    rowWidth += (shown - 1) * BANNER_DOT_GAP
+
+    m.bannerDots.translation = [m.bannerCardWidth - BANNER_DOTS_RIGHT - rowWidth, BANNER_DOTS_TOP]
+    m.bannerDots.visible = true
+end sub
+
+sub showMakdItem(item as object)
+    hasLogo = isValidAndNotEmpty(item.logoUrl)
+    m.makdLogo.uri = hasLogo ? item.logoUrl : ""
+    m.makdLogo.visible = hasLogo
+
+    ' The title only stands in when there is no logo to carry the name
+    m.makdTitle.text = item.title
+    m.makdTitle.visible = not hasLogo
+
+    hideDesc = moonfinPlugin.ParseBoolSetting(chainLookupReturn(m.global.session, "user.settings.`ui.home.hideMediaDescription`", false), false)
+    m.makdOverview.text = hideDesc ? "" : (item.overview ?? "")
+    m.makdOverview.visible = m.makdOverview.text <> ""
+
+    buildMakdMeta(item)
+    showMakdRatings(item)
+    layoutMakdText(hasLogo)
+    updateMakdDots()
+end sub
+
+' Year, rating, how long it runs and its first few genres, with a dot between
+' each one
+sub buildMakdMeta(item as object)
+    m.makdMeta.removeChildrenIndex(m.makdMeta.getChildCount(), 0)
+
+    parts = []
+    if isValid(item.year) and item.year > 0 then parts.push(item.year.toStr())
+
+    rating = item.rating ?? ""
+    if rating <> "" then parts.push(rating)
+
+    runtime = item.runtimeDisplay ?? ""
+    if not isStringEqual(item.itemType ?? "", "Series") and runtime <> "" and runtime <> "0m"
+        parts.push(runtime)
+    end if
+
+    if isValidAndNotEmpty(item.genres)
+        shown = 0
+        for each genre in item.genres
+            parts.push(genre)
+            shown++
+            if shown = MAKD_GENRES_LIMIT then exit for
+        end for
+    end if
+
+    metaFont = m.top.findNode("makdMetaFont").font
+    xPos = 0
+    for i = 0 to parts.count() - 1
+        label = m.makdMeta.createChild("Label")
+        label.font = metaFont
+        label.color = MAKD_META_INK
+        label.text = parts[i]
+        label.translation = [xPos, 0]
+        xPos += label.boundingRect().width
+
+        if i = parts.count() - 1 then continue for
+
+        xPos += MAKD_META_DOT_MARGIN
+        dot = m.makdMeta.createChild("Label")
+        dot.font = metaFont
+        dot.color = MAKD_META_DOT_INK
+        dot.text = "•"
+        dot.translation = [xPos, 0]
+        xPos += dot.boundingRect().width + MAKD_META_DOT_MARGIN + MAKD_META_GAP
+    end for
+end sub
+
+function communityRatingEntry(item as object) as dynamic
+    community = item.communityRatingDisplay ?? ""
+    if community = "" then return invalid
+
+    return {
+        source: "stars",
+        name: tr("Community"),
+        iconPath: "pkg:/images/sharp_star_white_18dp.png",
+        iconBlendColor: "#FFD700",
+        formatted: community
+    }
+end function
+
+sub showMakdRatings(item as object)
+    m.makdCommunity = communityRatingEntry(item)
+    renderMakdRatings([])
+    if moonfinPlugin.IsRatingsEnabled() then fetchMediaBarRatings(item)
+end sub
+
+' The score off the item shows straight away and the plugin's ratings join it
+' once they arrive, which is late enough that the block is measured again
+sub renderMakdRatings(pluginRatings as object)
+    entries = []
+    if isValid(m.makdCommunity) then entries.push(m.makdCommunity)
+    for each rating in pluginRatings
+        entries.push(rating)
+    end for
+
+    m.makdRatings.ratingsData = { data: entries }
+end sub
+
+' The block is stacked, then lifted off the bottom of the screen by the amount
+' the other clients lift theirs
+sub layoutMakdText(hasLogo as boolean)
+    leftInset = isValid(dockedSidebar()) ? MAKD_TEXT_LEFT_DOCKED : MAKD_TEXT_LEFT
+    m.makdLogo.translation = [leftInset, MAKD_LOGO_TOP]
+
+    yPos = 0
+
+    if m.makdTitle.visible
+        m.makdTitle.translation = [0, yPos]
+        yPos += m.makdTitle.boundingRect().height + MAKD_BLOCK_GAP
+    end if
+
+    m.makdMeta.translation = [0, yPos]
+    if m.makdMeta.getChildCount() > 0
+        yPos += m.makdMeta.getChild(0).boundingRect().height + MAKD_BLOCK_GAP
+    end if
+
+    m.makdRatings.translation = [0, yPos]
+    if m.makdRatings.visible then yPos += m.makdRatings.boundingRect().height + MAKD_BLOCK_GAP
+
+    if m.makdOverview.visible
+        m.makdOverview.translation = [0, yPos]
+        yPos += m.makdOverview.boundingRect().height
+    end if
+
+    lift = hasLogo ? MAKD_LIFT_WITH_LOGO : MAKD_LIFT_NO_LOGO
+    m.makdText.translation = [leftInset, 1080 - MAKD_PAD_BOTTOM - lift - yPos]
+end sub
+
+' The dots sit in the far corner on a rounded ground, which is sized to however
+' many there are
+sub updateMakdDots()
+    count = m.mediaBarItems.count()
+    if count <= 1
+        m.makdDots.visible = false
+        return
+    end if
+
+    if m.makdDotRow.getChildCount() <> count
+        m.makdDotRow.removeChildrenIndex(m.makdDotRow.getChildCount(), 0)
+        for i = 0 to count - 1
+            dot = m.makdDotRow.createChild("Poster")
+            dot.uri = "pkg:/images/icons/circle.png"
+            dot.loadDisplayMode = "scaleToFit"
+        end for
+    end if
+
+    rowWidth = 0
+    for i = 0 to count - 1
+        dot = m.makdDotRow.getChild(i)
+        size = i = m.currentIndex ? MAKD_DOT_ACTIVE_SIZE : MAKD_DOT_SIZE
+        dot.width = size
+        dot.height = size
+        dot.blendColor = i = m.currentIndex ? "#FFFFFF" : "#FFFFFF59"
+        rowWidth += size
+    end for
+    rowWidth += (count - 1) * MAKD_DOT_GAP
+
+    m.makdDotsBg.width = rowWidth + MAKD_DOTS_PAD_X * 2
+    m.makdDotsBg.height = MAKD_DOT_ACTIVE_SIZE + MAKD_DOTS_PAD_Y * 2
+
+    m.makdDots.translation = [1920 - MAKD_DOTS_RIGHT - m.makdDotsBg.width, 1080 - MAKD_DOTS_BOTTOM - m.makdDotsBg.height]
+    m.makdDots.visible = true
+end sub
+
+' The home screen hands the bar real focus rather than setting hasFocus, so the
+' styles that mark themselves follow the focus chain
+sub onMediaBarFocusChanged()
+    focused = m.top.isInFocusChain()
+
+    if m.mediaBarMode = "aya"
+        m.ayaFocusRing.visible = focused
+        m.ayaGroup.scale = focused ? [AYA_FOCUS_SCALE, AYA_FOCUS_SCALE] : [1.0, 1.0]
+        return
+    end if
+
+    if m.mediaBarMode = "banner" then m.bannerFocus.visible = focused
+end sub
+
+sub showAyaItem(item as object)
+    if item.logoUrl <> ""
+        m.ayaLogo.uri = item.logoUrl
+        m.ayaLogo.visible = true
+        m.ayaTitle.visible = false
+    else
+        m.ayaTitle.text = item.title
+        m.ayaTitle.visible = true
+        m.ayaLogo.visible = false
+    end if
+
+    updateAyaIndicators()
+    showAyaBackdrop(item.backdropUrl)
+end sub
+
+' The incoming artwork fades in over the one already showing, then takes its
+' place, so a slide never lands half drawn
+sub showAyaBackdrop(url as string)
+    if url = "" or isStringEqual(url, m.ayaBackdrop.uri) then return
+
+    if not isValidAndNotEmpty(m.ayaBackdrop.uri)
+        m.ayaBackdrop.uri = url
+        return
+    end if
+
+    ' Let whatever is still fading land before starting the next one
+    if isStringEqual(m.ayaSlideIn.state, "running") then commitAyaBackdrop()
+
+    m.ayaBackdropNext.uri = url
+    m.ayaSlideIn.control = "start"
+end sub
+
+sub onAyaSlideInComplete(event as object)
+    if isStringEqual(event.getData(), "stopped") then commitAyaBackdrop()
+end sub
+
+sub commitAyaBackdrop()
+    if not isValidAndNotEmpty(m.ayaBackdropNext.uri) then return
+
+    m.ayaBackdrop.uri = m.ayaBackdropNext.uri
+    m.ayaBackdropNext.uri = ""
+    m.ayaBackdropNext.opacity = 0
+end sub
+
+' The bars are right aligned in the corner, so the row is measured before it is
+' placed and the active one is wider
+sub updateAyaIndicators()
+    count = m.mediaBarItems.count()
+    if count <= 1
+        m.ayaIndicators.visible = false
+        return
+    end if
+
+    if m.ayaIndicators.getChildCount() <> count
+        m.ayaIndicators.removeChildrenIndex(m.ayaIndicators.getChildCount(), 0)
+        for i = 0 to count - 1
+            bar = m.ayaIndicators.createChild("Rectangle")
+            bar.height = 2
+        end for
+    end if
+
+    rowWidth = 0
+    for i = 0 to count - 1
+        bar = m.ayaIndicators.getChild(i)
+        if i = m.currentIndex
+            bar.width = AYA_INDICATOR_ACTIVE_WIDTH
+            bar.color = "#FFFFFFFF"
+        else
+            bar.width = AYA_INDICATOR_WIDTH
+            bar.color = "#FFFFFF4D"
+        end if
+        rowWidth += bar.width
+    end for
+    rowWidth += (count - 1) * AYA_INDICATOR_GAP
+
+    m.ayaIndicators.translation = [AYA_FRAME_WIDTH - AYA_INDICATOR_RIGHT - rowWidth, AYA_INDICATOR_TOP]
+    m.ayaIndicators.visible = true
+end sub
+
+' Called when contentFadeOut completes - swap content and fade back in
+sub onContentFadeOutComplete(event as object)
+    if event.getData() = "stopped" then return
+    if m.pendingDisplayIndex >= 0
+        showMediaBarItem(m.pendingDisplayIndex)
+        m.pendingDisplayIndex = -1
+        if isValid(m.contentFadeIn)
+            ' Set dynamic fade-in targets to respect user settings
+            if isValid(m.infoBgFadeInInterp)
+                m.infoBgFadeInInterp.keyValue = [0.0, m.overlayOpacity ?? 0.5]
+            end if
+            if isValid(m.logoShadowFadeInInterp)
+                m.logoShadowFadeInInterp.keyValue = [0.0, 0.6]
+            end if
+            m.contentFadeIn.control = "start"
+        end if
+    end if
+end sub
+
+' Actually populate the content (no animation, just sets values)
+sub showMediaBarItem(index as integer)
+    if index < 0 or index >= m.mediaBarItems.count() then return
+
+    item = m.mediaBarItems[index]
+
+    ' Update backdrop (single set, parent handles transitions)
+    if item.backdropUrl <> ""
+        m.top.currentBackdrop = item.backdropUrl
+    end if
+
+    if m.mediaBarMode = "aya"
+        showAyaItem(item)
+        return
+    end if
+
+    if m.mediaBarMode = "makd"
+        showMakdItem(item)
+        return
+    end if
+
+    if m.mediaBarMode = "banner"
+        showBannerItem(item)
+        return
+    end if
+
+    layoutFeatured()
+
+    if item.logoUrl <> ""
+        m.logoImage.uri = item.logoUrl
+        m.logoShadow.uri = item.logoUrl
+        m.logoImage.visible = true
+        m.logoShadow.visible = true
+        m.titleText.visible = false
+    else
+        m.titleText.text = item.title
+        m.titleText.visible = true
+        m.logoImage.visible = false
+        m.logoShadow.visible = false
+    end if
+
+    buildFeaturedMeta(item)
+
+    m.featuredCommunity = communityRatingEntry(item)
+    renderFeaturedRatings([])
+    if moonfinPlugin.IsRatingsEnabled()
+        fetchMediaBarRatings(item)
+    else
+        if isValid(m.ratingsDebounceTimer) then m.ratingsDebounceTimer.control = "stop"
+        m.pendingRatingsItem = invalid
+    end if
+
+    hideDesc = moonfinPlugin.ParseBoolSetting(chainLookupReturn(m.global.session, "user.settings.`ui.home.hideMediaDescription`", false), false)
+    m.overviewLabel.text = hideDesc ? "" : (item.overview ?? "")
+
+    updateIndicatorDots()
+    updateInfoBackgroundSize()
+end sub
+
+' Update info background to match content height
+sub updateInfoBackgroundSize()
+    if not isValid(m.infoOverlayContent) or not isValid(m.infoBackground) then return
+    if not m.infoBackground.visible then return
+
+    contentHeight = m.infoOverlayContent.boundingRect().height
+    if contentHeight <= 0 then return
+
+    totalHeight = contentHeight + (FEATURED_BOX_PAD_Y * 2)
+    newBgY = m.infoBottomAnchor - totalHeight
+
+    m.infoBackground.height = totalHeight
+    m.infoBackground.translation = [m.infoBackground.translation[0], newBgY]
+
+    m.infoOverlayContent.translation = [m.infoOverlayContent.translation[0], newBgY + FEATURED_BOX_PAD_Y]
+end sub
+
+sub fetchMediaBarRatings(item as object)
+    m.ratingsRow.ratingsData = invalid
+
+    tmdbId = item.tmdbId ?? ""
+    itemType = item.itemType ?? ""
+    if tmdbId = "" or itemType = "" then return
+
+    ' Debounce so auto-advance and rapid arrows don't fire a request per item
+    m.pendingRatingsItem = item
+    m.pendingRatingsIndex = m.currentIndex
+    m.ratingsDebounceTimer = moonfinPlugin.StartRatingsDebounce(m.ratingsDebounceTimer, "onRatingsDebounceFired")
+end sub
+
+sub onRatingsDebounceFired()
+    item = m.pendingRatingsItem
+    if not isValid(item) then return
+    m.pendingRatingsItem = invalid
+
+    if isValid(m.mediaBarRatingsTask)
+        m.mediaBarRatingsTask.unobserveFieldScoped("ratings")
+        m.mediaBarRatingsTask = invalid
+    end if
+
+    m.mediaBarRatingsTask = createObject("roSGNode", "FetchRatingsTask")
+    m.mediaBarRatingsTask.itemId = item.id ?? ""
+    m.mediaBarRatingsTask.itemType = item.itemType
+    m.mediaBarRatingsTask.tmdbId = item.tmdbId
+    m.mediaBarRatingsTask.observeFieldScoped("ratings", "onMediaBarRatingsLoaded")
+    m.mediaBarRatingsTask.control = "RUN"
+end sub
+
+sub onMediaBarRatingsLoaded(event as object)
+    result = event.getData()
+    if not isValid(result) then return
+
+    if m.currentIndex <> m.pendingRatingsIndex then return
+
+    displayRatings = result.data
+    if not isValidAndNotEmpty(displayRatings) then return
+
+    if m.mediaBarMode = "makd"
+        renderMakdRatings(displayRatings)
+        layoutMakdText(m.makdLogo.visible)
+        return
+    end if
+
+    if m.mediaBarMode = "banner"
+        renderBannerRatings(displayRatings)
+        layoutBannerContent()
+        return
+    end if
+
+    renderFeaturedRatings(displayRatings)
+
+    updateInfoBackgroundSize()
+end sub
+
+' Start auto-advance timer
+sub startAutoAdvanceTimer()
+    if isValid(m.autoAdvanceTimer)
+        m.autoAdvanceTimer.control = "stop"
+        m.autoAdvanceTimer = invalid
+    end if
+
+    if not getMediaBarAutoAdvanceEnabled() then return
+
+    m.autoAdvanceTimer = createObject("roSGNode", "Timer")
+    m.autoAdvanceTimer.duration = getMediaBarIntervalMs() / 1000.0
+    m.autoAdvanceTimer.repeat = true
+    m.autoAdvanceTimer.observeFieldScoped("fire", "onAutoAdvance")
+    m.autoAdvanceTimer.control = "start"
+end sub
+
+function getMediaBarAutoAdvanceEnabled() as boolean
+    return get_user_setting_bool("ui.home.mediaBarAutoAdvance", false)
+end function
+
+function getMediaBarIntervalMs() as integer
+    defaultMs = 7000
+    settingValue = m.global.session.user.settings["ui.home.mediaBarIntervalMs"] ?? invalid
+    if not isValid(settingValue) then return defaultMs
+
+    intervalMs = settingValue.toInt()
+    if intervalMs < 1000 then return 1000
+    if intervalMs > 60000 then return 60000
+    return intervalMs
+end function
+
+' Auto-advance handler
+sub onAutoAdvance()
+    if not getMediaBarAutoAdvanceEnabled() then return
+
+    if not m.isPaused and m.mediaBarItems.count() > 1
+        if m.mediaBarMode = "gallery"
+            galleryAdvance(1)
+        else if m.mediaBarMode = "bookshelf"
+            bookshelfAdvance(1)
+        else
+            nextSlide()
+        end if
+    end if
+end sub
+
+' Navigate to next slide
+sub nextSlide()
+    if m.mediaBarItems.count() <= 1 then return
+
+    m.currentIndex = (m.currentIndex + 1) mod m.mediaBarItems.count()
+    displayMediaBarItem(m.currentIndex)
+end sub
+
+' Navigate to previous slide
+sub previousSlide()
+    if m.mediaBarItems.count() <= 1 then return
+
+    if m.currentIndex = 0
+        m.currentIndex = m.mediaBarItems.count() - 1
+    else
+        m.currentIndex = m.currentIndex - 1
+    end if
+
+    displayMediaBarItem(m.currentIndex)
+end sub
+
+' Handle key events
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+
+    m.clearBackdrop = true ' Default to clearing backdrop on focus loss
+
+    if key = KeyCode.UP
+        ' Signal parent to navigate to overhang (navbar)
+        ' and don't clear the backdrop (if any)
+        m.clearBackdrop = false
+        return false ' Let parent handle navigation to overhang
+    else if key = KeyCode.DOWN
+        ' Navigate down to home rows
+        return false ' Let parent handle
+    else if key = KeyCode.LEFT
+        sidebar = dockedSidebar()
+        if isValid(sidebar)
+            m.clearBackdrop = false
+            sidebar.setFocus(true)
+            return true
+        end if
+        if m.mediaBarMode = "gallery"
+            galleryAdvance(-1)
+        else if m.mediaBarMode = "bookshelf"
+            bookshelfAdvance(-1)
+        else
+            previousSlide()
+        end if
+        ' Reset auto-advance timer
+        if isValid(m.autoAdvanceTimer)
+            m.autoAdvanceTimer.control = "stop"
+            m.autoAdvanceTimer.control = "start"
+        end if
+        return true
+    else if key = KeyCode.RIGHT
+        if m.mediaBarMode = "gallery"
+            galleryAdvance(1)
+        else if m.mediaBarMode = "bookshelf"
+            bookshelfAdvance(1)
+        else
+            nextSlide()
+        end if
+        ' Reset auto-advance timer
+        if isValid(m.autoAdvanceTimer)
+            m.autoAdvanceTimer.control = "stop"
+            m.autoAdvanceTimer.control = "start"
+        end if
+        return true
+    else if key = KeyCode.OK
+        ' Navigate to item details
+        activeItem = invalid
+        if m.mediaBarMode = "gallery"
+            activeItem = getGalleryActiveItem()
+        else if m.mediaBarMode = "bookshelf"
+            if m.bookshelfActiveIndex >= 0 and m.bookshelfActiveIndex < m.mediaBarItems.count()
+                activeItem = m.mediaBarItems[m.bookshelfActiveIndex]
+            end if
+        else if m.currentIndex >= 0 and m.currentIndex < m.mediaBarItems.count()
+            activeItem = m.mediaBarItems[m.currentIndex]
+        end if
+
+        if isValid(activeItem) and isValid(activeItem.id) and isValid(activeItem.itemType)
+            itemNode = createObject("roSGNode", "ContentNode")
+            itemNode.id = activeItem.id
+            itemNode.title = activeItem.title
+            itemNode.addFields({ type: activeItem.itemType })
+            m.top.itemSelected = itemNode
+        end if
+        return true
+    else if key = KeyCode.PLAY or key = "pause"
+        ' Toggle pause/play
+        m.isPaused = not m.isPaused
+        m.pauseIndicator.visible = m.isPaused
+
+        ' Stop/start auto-advance timer
+        if isValid(m.autoAdvanceTimer)
+            if m.isPaused
+                m.autoAdvanceTimer.control = "stop"
+            else
+                m.autoAdvanceTimer.control = "start"
+            end if
+        end if
+        return true
+    end if
+
+    return false
+end function
+
+' Public function to refresh the current display from parent
+sub refreshCurrentDisplay()
+    if m.mediaBarItems.count() > 0
+        if m.mediaBarMode = "gallery"
+            m.top.currentBackdrop = ""
+            refreshDisplay()
+        else if m.mediaBarMode = "bookshelf"
+            m.top.currentBackdrop = ""
+            refreshDisplay()
+        else
+            refreshDisplay()
+        end if
+    end if
+end sub

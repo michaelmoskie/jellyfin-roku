@@ -32,25 +32,20 @@
     <field id="voiceCommand" type="assocarray" alwaysNotify="true" />
     <!-- True when a skippable segment (intro, recap, etc.) is currently active -->
     <field id="hasActiveSegment" type="boolean" value="false" />
+    <field id="nowPlayingMetadata" type="assocarray" alwaysNotify="true" />
   </interface>
 
   <children>
-    <LayoutGroup id="bufferingVideoInfo" layoutDirection="vert" translation="[103,61]">
-      <ScrollingText id="bufferingItemTitle" font="font:LargeBoldSystemFont" maxWidth="1400" />
-      <LayoutGroup id="bufferingVideoInfo" layoutDirection="horiz" translation="[103,61]">
-        <Text id="bufferingItemSeason" font="font:MediumSystemFont" color="0xffffffFF" />
-        <Text id="bufferingItemEpisode" font="font:MediumSystemFont" color="0xffffffFF" />
-        <Text id="bufferingItemEpisodeEnd" font="font:MediumSystemFont" color="0xffffffFF" />
-      </LayoutGroup>
-    </LayoutGroup>
-
+    <Rectangle id="pauseOverlay" width="1920" height="1080" color="0x000000AA" visible="false" />
     <Group id="captionGroup" translation="[0,0]" />
     <timer id="playbackTimer" repeat="true" duration="30" />
     <timer id="playbackCheckTimer" repeat="false" duration="1" />
     <timer id="bufferStuckTimer" repeat="true" duration="3" />
     <timer id="bufferCheckTimer" repeat="true" />
-    <OSD id="osd" visible="false" />
-    <PlaybackCastPopup id="castPopup" visible="false" />
+    <timer id="scrubTimer" repeat="true" duration="0.3" />
+    <timer id="nextUpTimer" repeat="true" duration="0.1" />
+    <timer id="startDelayTimer" repeat="false" />
+    <OSD id="osd" visible="false" inactiveTimeout="0" />
 
     <Rectangle id="chapterList" visible="false" color="0x00000098" width="400" height="380" translation="[103,210]">
       <LabelList id="chapterMenu" itemSpacing="[0,20]" numRows="5" font="font:SmallSystemFont" itemSize="[315,40]" translation="[40,20]">
@@ -60,16 +55,17 @@
 
     <Text id="videoEndingTime" font="font:SmallSystemFont" color="0xffffffFF" horizAlign="right" width="200" translation="[1617,900]" visible="false" />
 
-    <Rectangle id="nextUp" visible="false" color="0x000000CC" height="144" width="785" translation="[1000, 920]">
-      <Poster id="nextItemPoster" width="150" height="124" translation="[10, 10]" />
-      <LayoutGroup layoutDirection="vert" horizAlignment="left" itemSpacings="[10, 10]" translation="[180, 15]">
-        <Text text="Next Up" color="#FFFFFF" font="font:SmallBoldSystemFont" horizAlign="left" vertAlign="center" height="35" />
-        <ScrollingText id="nextItemSeriesTitle" maxWidth="300" color="#FFFFFF" font="font:SmallBoldSystemFont" horizAlign="left" vertAlign="top" height="35" />
-        <ScrollingText id="nextItemEpisodeTitle" maxWidth="300" color="#AAAAAA" font="font:SmallBoldSystemFont" horizAlign="left" vertAlign="top" height="35" />
-      </LayoutGroup>
-    </Rectangle>
+    <NextUpOverlay id="nextUp" visible="false" />
 
-    <StandardButton id="skipSegment" visible="false" height="85" width="275" translation="[1500, 950]" />
+    <SkipSegmentOverlay id="skipSegment" visible="false" />
+
+    <Group id="scrubInfo" visible="false" translation="[103,900]">
+      <Text id="scrubSpeedDisplay" font="font:MediumSystemFont" color="0xffffffFF" horizAlign="right" width="100" translation="[1612,55]" />
+      <Rectangle id="scrubProgressBackground" width="1714" height="6" color="0x555555AA" translation="[0,30]">
+        <Rectangle id="scrubProgressBar" width="0" height="6" color="0x00a4dcFF" />
+      </Rectangle>
+      <Text id="scrubTimeDisplay" font="font:MediumSystemFont" color="0xffffffFF" horizAlign="left" width="400" translation="[0,55]" />
+    </Group>
 
     <Rectangle id="subtitleTimingButtons" height="120" width="560" translation="[100, 900]" visible="false">
       <Text id="subtitleSyncValue" translation="[10, 20]" />
@@ -105,11 +101,8 @@
         width="100" />
     </Rectangle>
 
-    <Timer id="fastForwardOrRewindTimer" repeat="true" duration="0.3" />
-    <Timer id="spinnerPercentTimer" repeat="true" duration="0.15" />
-    <Timer id="leftTenSecondSkipTimer" repeat="true" duration="0.5" />
-    <Timer id="rightTenSecondSkipTimer" repeat="true" duration="0.5" />
-
-    <Label id="spinnerPercent" text="0%" visible="false" horizAlign="center" vertAlign="center" height="100" width="100" font="font:SmallBoldSystemFont" />
+    <AudioSelector id="audioSelector" visible="false" />
+    <SubtitleSelector id="subtitleSelector" visible="false" />
+    <SubtitleDownloadDialog id="subtitleDownloadDialog" visible="false" />
   </children>
 </component>

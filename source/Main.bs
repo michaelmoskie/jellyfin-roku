@@ -31,14 +31,35 @@ sub Main (args as dynamic) as void
 
     sceneManager = CreateObject("roSGNode", "SceneManager")
     sceneManager.observeField("dataReturned", m.port)
+    sceneManager.observeField("buttonSelected", m.port)
 
     overhang = m.scene.findNode("overhang")
+    overhang.observeField("itemSelected", m.port)
 
-    m.global.addFields({ app_loaded: false, playstateTask: playstateTask, sceneManager: sceneManager })
-    m.global.addFields({ queueManager: CreateObject("roSGNode", "QueueManager") })
-    m.global.addFields({ audioPlayer: CreateObject("roSGNode", "AudioPlayer") })
-    m.global.addFields({ jumpTo: {} })
-    m.global.addFields({ fallbackFont: {} })
+    m.global.addFields({
+        app_loaded: false,
+        homeNeedsRefresh: false,
+        playstateTask: playstateTask,
+        sceneManager: sceneManager,
+        queueManager: CreateObject("roSGNode", "QueueManager"),
+        audioPlayer: CreateObject("roSGNode", "AudioPlayer"),
+        jumpTo: {},
+        fallbackFont: string.EMPTY
+    })
+
+    runtimeContext = GetGlobalAA()
+    runtimeContext["moonfin.appName"] = m.global.app.name
+    runtimeContext["moonfin.appVersion"] = m.global.app.version
+    runtimeContext["moonfin.deviceName"] = m.global.device.name
+    runtimeContext["moonfin.deviceModel"] = m.global.device.model
+    runtimeContext["moonfin.deviceId"] = m.global.device.serverDeviceName
+
+    accountDialog = m.scene.findNode("accountDialog")
+    if isValid(accountDialog)
+        accountDialog.observeField("accountAction", m.port)
+        accountDialog.observeField("switchToUser", m.port)
+        accountDialog.observeField("removeUserRequest", m.port)
+    end if
 
     m.global.observeField("jumpTo", m.port)
 
@@ -48,16 +69,48 @@ sub Main (args as dynamic) as void
     end if
 
     app_start:
-    ' First thing to do is validate the ability to use the API
+    ' Hide both nav elements before login to prevent flash/overlap
+    overhang.visible = false
+    overhang.isVisible = false
+    sidebar = m.scene.findNode("sidebar")
+    if isValid(sidebar) then sidebar.visible = false
+
     if not LoginFlow() then return
 
-    ' Set user's chosen colors
+    'Pull user configuration from server and apply settings
+    'The server reports no language preference as an empty string. The client uses "anyLanguage"
+    subtitleMode = chainLookupReturn(m.global.session, "user.Configuration.SubtitleMode", "Default")
+    subtitleLanguage = chainLookupReturn(m.global.session, "user.Configuration.SubtitleLanguagePreference", "")
+    audioLanguage = chainLookupReturn(m.global.session, "user.Configuration.AudioLanguagePreference", "")
+    defaultAudio = chainLookupReturn(m.global.session, "user.Configuration.PlayDefaultAudioTrack", true) ? "true" : "false"
+    if subtitleLanguage = "" then subtitleLanguage = "anyLanguage"
+    if audioLanguage = "" then audioLanguage = "anyLanguage"
+    set_user_setting("playback.subs.mode", subtitleMode)
+    set_user_setting("playback.subs.language", subtitleLanguage)
+    set_user_setting("playback.audioPreferredLanguage", audioLanguage)
+    set_user_setting("playback.playDefaultAudioTrack", defaultAudio)
+
+    MigrateSeerrRegistryNamespace()
+    MigrateSeerrConfig()
+    MigrateSettings()
+
+    navPosition = get_user_setting("navbar.position")
+    if isValid(sidebar)
+        sidebar.observeField("itemSelected", m.port)
+    end if
+    if isStringEqual(navPosition, "left") and isValid(sidebar)
+        sidebar.visible = true
+    else
+        overhang.visible = true
+        overhang.isVisible = true
+    end if
+
+    sceneManager.callFunc("refreshNavReference")
+
     setUserColors()
 
-    ' remove login scenes from the stack
     sceneManager.callFunc("clearScenes")
 
-    ' load home page
     group = CreateHomeGroup()
     group.callFunc("loadLibraries")
     stopLoadingSpinner()
@@ -67,7 +120,8 @@ sub Main (args as dynamic) as void
 
     ' Download and store the fallback font to tmp:/
     ' This font may be used for CJK subtitles
-    downloadFallbackFont()
+    ' TODO: Move to Task to avoid threading errors
+    ' downloadFallbackFont()
 
     ' Refresh overhang title font so it can change to fallback if desired
     if isValid(overhang)
@@ -107,19 +161,15 @@ sub Main (args as dynamic) as void
         msg = wait(0, m.port)
 
         if type(msg) = "roSGScreenEvent" and msg.isScreenClosed()
-            print "SCREEN CLOSED"
             return
         end if
 
         if isNodeEvent(msg, "exit")
-            print "CLOSING SCREEN"
             return
         end if
 
         if isNodeEvent(msg, "jumpTo")
             onJumpToEvent(msg)
-        else if isNodeEvent(msg, "closeSidePanel")
-            onCloseSidePanelEvent()
         else if isNodeEvent(msg, "quickPlayNode")
             onQuickPlayEvent(msg)
         else if isNodeEvent(msg, "refreshSeasonDetailsData")
@@ -128,7 +178,17 @@ sub Main (args as dynamic) as void
             onRefreshPlaylistDataEvent()
         else if isNodeEvent(msg, "refreshMovieDetailsData")
             onRefreshMovieDetailsDataEvent()
+        else if isNodeEvent(msg, "refreshEpisodeDetailsData")
+            onRefreshEpisodeDetailsDataEvent()
+        else if isNodeEvent(msg, "refreshSeriesDetailsData")
+            onRefreshSeriesDetailsDataEvent()
+        else if isNodeEvent(msg, "genreItemSelected")
+            onGenreItemSelectedEvent(msg)
+        else if isNodeEvent(msg, "studioSelected")
+            onStudioSelectedEvent(msg)
         else if isNodeEvent(msg, "selectedItem")
+            onSelectedItemEvent(msg)
+        else if isNodeEvent(msg, "shuffleSelectedItem")
             onSelectedItemEvent(msg)
         else if isNodeEvent(msg, "movieSelected")
             onMovieSelectedEvent(msg)
@@ -142,6 +202,8 @@ sub Main (args as dynamic) as void
             onPlaySeasonFromStartEvent(msg)
         else if isNodeEvent(msg, "musicAlbumSelected")
             onMusicAlbumSelectedEvent(msg)
+        else if isNodeEvent(msg, "selectedAlbum")
+            onSelectedAlbumEvent(msg)
         else if isNodeEvent(msg, "appearsOnSelected")
             onAppearsOnSelectedEvent(msg)
         else if isNodeEvent(msg, "similarArtistSelected")
@@ -152,14 +214,19 @@ sub Main (args as dynamic) as void
             onPlayAlbumEvent(msg)
         else if isNodeEvent(msg, "shuffleAlbumSelected")
             onShuffleAlbumEvent(msg)
-        else if isNodeEvent(msg, "subtitleToDelete")
-            onSubtitleToDeleteEvent(msg)
-        else if isNodeEvent(msg, "subtitleSearchButtonSelected")
-            onSubtitleSearchButtonSelectedEvent()
-        else if isNodeEvent(msg, "subtitleLanguageButtonSelected")
-            onSubtitleLanguageButtonSelectedEvent()
         else if isNodeEvent(msg, "playlistItemSelected")
             onPlaylistItemSelectedEvent(msg)
+        else if isNodeEvent(msg, "trackSelected")
+            onMusicTrackSelectedEvent(msg)
+        else if isNodeEvent(msg, "playAll")
+            node = msg.getRoSGNode()
+            if node.isSubType("MusicTrackListView")
+                onMusicTrackPlayAllEvent(msg)
+            else
+                onPlaylistPlayAllEvent(msg)
+            end if
+        else if isNodeEvent(msg, "shufflePlay") and (msg.getRoSGNode().isSubType("PlaylistDetails") or msg.getRoSGNode().isSubType("MusicTrackListView") or msg.getRoSGNode().isSubType("ModernItemDetails"))
+            onPlaylistShuffleEvent(msg)
         else if isNodeEvent(msg, "playArtistSelected")
             onPlayArtistSelectedEvent(msg)
         else if isNodeEvent(msg, "instantMixSelected")
@@ -167,33 +234,64 @@ sub Main (args as dynamic) as void
         else if isNodeEvent(msg, "search_value")
             onSearch_valueEvent(msg)
         else if isNodeEvent(msg, "itemSelected")
-            onItemSelectedEvent(msg)
+            node = msg.getRoSGNode()
+            if isValid(node) and (node.isSubType("JFOverhang") or node.id = "sidebar")
+                onOverhangItemSelectedEvent(msg)
+            else
+                onItemSelectedEvent(msg)
+            end if
         else if isNodeEvent(msg, "buttonSelected")
             onButtonSelectedEvent(msg)
         else if isNodeEvent(msg, "content")
             onContentEvent(msg)
-        else if isNodeEvent(msg, "userMenuOptionSelected")
-            button = msg.getRoSGNode()
-            group = sceneManager.callFunc("getActiveScene")
-            if isStringEqual(button.id, "change_server")
+        else if isNodeEvent(msg, "accountAction")
+            accountDialog.visible = false
+            action = msg.getData()
+            restartApp = true
+            if isStringEqual(action, "change_server")
                 unset_setting("server")
                 session.server.Delete()
                 SignOut(false)
-                setUserColors()
-                sceneManager.callFunc("clearScenes")
-                goto app_start
-            else if isStringEqual(button.id, "change_user")
+            else if isStringEqual(action, "add_user")
                 SignOut(false)
-                ' Reset colors to defaults
-                setUserColors()
-                sceneManager.callFunc("clearScenes")
-                goto app_start
-            else if isStringEqual(button.id, "sign_out")
+            else if isStringEqual(action, "sign_out")
                 SignOut()
+            else if isStringEqual(action, "sign_out_all")
+                SignOutAllUsers()
+            else
+                restartApp = false
+                returnFocus = accountDialog.returnFocus
+                if not isValid(returnFocus) then returnFocus = sceneManager.callFunc("getActiveScene")
+                if isValid(returnFocus) then returnFocus.setFocus(true)
+            end if
+
+            if restartApp
                 setUserColors()
                 sceneManager.callFunc("clearScenes")
                 goto app_start
             end if
+        else if isNodeEvent(msg, "switchToUser")
+            accountDialog.visible = false
+            SwitchToSavedUser(msg.getData())
+            setUserColors()
+            sceneManager.callFunc("clearScenes")
+            goto app_start
+        else if isNodeEvent(msg, "removeUserRequest")
+            request = msg.getData()
+            prompt = Substitute(tr("Are you sure you want to remove {0} from {1}?"), request.username, request.serverName)
+            confirmed = show_dialog(prompt + " " + tr("You will need to sign in again to use this account."), [tr("Cancel"), tr("Remove")], 0)
+            if confirmed = 1
+                ForgetSavedUser(request.id)
+                ' Removing the account in use leaves nothing signed in
+                if isStringEqual(request.id, m.global.session.user.id)
+                    accountDialog.visible = false
+                    SignOut()
+                    setUserColors()
+                    sceneManager.callFunc("clearScenes")
+                    goto app_start
+                end if
+            end if
+            accountDialog.callFunc("showDialog")
         else if isNodeEvent(msg, "state")
             onStateEvent(msg)
         else if type(msg) = "roDeviceInfoEvent"
@@ -207,9 +305,6 @@ sub Main (args as dynamic) as void
             onReturnDataEvent(msg)
         else if isNodeEvent(msg, "dataReturned")
             onDataReturnedEvent(msg)
-        else
-            print "Unhandled " type(msg)
-            print msg
         end if
     end while
 end sub
@@ -336,7 +431,6 @@ end sub
 
 sub setUserColors()
     setBackgroundColor()
-    setBackgroundImage()
     setOverhangColors()
 end sub
 
@@ -344,31 +438,27 @@ sub setBackgroundColor()
     m.scene.backgroundColor = chainLookupReturn(m.global.session, "user.settings.colorBackground", ColorPalette.VIEWBACKGROUND)
 end sub
 
-sub setBackgroundImage()
-    selectedBackgroundImage = chainLookupReturn(m.global.session, "user.settings.imageBackground", string.EMPTY)
+sub setOverhangColors()
+    activeNav = getActiveNav(m.scene)
+    if not isValid(activeNav) then return
 
-    if isStringEqual(selectedBackgroundImage, "splash")
-        selectedBackgroundImage = api.branding.GetSplashScreen({
-            format: "jpg",
-            foregroundLayer: 1,
-            fillWidth: 1920,
-            width: 1920,
-            fillHeight: 1080,
-            height: 1080,
-            tag: "splash"
-        })
+    overlayCurrentUserSelection = activeNav.findNode("overlayCurrentUserSelection")
+    if isValid(overlayCurrentUserSelection)
+        overlayCurrentUserSelection.blendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
     end if
 
-    m.scene.callFunc("setBackgroundImage", selectedBackgroundImage)
+    overlayCurrentUser = activeNav.findNode("overlayCurrentUser")
+    if isValid(overlayCurrentUser)
+        overlayCurrentUser.color = chainLookupReturn(m.global.session, "user.settings.colorHomeUsername", ColorPalette.WHITE)
+    end if
 end sub
 
-sub setOverhangColors()
-    overhang = m.scene.findNode("overhang")
-    if not isValid(overhang) then return
-
-    overlayCurrentUserSelection = overhang.findNode("overlayCurrentUserSelection")
-    overlayCurrentUserSelection.blendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
-
-    overlayCurrentUser = overhang.findNode("overlayCurrentUser")
-    overlayCurrentUser.color = chainLookupReturn(m.global.session, "user.settings.colorHomeUsername", ColorPalette.WHITE)
+' Migrate user settings from previous versions.
+' Each migration is idempotent - safe to run multiple times.
+sub MigrateSettings()
+    ' colorDialogBorderLine: Fix truncated hex value from old default
+    borderColor = get_user_setting("colorDialogBorderLine")
+    if isValid(borderColor) and borderColor = "#CCFFF"
+        set_user_setting("colorDialogBorderLine", "#CCFFFF")
+    end if
 end sub

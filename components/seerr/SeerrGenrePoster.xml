@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="SeerrGenrePoster" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="itemContentChanged" />
+        <field id="itemHasFocus" type="boolean" alwaysNotify="true" />
+        <field id="drawFocusFeedback" type="boolean" value="true" />
+    </interface>
+
+    <children>
+        <!-- Backdrop: 180x270 to match standard poster size -->
+        <Rectangle id="backdrop"
+            width="180"
+            height="270"
+            translation="[0, 0]"
+            color="#1E1E1E"
+            opacity="1.0"
+            visible="true" />
+
+        <!-- Poster: 180x270 background image -->
+        <Poster id="poster"
+            width="180"
+            height="270"
+            translation="[0, 0]"
+            loadDisplayMode="scaleToZoom"
+            failedBitmapUri="pkg:/images/media_type_icons/movie.png"
+            loadingBitmapUri="pkg:/images/media_type_icons/movie.png" />
+
+        <!-- Gradient overlay at bottom for text readability -->
+        <Rectangle id="gradientOverlay"
+            width="180"
+            height="100"
+            translation="[0, 170]"
+            color="#000000"
+            opacity="0.7"
+            visible="true" />
+
+        <!-- Title overlaid on the poster at the bottom -->
+        <Label id="title"
+            width="172"
+            height="80"
+            translation="[4, 185]"
+            font="font:SmallBoldSystemFont"
+            color="#FFFFFF"
+            horizAlign="center"
+            vertAlign="center"
+            wrap="true"
+            maxLines="3" />
+    </children>
+</component>

@@ -1,0 +1,1290 @@
+' Seerr API Configuration and Utilities
+
+' ============================================
+' Permission Constants (from Seerr)
+' ============================================
+' Permission bits from https://github.com/seerr-team/seerr/blob/develop/server/lib/permissions.ts
+const SEERR_PERMISSION_ADMIN = 2
+const SEERR_PERMISSION_MANAGE_REQUESTS = 16
+const SEERR_PERMISSION_REQUEST = 32
+const SEERR_PERMISSION_REQUEST_4K = 1024
+const SEERR_PERMISSION_REQUEST_4K_MOVIE = 2048
+const SEERR_PERMISSION_REQUEST_4K_TV = 4096
+const SEERR_PERMISSION_REQUEST_ADVANCED = 8192
+
+' Check if user has a specific Seerr permission
+' @param permissions - User's permission bitmask
+' @param permission - Permission constant to check
+' @returns True if user has the permission (or is admin)
+function HasSeerrPermission(permissions as integer, permission as integer) as boolean
+    ' Admin has all permissions
+    if (permissions and SEERR_PERMISSION_ADMIN) <> 0
+        return true
+    end if
+    return (permissions and permission) <> 0
+end function
+
+' Check if user can request 4K content for a specific media type
+' @param permissions - User's permission bitmask
+' @param mediaType - "movie" or "tv"
+' @returns True if user can request 4K for this media type
+function CanRequest4K(permissions as integer, mediaType as string) as boolean
+    ' Admin can request anything
+    if (permissions and SEERR_PERMISSION_ADMIN) <> 0
+        return true
+    end if
+
+    ' Check general 4K permission first
+    if (permissions and SEERR_PERMISSION_REQUEST_4K) <> 0
+        return true
+    end if
+
+    ' Check specific media type permission
+    if mediaType = "movie"
+        return (permissions and SEERR_PERMISSION_REQUEST_4K_MOVIE) <> 0
+    else if mediaType = "tv"
+        return (permissions and SEERR_PERMISSION_REQUEST_4K_TV) <> 0
+    end if
+
+    return false
+end function
+
+' Check if user has advanced request permission (can select server, profile, root folder)
+' @param permissions - User's permission bitmask
+' @returns True if user has REQUEST_ADVANCED permission (or is admin/manage requests)
+function HasAdvancedRequestPermission(permissions as integer) as boolean
+
+    ' Admin has all permissions
+    if (permissions and SEERR_PERMISSION_ADMIN) <> 0
+        return true
+    end if
+    ' MANAGE_REQUESTS also grants advanced request options
+    if (permissions and SEERR_PERMISSION_MANAGE_REQUESTS) <> 0
+        return true
+    end if
+    hasAdvanced = (permissions and SEERR_PERMISSION_REQUEST_ADVANCED) <> 0
+    return hasAdvanced
+end function
+
+' ============================================
+' User ID Management
+' ============================================
+
+' Get the current logged-in Jellyfin user ID
+' Returns empty string if no user is logged in
+function GetCurrentJellyfinUserId() as string
+    if m.global <> invalid and m.global.session <> invalid and m.global.session.user <> invalid and m.global.session.user.id <> invalid
+        return m.global.session.user.id
+    end if
+    return ""
+end function
+
+' Get the last Jellyfin user ID that used Seerr
+' Returns empty string if never set
+function GetLastSeerrUserId() as string
+    sec = CreateObject("roRegistrySection", "seerr_global")
+    lastUserId = sec.Read("lastJellyfinUserId")
+    if lastUserId = invalid
+        return ""
+    end if
+    return lastUserId
+end function
+
+' Store the last Jellyfin user ID that used Seerr
+' @param userId - Jellyfin user ID to store
+sub SetLastSeerrUserId(userId as string)
+    if userId = ""
+        return
+    end if
+
+    sec = CreateObject("roRegistrySection", "seerr_global")
+    sec.Write("lastJellyfinUserId", userId)
+    sec.Flush()
+end sub
+
+' Get the registry section name for a specific user's Seerr settings
+' @param userId - Jellyfin user ID
+' @returns Registry section name like "seerr_user_abc123"
+function GetSeerrUserRegistry(userId as string) as string
+    if userId = ""
+        return ""
+    end if
+    return "seerr_user_" + userId
+end function
+
+' ============================================
+' Migration & Backward Compatibility
+' ============================================
+
+' Carry pre-rename device data from the jellyseerr_* registry namespace (and the
+' jellyseerr.* per-user setting keys) over to the seerr_* names. Idempotent: each copy
+' no-ops once the target already holds data.
+sub MigrateSeerrRegistryNamespace()
+    CopyRegistrySectionIfEmpty("jellyseerr_global", "seerr_global")
+
+    userId = GetCurrentJellyfinUserId()
+    if userId <> ""
+        CopyRegistrySectionIfEmpty("jellyseerr_user_" + userId, "seerr_user_" + userId)
+        ' Per-user settings are stored in a registry section named after the user id,
+        ' keyed by settingName (e.g. "jellyseerr.enabled" -> "seerr.enabled").
+        MigrateUserSettingPrefix(userId, "jellyseerr.", "seerr.")
+    end if
+end sub
+
+sub CopyRegistrySectionIfEmpty(fromName as string, toName as string)
+    toSec = CreateObject("roRegistrySection", toName)
+    toKeys = toSec.GetKeyList()
+    if toKeys <> invalid and toKeys.Count() > 0 then return
+
+    fromSec = CreateObject("roRegistrySection", fromName)
+    fromKeys = fromSec.GetKeyList()
+    if fromKeys = invalid then return
+
+    for each k in fromKeys
+        if fromSec.Exists(k)
+            toSec.Write(k, fromSec.Read(k))
+        end if
+    end for
+    toSec.Flush()
+end sub
+
+sub MigrateUserSettingPrefix(sectionName as string, oldPrefix as string, newPrefix as string)
+    sec = CreateObject("roRegistrySection", sectionName)
+    keys = sec.GetKeyList()
+    if keys = invalid then return
+
+    changed = false
+    for each k in keys
+        if Left(k, Len(oldPrefix)) = oldPrefix
+            newKey = newPrefix + Mid(k, Len(oldPrefix) + 1)
+            if not sec.Exists(newKey)
+                sec.Write(newKey, sec.Read(k))
+                changed = true
+            end if
+        end if
+    end for
+    if changed then sec.Flush()
+end sub
+
+' Migrate old Seerr configuration to new separated registry structure
+' This runs once per installation and preserves all existing settings
+' Old structure: Single "seerr" registry for all data
+' New structure: "seerr_global" + "seerr_user_{userId}" per user
+sub MigrateSeerrConfig()
+    ' Check if migration already completed
+    globalSec = CreateObject("roRegistrySection", "seerr_global")
+    migrated = globalSec.Read("migrated")
+    if migrated = "true"
+        ' Already migrated, skip
+        return
+    end if
+
+    ' Check if old registry section exists
+    oldSec = CreateObject("roRegistrySection", "seerr")
+    oldServerUrl = oldSec.Read("serverUrl")
+
+    ' If no old config exists, just mark as migrated and return
+    if oldServerUrl = invalid or oldServerUrl = ""
+        globalSec.Write("migrated", "true")
+        globalSec.Flush()
+        return
+    end if
+
+    ' Get current user ID (migration only works if user is logged in)
+    userId = GetCurrentJellyfinUserId()
+    if userId = ""
+        ' Migrate blockNsfw (default to true if not set)
+        oldBlockNsfw = oldSec.Read("blockNsfw")
+        if oldBlockNsfw <> invalid
+            oldBlockNsfwType = type(oldBlockNsfw)
+            if (oldBlockNsfwType = "String" or oldBlockNsfwType = "roString") and oldBlockNsfw = ""
+                globalSec.Write("blockNsfw", "true")
+            else
+                globalSec.Write("blockNsfw", oldBlockNsfw)
+            end if
+        else
+            globalSec.Write("blockNsfw", "true")
+        end if
+
+        globalSec.Write("migrated", "true")
+        globalSec.Flush()
+        return
+    end if
+
+    ' Migrate global blockNsfw preference
+    oldBlockNsfw = oldSec.Read("blockNsfw")
+    if oldBlockNsfw <> invalid
+        oldBlockNsfwType = type(oldBlockNsfw)
+        if (oldBlockNsfwType = "String" or oldBlockNsfwType = "roString") and oldBlockNsfw = ""
+            globalSec.Write("blockNsfw", "true")
+        else
+            globalSec.Write("blockNsfw", oldBlockNsfw)
+        end if
+    else
+        globalSec.Write("blockNsfw", "true") ' Default to enabled
+    end if
+
+    ' Migrate user-specific settings (authCookie, authMethod, credentials)
+    userRegistry = GetSeerrUserRegistry(userId)
+    userSec = CreateObject("roRegistrySection", userRegistry)
+
+    ' Migrate authCookie
+    oldAuthCookie = oldSec.Read("authCookie")
+    if oldAuthCookie <> invalid and oldAuthCookie <> ""
+        userSec.Write("authCookie", oldAuthCookie)
+    end if
+
+    ' Migrate authMethod
+    oldAuthMethod = oldSec.Read("authMethod")
+    if oldAuthMethod <> invalid and oldAuthMethod <> ""
+        userSec.Write("authMethod", oldAuthMethod)
+    else
+        ' Default to jellyfin if not set
+        userSec.Write("authMethod", "jellyfin")
+    end if
+
+    ' Migrate Jellyfin password (if stored)
+    oldJellyfinPassword = oldSec.Read("jellyfinPassword")
+    if oldJellyfinPassword <> invalid and oldJellyfinPassword <> ""
+        userSec.Write("jellyfinPassword", oldJellyfinPassword)
+    end if
+
+    ' Migrate local credentials (if stored)
+    oldLocalEmail = oldSec.Read("localEmail")
+    if oldLocalEmail <> invalid and oldLocalEmail <> ""
+        userSec.Write("localEmail", oldLocalEmail)
+    end if
+
+    oldLocalPassword = oldSec.Read("localPassword")
+    if oldLocalPassword <> invalid and oldLocalPassword <> ""
+        userSec.Write("localPassword", oldLocalPassword)
+    end if
+
+    userSec.Flush()
+
+    ' Mark migration as complete
+    globalSec.Write("migrated", "true")
+    globalSec.Flush()
+
+    ' Delete old registry section to clean up
+    oldSec.Delete("serverUrl")
+    oldSec.Delete("apiKey")
+    oldSec.Delete("authCookie")
+    oldSec.Delete("authMethod")
+    oldSec.Delete("blockNsfw")
+    oldSec.Delete("enabled")
+    oldSec.Delete("jellyfinPassword")
+    oldSec.Delete("localEmail")
+    oldSec.Delete("localPassword")
+    oldSec.Flush()
+end sub
+
+' ============================================
+' User Switch Detection & Cleanup
+' ============================================
+
+' Handle Jellyfin user switch - clears previous user's session data
+' Called after successful user login to detect and handle user changes
+' @returns True if user switch was detected and handled, false if same user
+function HandleSeerrUserSwitch() as boolean
+    currentUserId = GetCurrentJellyfinUserId()
+    if currentUserId = ""
+        ' No user logged in, nothing to do
+        return false
+    end if
+
+    ' Ensure this user's pre-rename device data is carried over.
+    MigrateSeerrRegistryNamespace()
+
+    lastUserId = GetLastSeerrUserId()
+
+    ' Check if this is a different user
+    if lastUserId <> "" and lastUserId <> currentUserId
+        ' Just update the last user ID - each user keeps their own session
+        SetLastSeerrUserId(currentUserId)
+
+        return true
+    else if lastUserId = ""
+        ' First time using Seerr, just set the user ID
+        SetLastSeerrUserId(currentUserId)
+        return false
+    end if
+
+    ' Same user, no switch
+    return false
+end function
+
+' ============================================
+' Global & Per-User Config Helpers
+' ============================================
+
+' Get global Seerr settings (shared across all users)
+' @returns Object with blockNsfw
+function GetSeerrGlobalConfig() as object
+    sec = CreateObject("roRegistrySection", "seerr_global")
+
+    blockNsfwStr = sec.Read("blockNsfw")
+    blockNsfw = true ' Default to enabled
+    if blockNsfwStr <> invalid and blockNsfwStr <> ""
+        blockNsfw = (blockNsfwStr = "true")
+    end if
+
+    return {
+        blockNsfw: blockNsfw
+    }
+end function
+
+' Set global Seerr settings (shared across all users)
+' @param blockNsfw - Whether to block NSFW content
+sub SetSeerrGlobalConfig(blockNsfw as boolean)
+    sec = CreateObject("roRegistrySection", "seerr_global")
+
+    if blockNsfw
+        sec.Write("blockNsfw", "true")
+    else
+        sec.Write("blockNsfw", "false")
+    end if
+
+    sec.Flush()
+end sub
+
+' Get user-specific Seerr settings
+' @param userId - Jellyfin user ID
+' @returns Object with authCookie, authMethod, credentials
+function GetSeerrUserConfig(userId as string) as object
+    if userId = ""
+        return {
+            authCookie: "",
+            authMethod: "jellyfin",
+            jellyfinPassword: "",
+            localEmail: "",
+            localPassword: "",
+            seerrUserId: 0,
+            displayName: "",
+            avatar: "",
+            permissions: 0
+        }
+    end if
+
+    registryName = GetSeerrUserRegistry(userId)
+    sec = CreateObject("roRegistrySection", registryName)
+
+    authCookie = sec.Read("authCookie")
+    if authCookie = invalid then authCookie = ""
+
+    authMethod = sec.Read("authMethod")
+    if authMethod = invalid or authMethod = "" then authMethod = "jellyfin"
+
+    jellyfinPassword = sec.Read("jellyfinPassword")
+    if jellyfinPassword = invalid then jellyfinPassword = ""
+
+    localEmail = sec.Read("localEmail")
+    if localEmail = invalid then localEmail = ""
+
+    localPassword = sec.Read("localPassword")
+    if localPassword = invalid then localPassword = ""
+
+    seerrUserIdStr = sec.Read("seerrUserId")
+    seerrUserId = 0
+    if seerrUserIdStr <> invalid and seerrUserIdStr <> ""
+        seerrUserId = seerrUserIdStr.toInt()
+    end if
+
+    displayName = sec.Read("displayName")
+    if displayName = invalid then displayName = ""
+
+    avatar = sec.Read("avatar")
+    if avatar = invalid then avatar = ""
+
+    permissionsStr = sec.Read("permissions")
+    permissions = 0
+    if permissionsStr <> invalid and permissionsStr <> ""
+        permissions = permissionsStr.toInt()
+    end if
+
+    return {
+        authCookie: authCookie,
+        authMethod: authMethod,
+        jellyfinPassword: jellyfinPassword,
+        localEmail: localEmail,
+        localPassword: localPassword,
+        seerrUserId: seerrUserId,
+        displayName: displayName,
+        avatar: avatar,
+        permissions: permissions
+    }
+end function
+
+' Set user-specific Seerr settings
+' @param userId - Jellyfin user ID
+' @param authCookie - Session cookie
+' @param authMethod - Authentication method ("jellyfin" or "local")
+' @param jellyfinPassword - Jellyfin password (optional, for auto-login)
+' @param localEmail - Local account email (optional)
+' @param localPassword - Local account password (optional)
+sub SetSeerrUserConfig(userId as string, authCookie as string, authMethod as string, jellyfinPassword = "" as string, localEmail = "" as string, localPassword = "" as string)
+    if userId = ""
+        return
+    end if
+
+    registryName = GetSeerrUserRegistry(userId)
+
+    sec = CreateObject("roRegistrySection", registryName)
+
+    if authCookie <> ""
+        sec.Write("authCookie", authCookie)
+    end if
+
+    if authMethod <> ""
+        sec.Write("authMethod", authMethod)
+    end if
+
+    if jellyfinPassword <> ""
+        sec.Write("jellyfinPassword", jellyfinPassword)
+    else
+        sec.Delete("jellyfinPassword")
+    end if
+
+    if localEmail <> ""
+        sec.Write("localEmail", localEmail)
+    else
+        sec.Delete("localEmail")
+    end if
+
+    if localPassword <> ""
+        sec.Write("localPassword", localPassword)
+    else
+        sec.Delete("localPassword")
+    end if
+
+    sec.Flush()
+end sub
+
+' Save Seerr user permissions
+' @param userId - Jellyfin user ID
+' @param permissions - Permission bitmask from /auth/me response
+sub SetSeerrUserPermissions(userId as string, permissions as integer)
+    if userId = ""
+        return
+    end if
+
+    registryName = GetSeerrUserRegistry(userId)
+    sec = CreateObject("roRegistrySection", registryName)
+    sec.Write("permissions", permissions.toStr())
+    sec.Flush()
+end sub
+
+sub SetSeerrUserIdentity(userId as string, seerrUserId as integer, displayName as string, permissions as integer, avatar = "" as string)
+    if userId = ""
+        return
+    end if
+
+    registryName = GetSeerrUserRegistry(userId)
+    sec = CreateObject("roRegistrySection", registryName)
+    sec.Write("seerrUserId", seerrUserId.toStr())
+
+    if displayName <> ""
+        sec.Write("displayName", displayName)
+    else
+        sec.Delete("displayName")
+    end if
+
+    if avatar <> ""
+        sec.Write("avatar", avatar)
+    else
+        sec.Delete("avatar")
+    end if
+
+    sec.Write("permissions", permissions.toStr())
+    sec.Flush()
+end sub
+
+sub ClearSeerrUserIdentity(userId as string)
+    if userId = ""
+        return
+    end if
+
+    registryName = GetSeerrUserRegistry(userId)
+    sec = CreateObject("roRegistrySection", registryName)
+    sec.Delete("seerrUserId")
+    sec.Delete("displayName")
+    sec.Delete("avatar")
+    sec.Delete("permissions")
+    sec.Flush()
+end sub
+
+' Get current user's Seerr permissions
+' @returns Permission bitmask (0 if not set)
+function GetCurrentUserSeerrPermissions() as integer
+    userId = GetCurrentJellyfinUserId()
+    if userId = ""
+        return 0
+    end if
+
+    config = GetSeerrUserConfig(userId)
+    return config.permissions
+end function
+
+' ============================================
+' TMDB Image URLs
+' ============================================
+
+' TMDB Image Base URLs (cached to avoid repeated concatenation)
+function GetTmdbImageBaseUrls() as object
+    return {
+        posterW500: "https://image.tmdb.org/t/p/w500",
+        posterW342: "https://image.tmdb.org/t/p/w342",
+        backdropW1280: "https://image.tmdb.org/t/p/w1280",
+        backdropW780: "https://image.tmdb.org/t/p/w780"
+    }
+end function
+
+' Get complete Seerr configuration (combines global and user-specific settings)
+' NOTE: Now uses separated registry sections for global vs per-user data
+' @returns Object with all Seerr settings
+function GetSeerrConfig() as object
+    pluginEnabled = false
+    pluginSeerrEnabled = false
+    seerrSettingEnabled = false
+    serverUrl = ""
+
+    if m.global <> invalid and m.global.session <> invalid
+        if m.global.session.user <> invalid and m.global.session.user.settings <> invalid
+            pluginEnabled = SeerrParseBool(m.global.session.user.settings["plugin.enabled"], false)
+            seerrSettingEnabled = SeerrParseBool(m.global.session.user.settings["seerr.enabled"], false)
+        end if
+        if m.global.session.pluginInfo <> invalid
+            pluginSeerrEnabled = SeerrParseBool(m.global.session.pluginInfo.seerrEnabled, false)
+        end if
+        if m.global.session.server <> invalid
+            serverUrl = m.global.session.server.url ?? ""
+        end if
+    end if
+
+    ' Seerr is reached only through the Moonfin server plugin proxy. The client never
+    ' connects to Seerr directly, so there is no Seerr URL or API key to configure.
+    ' serverUrl here is the Jellyfin server the proxy lives on.
+    return {
+        serverUrl: serverUrl,
+        authMethod: "plugin",
+        blockNsfw: GetSeerrGlobalConfig().blockNsfw,
+        enabled: (pluginEnabled and pluginSeerrEnabled and seerrSettingEnabled and serverUrl <> ""),
+        usePluginProxy: true
+    }
+end function
+
+' What to call Seerr on screen. A server running a fork names it in the plugin config,
+' and anything else falls back on the name the navigation bar already uses.
+function GetSeerrDisplayName() as string
+    if m.global = invalid or m.global.session = invalid then return "Seerr"
+
+    pluginInfo = m.global.session.pluginInfo
+    if pluginInfo = invalid then return "Seerr"
+
+    name = pluginInfo.seerrDisplayName
+    if isValidStringValue(name) then return name
+
+    return "Seerr"
+end function
+
+' Which Seerr title a library item stands for. Only movies and series have a counterpart,
+' and an episode or a season resolves through its series page instead.
+function GetSeerrTargetFor(itemData as object) as object
+    idle = { tmdbId: "", mediaType: "" }
+    if itemData = invalid or not isValidStringValue(itemData.Type) then return idle
+
+    if LCase(itemData.Type) = "series"
+        mediaType = "tv"
+    else if LCase(itemData.Type) = "movie"
+        mediaType = "movie"
+    else
+        return idle
+    end if
+
+    providerIds = itemData.ProviderIds
+    if providerIds = invalid or type(providerIds) <> "roAssociativeArray" then return idle
+
+    ' Jellyfin keeps provider ids as strings and varies their casing between servers
+    tmdbId = providerIds.LookupCI("Tmdb")
+    if tmdbId = invalid then return idle
+
+    tmdbId = tmdbId.toStr()
+    if tmdbId = "" or tmdbId.toInt() <= 0 then return idle
+
+    return { tmdbId: tmdbId, mediaType: mediaType }
+end function
+
+' Disable Seerr and clear all configuration
+' Clears both global settings and current user's settings
+sub DisableSeerr()
+    ' Clear global settings
+    globalSec = CreateObject("roRegistrySection", "seerr_global")
+    globalSec.Delete("serverUrl")
+    globalSec.Delete("blockNsfw")
+    globalSec.Flush()
+
+    ' Clear current user's settings
+    userId = GetCurrentJellyfinUserId()
+    if userId <> ""
+        userRegistry = GetSeerrUserRegistry(userId)
+        userSec = CreateObject("roRegistrySection", userRegistry)
+        userSec.Delete("authCookie")
+        userSec.Delete("authMethod")
+        userSec.Delete("jellyfinPassword")
+        userSec.Delete("localEmail")
+        userSec.Delete("localPassword")
+        userSec.Delete("seerrUserId")
+        userSec.Delete("displayName")
+        userSec.Delete("avatar")
+        userSec.Delete("permissions")
+        userSec.Flush()
+    end if
+end sub
+
+' Set NSFW filtering preference (global setting shared across all users)
+' @param enabled - True to block NSFW content, false to allow
+sub SetSeerrBlockNsfw(enabled as boolean)
+    SetSeerrGlobalConfig(enabled)
+end sub
+
+function BuildQueryString(params as object) as string
+    if params = invalid
+        return ""
+    end if
+
+    query = ""
+    for each key in params
+        if query <> ""
+            query = query + "&"
+        end if
+        value = params[key]
+
+        if type(value) = "String" or type(value) = "roString"
+            query = query + key + "=" + UrlEncode(value)
+        else
+            query = query + key + "=" + value.ToStr()
+        end if
+    end for
+
+    return query
+end function
+
+function UrlEncode(str as string) as string
+    encoded = ""
+    for i = 0 to str.Len() - 1
+        char = str.Mid(i, 1)
+        if char = " "
+            encoded = encoded + "%20"
+        else if char = "&"
+            encoded = encoded + "%26"
+        else if char = "="
+            encoded = encoded + "%3D"
+        else if char = "/"
+            encoded = encoded + "%2F"
+        else
+            encoded = encoded + char
+        end if
+    end for
+    return encoded
+end function
+
+function SeerrFormatJson(obj as object) as string
+    if obj = invalid
+        return "{}"
+    end if
+
+    json = "{"
+    isFirst = true
+
+    for each key in obj
+        if not isFirst
+            json = json + ","
+        end if
+        isFirst = false
+
+        json = json + """" + key + """:"
+        value = obj[key]
+        json = json + SeerrFormatJsonValue(value)
+    end for
+
+    json = json + "}"
+    return json
+end function
+
+function SeerrFormatJsonValue(value as object) as string
+    if value = invalid
+        return "null"
+    else if type(value) = "String" or type(value) = "roString"
+        return """" + value + """"
+    else if type(value) = "Integer" or type(value) = "roInt"
+        return value.ToStr()
+    else if type(value) = "Boolean" or type(value) = "roBoolean"
+        if value
+            return "true"
+        else
+            return "false"
+        end if
+    else if type(value) = "roArray"
+        json = "["
+        for i = 0 to value.Count() - 1
+            if i > 0
+                json = json + ","
+            end if
+            json = json + SeerrFormatJsonValue(value[i])
+        end for
+        return json + "]"
+    else if type(value) = "roAssociativeArray"
+        return SeerrFormatJson(value)
+    end if
+
+    return """" + value.ToStr() + """"
+end function
+
+' Format a float value to a specific number of decimal places (Seerr-specific)
+' @param value - Float or dynamic value to format
+' @param decimals - Number of decimal places
+' @returns Formatted string representation
+function SeerrFormatFloat(value as dynamic, decimals as integer) as string
+    if value = invalid then return ""
+    strVal = value.ToStr()
+    dotPos = InStr(1, strVal, ".")
+    if dotPos > 0 and decimals >= 0
+        return Left(strVal, dotPos + decimals)
+    end if
+    return strVal
+end function
+
+' Create a content node for a Seerr genre item
+' Genre items have id, name, and backdrops (array of TMDB backdrop paths)
+function CreateGenreContentNode(genre as object, mediaType as string) as object
+    if genre = invalid then return invalid
+    if genre.id = invalid or genre.name = invalid then return invalid
+
+    node = CreateObject("roSGNode", "ContentNode")
+
+    node.title = genre.name
+
+    ' Store genre ID and media type for navigation
+    node.addField("genreId", "integer", false)
+    node.genreId = genre.id
+
+    node.addField("mediaType", "string", false)
+    node.mediaType = mediaType
+
+    node.addField("isGenre", "boolean", false)
+    node.isGenre = true
+
+    ' Use a random backdrop from the list if available
+    backdrops = genre.backdrops
+    if type(backdrops) = "roArray" and backdrops.count() > 0
+        tmdbUrls = GetTmdbImageBaseUrls()
+
+        ' Pick random backdrop for variety
+        randomIdx = Rnd(backdrops.count()) - 1
+        backdropPath = backdrops[randomIdx]
+
+        if backdropPath <> invalid and backdropPath <> ""
+            ' Use backdrop as poster for genre cards (landscape style)
+            backdropUrl = tmdbUrls.backdropW780 + backdropPath
+            node.hdPosterUrl = backdropUrl
+            node.sdPosterUrl = backdropUrl
+            node.HDGRIDPOSTERURL = backdropUrl
+            node.SDGRIDPOSTERURL = backdropUrl
+            node.addField("posterUrl", "string", false)
+            node.posterUrl = backdropUrl
+            node.url = backdropUrl
+
+            ' Also set as background
+            node.hdBackgroundImageUrl = tmdbUrls.backdropW1280 + backdropPath
+            node.sdBackgroundImageUrl = tmdbUrls.backdropW780 + backdropPath
+        end if
+    end if
+
+    return node
+end function
+
+function CreateMediaContentNode(item as object) as object
+    if item = invalid or type(item) <> "roAssociativeArray" then return invalid
+
+    node = CreateObject("roSGNode", "ContentNode")
+
+    if item.title <> invalid
+        node.title = item.title
+    else if item.name <> invalid
+        node.title = item.name
+    else
+        node.title = "Unknown"
+    end if
+
+    if item.overview <> invalid
+        node.description = item.overview
+        node.shortDescriptionLine1 = item.overview
+    end if
+
+    posterPath = invalid
+    if item.posterPath <> invalid and item.posterPath <> ""
+        posterPath = item.posterPath
+    else if item.poster_path <> invalid and item.poster_path <> ""
+        posterPath = item.poster_path
+    end if
+
+    if posterPath <> invalid and posterPath <> ""
+        tmdbUrls = GetTmdbImageBaseUrls()
+        ' Grids get the smaller size, since a w500 texture is larger than a 720p UI and a
+        ' screen full of them stalls the render thread while they decode
+        gridPosterUrl = tmdbUrls.posterW342 + posterPath
+        node.hdPosterUrl = tmdbUrls.posterW500 + posterPath
+        node.sdPosterUrl = gridPosterUrl
+        node.addField("PosterUrl", "string", false)
+        node.PosterUrl = gridPosterUrl
+        node.url = gridPosterUrl
+    end if
+
+    backdropPath = invalid
+    if item.backdropPath <> invalid and item.backdropPath <> ""
+        backdropPath = item.backdropPath
+    else if item.backdrop_path <> invalid and item.backdrop_path <> ""
+        backdropPath = item.backdrop_path
+    end if
+
+    if backdropPath <> invalid and backdropPath <> ""
+        tmdbUrls = GetTmdbImageBaseUrls()
+        backdropUrl = tmdbUrls.backdropW1280 + backdropPath
+        node.hdBackgroundImageUrl = backdropUrl
+        node.sdBackgroundImageUrl = tmdbUrls.backdropW780 + backdropPath
+    end if
+
+    releaseYear = ""
+    if item.releaseDate <> invalid and item.releaseDate <> ""
+        releaseYear = Left(item.releaseDate, 4)
+    else if item.release_date <> invalid and item.release_date <> ""
+        releaseYear = Left(item.release_date, 4)
+    else if item.firstAirDate <> invalid and item.firstAirDate <> ""
+        releaseYear = Left(item.firstAirDate, 4)
+    else if item.first_air_date <> invalid and item.first_air_date <> ""
+        releaseYear = Left(item.first_air_date, 4)
+    end if
+
+    rating = ""
+    voteAvg = invalid
+    if item.voteAverage <> invalid
+        voteAvg = item.voteAverage
+    else if item.vote_average <> invalid
+        voteAvg = item.vote_average
+    end if
+
+    if voteAvg <> invalid
+        rating = SeerrFormatFloat(voteAvg, 1)
+    end if
+
+    adultFlag = false
+    if item.adult <> invalid
+        adultFlag = item.adult
+    end if
+
+    ' Status: 1=unknown, 2=pending, 3=processing, 4=partial, 5=available, 6=blacklisted
+    mediaInfoStatus = 0
+    if item.mediaInfo <> invalid and item.mediaInfo.status <> invalid
+        mediaInfoStatus = item.mediaInfo.status
+    end if
+
+    ' Add custom fields including backdrop URL
+    fieldsToAdd = {
+        tmdbId: item.id,
+        mediaType: item.mediaType,
+        releaseDate: item.releaseDate,
+        voteAverage: voteAvg,
+        releaseYear: releaseYear,
+        rating: rating,
+        overview: item.overview,
+        adult: adultFlag,
+        mediaInfoStatus: mediaInfoStatus,
+        originalData: item,
+        ' Minimal .json structure for Jellyfin grid compatibility
+        json: {
+            Type: item.mediaType,
+            UserData: {
+                Played: false,
+                UnplayedItemCount: 0
+            }
+        }
+    }
+
+    if backdropPath <> invalid and backdropPath <> ""
+        tmdbUrls = GetTmdbImageBaseUrls()
+        fieldsToAdd.backdropUrl = tmdbUrls.backdropW1280 + backdropPath
+    end if
+
+    node.addFields(fieldsToAdd)
+
+    return node
+end function
+
+function GetRequestStatusText(status as integer) as string
+    if status = 1
+        return "Unknown"
+    else if status = 2
+        return "Pending"
+    else if status = 3
+        return "Processing"
+    else if status = 4
+        return "Partially Available"
+    else if status = 5
+        return "Available"
+    end if
+    return "Unknown"
+end function
+
+' ============================================
+' Validation
+' ============================================
+
+function isValidStringValue(value as dynamic) as boolean
+    ' Helper to check if a value is a valid non-empty string (handles type mismatches)
+    if value = invalid then return false
+    if type(value) <> "String" and type(value) <> "roString" then return false
+    return value <> ""
+end function
+
+function SeerrParseBool(value as dynamic, defaultValue = false as boolean) as boolean
+    if value = invalid then return defaultValue
+
+    valueType = type(value)
+    if valueType = "Boolean" or valueType = "roBoolean"
+        return value
+    else if valueType = "Integer" or valueType = "LongInteger" or valueType = "Float" or valueType = "Double" or valueType = "roInt" or valueType = "roInteger" or valueType = "roFloat" or valueType = "roDouble"
+        return value <> 0
+    else if valueType = "String" or valueType = "roString"
+        normalized = LCase(value.Trim())
+        if normalized = "true" or normalized = "1" or normalized = "yes" or normalized = "on"
+            return true
+        else if normalized = "false" or normalized = "0" or normalized = "no" or normalized = "off"
+            return false
+        end if
+    end if
+
+    return defaultValue
+end function
+
+function IsValidSeerrConfig(config as object) as boolean
+    if config = invalid
+        return false
+    end if
+
+    ' Valid when the Jellyfin server hosting the Moonfin proxy is known.
+    return isValidStringValue(config.serverUrl)
+end function
+
+function IsItemAvailable(item as object) as boolean
+    ' Status 4=partial, 5=available
+    if item = invalid then return false
+    if item.mediaInfo <> invalid and item.mediaInfo.status <> invalid
+        status = item.mediaInfo.status
+        return status = 4 or status = 5
+    end if
+
+    if item.mediaInfoStatus <> invalid
+        return item.mediaInfoStatus = 4 or item.mediaInfoStatus = 5
+    end if
+
+    return false
+end function
+
+function IsItemRequested(item as object) as boolean
+    ' Status 2=pending, 3=processing - these indicate a request has been made
+    if item = invalid then return false
+    if item.mediaInfo <> invalid and item.mediaInfo.status <> invalid
+        status = item.mediaInfo.status
+        return status = 2 or status = 3
+    end if
+
+    if item.mediaInfoStatus <> invalid
+        return item.mediaInfoStatus = 2 or item.mediaInfoStatus = 3
+    end if
+
+    return false
+end function
+
+function IsItemBlacklisted(item as object) as boolean
+    ' Status 6=blacklisted
+    if item = invalid then return false
+
+    if item.mediaInfo <> invalid and item.mediaInfo.status <> invalid
+        return item.mediaInfo.status = 6
+    end if
+
+    if item.mediaInfoStatus <> invalid
+        return item.mediaInfoStatus = 6
+    end if
+
+    return false
+end function
+
+function IsItemNsfw(item as object) as boolean
+    ' Check adult flag and keyword detection
+    if item = invalid then return false
+
+    if item.adult <> invalid and item.adult = true
+        return true
+    end if
+
+    ' NSFW keyword detection
+    nsfwKeywords = [
+        "sex", "sexual", "porn", "erotic", "nude", "nudity", "xxx",
+        "adult film", "prostitute", "stripper", "escort", "seduction",
+        "affair", "threesome", "orgy", "kinky", "fetish", "bdsm", "dominatrix"
+    ]
+
+    searchText = ""
+
+    if item.title <> invalid and item.title <> ""
+        searchText = LCase(item.title)
+    else if item.name <> invalid and item.name <> ""
+        searchText = LCase(item.name)
+    end if
+
+    if item.overview <> invalid and item.overview <> ""
+        searchText = searchText + " " + LCase(item.overview)
+    end if
+
+    if searchText = "" then return false
+
+    ' Word boundary check for keyword matches
+    for each keyword in nsfwKeywords
+        if InStr(1, searchText, keyword) > 0
+            keywordPos = InStr(1, searchText, keyword)
+            keywordLen = Len(keyword)
+
+            validStart = true
+            if keywordPos > 1
+                charBefore = Mid(searchText, keywordPos - 1, 1)
+                if charBefore <> " " and charBefore <> "," and charBefore <> "." and charBefore <> "!" and charBefore <> "?" and charBefore <> ":" and charBefore <> ";"
+                    validStart = false
+                end if
+            end if
+
+            validEnd = true
+            if keywordPos + keywordLen <= Len(searchText)
+                charAfter = Mid(searchText, keywordPos + keywordLen, 1)
+                if charAfter <> " " and charAfter <> "," and charAfter <> "." and charAfter <> "!" and charAfter <> "?" and charAfter <> ":" and charAfter <> ";"
+                    validEnd = false
+                end if
+            end if
+
+            if validStart and validEnd
+                return true
+            end if
+        end if
+    end for
+
+    return false
+end function
+
+
+' ============================================
+' Cookie Validation
+' ============================================
+
+' Clear authentication cookie for current user
+' Used when session expires or authentication fails
+sub ClearSeerrCookie()
+    userId = GetCurrentJellyfinUserId()
+    if userId = ""
+        return
+    end if
+
+    ' Remove cookie from user-specific registry
+    userRegistry = GetSeerrUserRegistry(userId)
+    sec = CreateObject("roRegistrySection", userRegistry)
+    sec.Delete("authCookie")
+    sec.Flush()
+
+    ' Clear validation flag so user can re-authenticate
+    if m.global <> invalid
+        m.global.seerrSessionValidated = false
+    end if
+end sub
+
+' ============================================
+' Search API
+' ============================================
+
+function SearchSeerr(query as string, timeoutMs = 1500 as integer) as object
+    ' Search Seerr for movies and TV shows
+    ' Returns array of search results in standardized format
+    ' NOTE: Does NOT filter out items already in library (per user request)
+
+    if query = invalid or query = "" then return []
+
+    config = GetSeerrConfig()
+    if not IsValidSeerrConfig(config) then return []
+
+    ' Create API task for search
+    searchTask = CreateObject("roSGNode", "SeerrAPITask")
+    searchTask.request = {
+        method: "GET",
+        endpoint: "/api/v1/search",
+        queryParams: {
+            query: query,
+            page: "1",
+            language: "en"
+        }
+    }
+
+    timeout = timeoutMs
+    if timeout <= 0 then timeout = 1500
+    if timeout > 5000 then timeout = 5000
+
+    ' Reading a node field from here is a rendezvous with the render thread, so wait on an
+    ' observer rather than polling and risking an abort while the render thread is busy
+    port = CreateObject("roMessagePort")
+    searchTask.observeField("response", port)
+    searchTask.control = "RUN"
+
+    response = invalid
+    msg = wait(timeout, port)
+    if type(msg) = "roSGNodeEvent"
+        response = msg.getData()
+    end if
+    searchTask.unobserveField("response")
+
+    if response = invalid
+        searchTask.control = "stop"
+        return []
+    end if
+
+    if not response.success then return []
+    if response.data = invalid or type(response.data) <> "roAssociativeArray" then return []
+    if type(response.data.results) <> "roArray" then return []
+
+    ' Convert Seerr results to standard format
+    results = []
+    for each item in response.data.results
+        ' Create content node for this result
+        contentNode = CreateMediaContentNode(item)
+        if contentNode <> invalid
+            ' Add Seerr-specific fields for identification
+            contentNode.addFields({
+                isSeerrResult: true,
+                seerrItem: item
+            })
+            results.push(contentNode)
+        end if
+    end for
+
+    return results
+end function
+
+' Opens a Seerr title on whichever detail screen the viewer has chosen. The screen asks Seerr
+' for the rest itself, so a title already in the library can open as the library item instead.
+' @param mediaItem - ContentNode with media information (title, tmdbId, mediaType, etc.)
+sub ShowSeerrDetails(mediaItem as object)
+    if mediaItem = invalid then return
+    if mediaItem.tmdbId = invalid then return
+
+    mediaType = "movie"
+    if isValidStringValue(mediaItem.mediaType) then mediaType = mediaItem.mediaType
+
+    detailsScreen = CreateObject("roSGNode", SeerrDetailScreenComponent())
+    detailsScreen.seerrTarget = {
+        tmdbId: mediaItem.tmdbId.toStr(),
+        mediaType: mediaType
+    }
+    m.global.sceneManager.callFunc("pushScene", detailsScreen)
+end sub
+
+' Mirrors detailScreenComponent in ShowScenes, read without the lookup helpers so this stays
+' usable from the task scopes this file is pulled into
+function SeerrDetailScreenComponent() as string
+    if m.global = invalid or m.global.session = invalid then return "ModernItemDetails"
+
+    user = m.global.session.user
+    if user = invalid or user.settings = invalid then return "ModernItemDetails"
+
+    style = user.settings["ui.itemdetail.style"]
+    if isValidStringValue(style) and LCase(style) = "classic" then return "ItemDetails"
+
+    return "ModernItemDetails"
+end function
+
+' ============================================
+' Error Formatting
+' ============================================
+
+' Convert technical error messages to user-friendly messages
+' @param errorMessage - Raw error message from API or internal error
+' @return User-friendly error message
+function FormatSeerrError(errorMessage as string) as string
+    if errorMessage = invalid or errorMessage = ""
+        return "An unknown error occurred. Please try again."
+    end if
+
+    errorLower = LCase(errorMessage)
+
+    ' Connection errors
+    if InStr(errorLower, "timeout") > 0
+        return "Connection timed out. Please check your network and server status."
+    end if
+
+    if InStr(errorLower, "connection") > 0 or InStr(errorLower, "connect") > 0
+        return "Unable to connect to Seerr server. Please verify the server URL and network connection."
+    end if
+
+    if InStr(errorLower, "network") > 0 or InStr(errorLower, "dns") > 0
+        return "Network error. Please check your internet connection."
+    end if
+
+    ' Authentication errors
+    if InStr(errorLower, "unauthorized") > 0 or InStr(errorLower, "401") > 0
+        return "Authentication failed. Please check your credentials and try logging in again."
+    end if
+
+    if InStr(errorLower, "forbidden") > 0 or InStr(errorLower, "403") > 0
+        return "Access denied. You may not have permission for this action."
+    end if
+
+    if InStr(errorLower, "invalid credentials") > 0 or InStr(errorLower, "invalid password") > 0
+        return "Invalid username or password. Please try again."
+    end if
+
+    if InStr(errorLower, "session") > 0 or InStr(errorLower, "cookie") > 0
+        return "Your session has expired. Please log in again."
+    end if
+
+    ' Resource errors
+    if InStr(errorLower, "not found") > 0 or InStr(errorLower, "404") > 0
+        return "The requested item was not found. It may have been removed or is unavailable."
+    end if
+
+    ' Server errors
+    if InStr(errorLower, "server error") > 0 or InStr(errorLower, "500") > 0 or InStr(errorLower, "502") > 0 or InStr(errorLower, "503") > 0
+        return "Seerr server error. The server may be temporarily unavailable. Please try again later."
+    end if
+
+    ' Rate limiting
+    if InStr(errorLower, "rate limit") > 0 or InStr(errorLower, "too many") > 0 or InStr(errorLower, "429") > 0
+        return "Too many requests. Please wait a moment and try again."
+    end if
+
+    ' Configuration errors
+    if InStr(errorLower, "not configured") > 0
+        return "Seerr is not configured. Please set up your server connection in settings."
+    end if
+
+    if InStr(errorLower, "invalid url") > 0
+        return "Invalid server URL. Please check the URL format (http:// or https://)."
+    end if
+
+    ' Parsing errors
+    if InStr(errorLower, "parse") > 0 or InStr(errorLower, "json") > 0
+        return "Unable to process server response. The server may be experiencing issues."
+    end if
+
+    ' Default: return original message if it's short and readable, otherwise generic message
+    if Len(errorMessage) < 100 and InStr(errorMessage, "{") = 0 and InStr(errorMessage, "<") = 0
+        return errorMessage
+    end if
+
+    return "An error occurred: " + errorMessage
+end function
+

@@ -5,6 +5,8 @@
     <field id="itemId" type="string" />
     <field id="startIndex" type="integer" value="0" />
     <field id="itemType" type="string" value="" />
+    <field id="excludeItemTypes" type="string" value="" />
+    <field id="collapseBoxSetItems" type="boolean" value="true" />
     <field id="limit" type="integer" value="60" />
     <field id="metadata" type="assocarray" />
     <field id="sortField" type="string" value="" />
@@ -17,10 +19,18 @@
     <field id="searchTerm" type="string" value="" />
     <field id="studioIds" type="string" value="" />
     <field id="genreIds" type="string" value="" />
+    <field id="genreNames" type="string" value="" />
     <field id="view" type="string" value="" />
     <field id="numberOfColumns" type="integer" value="7" />
     <!-- Total records available from server-->
     <field id="totalRecordCount" type="int" value="-1" />
-    <field id="content" type="array" alwaysNotify="true" />
+    <field id="hasExecuted" type="boolean" value="false" />
+    <field id="content" type="array" />
+    <!-- Multi-server support fields -->
+    <field id="serverUrl" type="string" value="" />
+    <field id="serverUserId" type="string" value="" />
+    <field id="serverAuthToken" type="string" value="" />
+    <field id="serverId" type="string" value="" />
+    <field id="serverName" type="string" value="" />
   </interface>
 </component>

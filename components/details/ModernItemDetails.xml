@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="ModernItemDetails" extends="JFScreen">
+    <children>
+        <!-- Cinematic backdrop: art toward the right, scrims darkening the left
+            and bottom so the hero text stays readable -->
+        <Rectangle id="backdropBlack" width="1920" height="1080" color="#000000" />
+        <Poster id="backdrop" width="1920" height="1080" loadDisplayMode="scaleToZoom" opacity="1.0" />
+        <Rectangle id="backdropScrim" width="1920" height="1080" color="#000000" opacity="0.28" />
+        <Poster id="backdropLeftScrim" width="1400" height="1080" uri="pkg:/images/sidebar-edge-gradient.png"
+            blendColor="0x000000" loadDisplayMode="scaleToFill" />
+        <Poster id="backdropBottomScrim" width="1920" height="440" translation="[0, 640]"
+            uri="pkg:/images/seerr_gradient.png" blendColor="0x000000" loadDisplayMode="scaleToFill" opacity="0.85" />
+
+        <!-- Scrollable content -->
+        <Group id="scrollableContent" translation="[0, 0]">
+            <!-- Poster kept for compatibility, hidden in the modern layout -->
+            <Poster id="posterImage" translation="[1540, 140]" width="260" height="390"
+                loadDisplayMode="scaleToFit" visible="false" />
+            <PlayedCheckmark id="playedIndicator" visible="false" />
+
+            <Group id="container"
+                translation="[96, 130]">
+
+                <!-- The series name over an episode title, when no series logo stands in -->
+                <Text id="episodeHeader" font="font:SmallSystemFont" width="1350"
+                    color="#FFFFFFB3" visible="false" />
+
+                <!-- Logo with drop shadow (Group so shadow overlaps, not stacks) -->
+                <Group id="logoGroup" visible="false">
+                    <Poster id="logoShadow" visible="true" loadDisplayMode="scaleToFit"
+                        width="500" height="200" blendColor="0x000000" opacity="0.6"
+                        translation="[3, 3]" />
+                    <Poster id="logoImage" visible="true" loadDisplayMode="scaleToFit"
+                        width="500" height="200" />
+                </Group>
+
+                <!-- The item's name. An episode keeps it under the series logo -->
+                <Text id="title" font="font:LargeBoldSystemFont" width="1350" wrap="true"
+                    maxLines="2" color="#FFFFFF" visible="false" />
+
+                <!-- Facts about the item, laid out left to right with dots
+                    between them by layoutMetadataRow() -->
+                <Group id="metadataRow">
+                    <Text id="releaseYear" font="font:SmallestSystemFont" color="#FFFFFFBF" />
+                    <Text id="officialRating" font="font:SmallestSystemFont" color="#FFFFFFBF" />
+                    <Text id="seasonCount" font="font:SmallestSystemFont" color="#FFFFFFBF" />
+                    <Text id="episodeNumber" font="font:SmallestSystemFont" color="#FFFFFFBF" />
+                    <Group id="statusBadge" visible="false">
+                        <Poster id="statusBadgeBg" uri="pkg:/images/details/surface12.9.png"
+                            loadDisplayMode="scaleToFit" />
+                        <Label id="statusBadgeText" font="font:SmallestBoldSystemFont"
+                            color="#FFFFFF" vertAlign="center" horizAlign="center" />
+                    </Group>
+                    <Group id="runtimeGroup">
+                        <Poster id="runtimeIcon" uri="pkg:/images/details/schedule.png"
+                            width="20" height="20" blendColor="#FFFFFFBF" />
+                        <Text id="runtime" font="font:SmallestSystemFont" color="#FFFFFFBF" />
+                    </Group>
+                    <Text id="endsAt" font="font:SmallestSystemFont" color="#FFFFFFBF" />
+                    <Text id="metaGenres" font="font:SmallestSystemFont" color="#FFFFFFBF" />
+                    <!-- Dots are made as the row is laid out, since how many it
+                        needs depends on how many facts the item has -->
+                    <Group id="metaSeparators" />
+                </Group>
+
+                <!-- File size and the codec chips beside it -->
+                <Group id="techRow" visible="false">
+                    <Text id="techSize" font="font:SmallestBoldSystemFont" color="#FFFFFFBF" />
+                    <Text id="techSeparator" font="font:SmallestSystemFont"
+                        color="#FFFFFF80" visible="false" />
+                    <Group id="techChips" />
+                    <!-- Never shown, it just lends its font to the chips built at runtime -->
+                    <Text id="techChipFont" font="font:SmallestSystemFont" visible="false" />
+                </Group>
+
+                <!-- Community, critic and plugin ratings -->
+                <RatingsRow id="ratingsRow" visible="false" />
+
+                <!-- Tagline -->
+                <Text id="tagline" font="font:SmallestSystemFont" wrap="true" maxLines="2"
+                    width="1350" color="#FFFFFFE6" visible="false" />
+
+                <!-- Overview, which opens in place when there is more to read -->
+                <ExpandableOverview id="overview" visible="false" />
+
+                <!-- Button row (centered across screen) -->
+                <Rectangle id="buttonRowContainer" width="1728" height="75"
+                    color="#00000000">
+                    <Group id="buttonRow" />
+                </Rectangle>
+
+                <!-- Sits beside the hero column when there is a next episode -->
+                <UpNextCard id="upNextCard" visible="false" />
+
+                <!-- Pill tab bar -->
+                <DetailTabBar id="tabBar" />
+
+                <!-- Media streams, shown by the Details tab -->
+                <MarkupGrid id="streamGrid"
+                    itemComponentName="DetailStreamRow"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="false"
+                    numColumns="1"
+                    numRows="6"
+                    itemSize="[900, 76]"
+                    rowHeights="[76]"
+                    itemSpacing="[0, 20]"
+                    visible="false" />
+
+                <!-- Extras loader, hidden. Its rows feed the tab grid -->
+                <ExtrasRowList id="extrasGrid"
+                    numRows="5"
+                    rowFocusAnimationStyle="floatingFocus"
+                    itemSpacing="[60, 60]"
+                    rowLabelOffset="[[9, 24]]"
+                    showRowLabel="true"
+                    showRowCounter="true"
+                    visible="false"
+                    drawFocusFeedback="true"
+                    itemComponentName="ExtrasItem"
+                    focusBitmapUri="pkg:/images/hd_focus.9.png" />
+
+                <!-- Tab content grid -->
+                <MarkupGrid id="tabGrid"
+                    itemComponentName="ExtrasItem"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="true"
+                    focusBitmapUri="pkg:/images/hd_focus.9.png"
+                    numColumns="6"
+                    numRows="2"
+                    itemSize="[250, 330]"
+                    rowHeights="[330]"
+                    itemSpacing="[30, 30]"
+                    visible="false" />
+
+                <!-- Cast and crew -->
+                <MarkupGrid id="castGrid"
+                    itemComponentName="DetailCastCard"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="false"
+                    numColumns="9"
+                    numRows="2"
+                    itemSize="[160, 265]"
+                    rowHeights="[265]"
+                    itemSpacing="[30, 30]"
+                    visible="false" />
+
+                <!-- Studios grid (TMDB logos) -->
+                <MarkupGrid id="studioGrid"
+                    itemComponentName="StudioCard"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="false"
+                    numColumns="6"
+                    numRows="3"
+                    itemSize="[240, 166]"
+                    rowHeights="[166]"
+                    itemSpacing="[30, 30]"
+                    visible="false" />
+
+                <!-- Season episodes (full-width rows) -->
+                <MarkupGrid id="episodeRowGrid"
+                    itemComponentName="SeasonEpisodeRow"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="true"
+                    focusBitmapUri="pkg:/images/hd_focus.9.png"
+                    numColumns="1"
+                    numRows="4"
+                    itemSize="[1728, 180]"
+                    rowHeights="[180]"
+                    itemSpacing="[0, 10]"
+                    visible="false" />
+
+                <!-- Music tracks (full-width rows) -->
+                <MarkupGrid id="trackGrid"
+                    itemComponentName="PlaylistItemRow"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="true"
+                    focusBitmapUri="pkg:/images/hd_focus.9.png"
+                    numColumns="1"
+                    numRows="5"
+                    itemSize="[1728, 120]"
+                    rowHeights="[120]"
+                    itemSpacing="[0, 8]"
+                    visible="false" />
+
+                <!-- Artist albums grid -->
+                <MarkupGrid id="artistAlbumGrid"
+                    itemComponentName="GridItemSmall"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="true"
+                    focusBitmapUri="pkg:/images/hd_focus.9.png"
+                    numColumns="5"
+                    numRows="2"
+                    itemSize="[310, 350]"
+                    rowHeights="[350]"
+                    itemSpacing="[24, 24]"
+                    visible="false" />
+
+                <!-- Chapters grid -->
+                <MarkupGrid id="chaptersGrid"
+                    itemComponentName="ChapterCard"
+                    vertFocusAnimationStyle="fixedFocus"
+                    drawFocusFeedback="false"
+                    numColumns="5"
+                    numRows="2"
+                    itemSize="[300, 206]"
+                    rowHeights="[206]"
+                    itemSpacing="[30, 30]"
+                    visible="false" />
+
+                <SeerrDetailBlock id="seerrBlock" visible="false" />
+            </Group>
+        </Group>
+
+        <AudioSelector id="audioSelector" visible="false" />
+        <SubtitleSelector id="subtitleSelector" visible="false" />
+        <SubtitleDownloadDialog id="subtitleDownloadDialog" visible="false" />
+        <VersionSelector id="versionSelector" visible="false" />
+        <ThemeMusicPlayer id="themeMusicPlayer" />
+        <FavoriteItemsTask id="favoriteTask" />
+        <PlaystateTask id="playstateTask" />
+
+        <!-- Smooth scroll animation for page transitions -->
+        <Animation id="scrollAnimation" duration="0.5" repeat="false" easeFunction="inOutQuad">
+            <Vector2DFieldInterpolator id="scrollInterpolator"
+                key="[0.0, 1.0]"
+                keyValue="[[0, 0], [0, 0]]"
+                fieldToInterp="scrollableContent.translation" />
+        </Animation>
+    </children>
+    <interface>
+        <field id="buttonSelected" type="string" alwaysNotify="true" />
+        <field id="studioSelected" type="assocarray" alwaysNotify="true" />
+        <field id="selectedItem" type="node" alwaysNotify="true" />
+        <field id="itemContent" type="node" />
+        <!-- A Seerr title with no library counterpart, which the screen fetches and dresses itself -->
+        <field id="seerrTarget" type="assocarray" onChange="onSeerrTargetChanged" />
+        <field id="seerrOnly" type="boolean" value="false" />
+        <field id="itemType" type="string" value="movie" />
+        <field id="trailerAvailable" type="bool" value="false" />
+        <field id="selectedPart" type="assocarray" onChange="onSelectedPartChanged" />
+        <field id="selectedAudioStreamIndex" type="integer" />
+        <field id="selectedVideoStreamId" type="string" />
+        <field id="quickPlayNode" type="node" alwaysNotify="true" />
+        <field id="refreshMovieDetailsData" type="bool" alwaysNotify="true" />
+        <field id="refreshEpisodeDetailsData" type="bool" alwaysNotify="true" />
+        <field id="refreshSeriesDetailsData" type="bool" alwaysNotify="true" />
+        <field id="logoImageURI" type="string" onChange="onLogoImageURIChanged" />
+        <field id="seasonData" type="node" />
+        <field id="seasonSelected" type="node" alwaysNotify="true" />
+        <field id="playSeriesFromStart" type="bool" alwaysNotify="true" />
+        <field id="playSeasonFromStart" type="bool" alwaysNotify="true" />
+        <field id="shufflePlay" type="bool" value="false" />
+        <field id="refreshSeasonDetailsData" type="bool" alwaysNotify="true" />
+        <field id="seasonEpisodesData" type="assocarray" onChange="onSeasonEpisodesLoaded" />
+        <field id="pageContent" type="node" />
+        <field id="albumData" type="node" onChange="onMusicDataChanged" />
+        <field id="listData" type="node" onChange="onMusicDataChanged" />
+        <field id="playAlbumSelected" type="bool" alwaysNotify="true" />
+        <field id="shuffleAlbumSelected" type="bool" alwaysNotify="true" />
+        <field id="instantMixSelected" type="bool" alwaysNotify="true" />
+        <field id="playSong" type="integer" alwaysNotify="true" />
+        <field id="playAll" type="bool" alwaysNotify="true" />
+        <field id="playArtistSelected" type="bool" alwaysNotify="true" />
+        <field id="selectedAlbum" type="node" alwaysNotify="true" />
+        <field id="playlistItemSelected" type="integer" alwaysNotify="true" />
+        <field id="displayResumeButton" type="bool" onChange="onDisplayResumeButtonChange" />
+    </interface>
+</component>

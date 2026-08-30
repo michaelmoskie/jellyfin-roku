@@ -3,6 +3,7 @@ import "pkg:/source/enums/ItemType.bs"
 import "pkg:/source/enums/PosterLoadStatus.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/themeApply.bs"
 
 sub init()
     m.itemPoster = m.top.findNode("itemPoster")
@@ -23,11 +24,10 @@ sub init()
         m.itemPoster.loadDisplayMode = m.topParent.imageDisplayMode
     end if
 
-    m.gridTitles = m.global.session.user.settings["itemgrid.gridTitles"]
-    m.hasPoster = false
-    m.forceTitleVisible = false
     m.posterText.visible = false
     m.postTextBackground.visible = false
+
+    themeApply.ApplyToItem(m.top)
 end sub
 
 sub onHeightChanged()

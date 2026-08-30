@@ -1,155 +1,895 @@
+import "pkg:/source/api/baserequest.bs"
+import "pkg:/source/api/sdk.bs"
 import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/enums/KeyCode.bs"
 import "pkg:/source/enums/PosterLoadStatus.bs"
 import "pkg:/source/utils/config.bs"
-import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/multiserver.bs"
+import "pkg:/source/utils/themeChrome.bs"
+
+' The bar is laid out in the pixels the other clients lay it out in. It carries
+' no padding of its own, so a focused button fills it top to bottom rather than
+' floating inside it, and it is only as wide as what is in it
+const NAV_TOP = 30
+const NAV_HEIGHT = 70
+const NAV_MAX_WIDTH = 1400
+
+const ICON_SIZE = 36
+const ICON_LABEL_GAP = 10
+const ITEM_PAD = 18
+const ITEM_PAD_FOCUSED = 24
+const ITEM_GAP = 2
+const LABEL_SIZE = 22
+
+' Libraries open out as their own smaller buttons alongside the rest
+const LIB_ITEM_PAD = 20
+const LIB_ITEM_HEIGHT = 58
+const LIB_ITEM_GAP = 4
+
+const CLOCK_SIZE = 28
+const SCREEN_MIDDLE = 960
 
 sub init()
     m.top.id = "overhang"
-    m.top.translation = [54, 0]
 
-    m.leftGroup = m.top.findNode("overlayLeftGroup")
-    m.rightGroup = m.top.findNode("overlayRightGroup")
-
-    ' save node references
-    m.title = m.top.findNode("overlayTitle")
-    m.overlayRightGroup = m.top.findNode("overlayRightGroup")
-    m.slideDownAnimation = m.top.findNode("slideDown")
-    m.slideUpAnimation = m.top.findNode("slideUp")
-
+    m.navContainer = m.top.findNode("navContainer")
+    m.navClipGroup = m.top.findNode("navClipGroup")
+    m.navbarBg = m.top.findNode("navbarBackground")
+    m.navItemsGroup = m.top.findNode("navItemsGroup")
+    m.focusPill = m.top.findNode("focusPill")
+    m.clock = m.top.findNode("overlayClock")
+    ' Sized here rather than in the Clock, which the sidebar and player share
+    clockText = m.clock.findNode("clockTime")
+    if isValid(clockText)
+        clockText.font.size = CLOCK_SIZE
+        clockText.color = "#FFFFFFE6"
+    end if
     m.profileImage = m.top.findNode("overlayCurrentUserProfileImage")
-    m.profileMask = m.top.findNode("backgroundMask")
-
     m.overlayCurrentUser = m.top.findNode("overlayCurrentUser")
-    if isValid(m.overlayCurrentUser)
-        m.overlayCurrentUser.color = chainLookupReturn(m.global.session, "user.settings.colorHomeUsername", ColorPalette.WHITE)
-    end if
-
     m.overlayCurrentUserSelection = m.top.findNode("overlayCurrentUserSelection")
+
+    m.slideUpAnim = m.top.findNode("slideUp")
+    m.slideDownAnim = m.top.findNode("slideDown")
+    m.focusPillAnim = m.top.findNode("focusPillAnim")
+    m.focusPillPosInterp = m.top.findNode("focusPillPosInterp")
+    m.focusPillWidthInterp = m.top.findNode("focusPillWidthInterp")
+    m.scrollAnim = m.top.findNode("scrollAnim")
+    m.scrollPosInterp = m.top.findNode("scrollPosInterp")
+
+    if isValid(m.overlayCurrentUser)
+        m.overlayCurrentUser.color = formatSceneGraphColor(chainLookupReturn(m.global.session, "user.settings.colorHomeUsername", ColorPalette.WHITE), ColorPalette.WHITE)
+    end if
     if isValid(m.overlayCurrentUserSelection)
-        m.overlayCurrentUserSelection.blendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
+        m.overlayCurrentUserSelection.blendColor = formatSceneGraphColor(chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT), ColorPalette.HIGHLIGHT)
+        m.overlayCurrentUserSelection.visible = false
     end if
 
-    if isValid(m.profileMask)
-        ' Adjust MaskGroup size for HD devices because maskSize does not currently
-        ' follow SceneGraph automatic resolution scaling. Asset is 66x66 (not 64x64)
-        ' because it must be divisible by 3 for clean 2/3 scaling to HD (66 -> 44).
-        size = scaleMaskSize(66)
-        m.profileMask.maskSize = [size, size]
-    end if
+    m.selectedIndex = 0
+    m.avatarSelected = false
+    m.navHasFocus = false
+    m.firstFocusShow = true
+    m.scrollX = 0
+    m.clipWidth = 900
+    m.totalContentWidth = 0
+    m.navItems = []
+    m.libraryData = []
+    m.libraryItems = []
+    m.librariesExpanded = false
+    m.multiServerTask = invalid
+    m.lastNavbarSettings = { shuffle: invalid, favorites: invalid, genres: invalid, libraries: invalid, seerr: invalid, showSeerr: invalid, alwaysExpanded: invalid }
 
+    m.homeItem = createNavItem("home", "pkg:/images/icons/home.png", "Home")
+    m.searchItem = createNavItem("search", "pkg:/images/icons/search-light.png", "Search")
+    m.shuffleItem = createNavItem("shuffle", "pkg:/images/icons/shuffle.png", "Shuffle", "0xFFFFFF")
+    m.favoritesItem = createNavItem("favorites", "pkg:/images/icons/heart.png", "Favorites", "0xFFFFFF")
+    m.genresItem = createNavItem("genres", "pkg:/images/icons/masks.png", "Genres", "0xFFFFFF")
+    m.seerrItem = createNavItem("seerr", "pkg:/images/icons/seerr.png", "Seerr")
+    m.librariesItem = createNavItem("libraries", "pkg:/images/icons/library.png", "Libraries")
+    m.settingsItem = createNavItem("settings", "pkg:/images/icons/settings.png", "Settings")
+
+    loadNavbarSettings()
+    m.global.observeField("session", "onSessionChanged")
+    m.global.observeField("overlaySettingsChanged", "onOverlaySettingsChanged")
+    m.top.observeField("focusedChild", "onFocusChanged")
+
+    rebuildNavItems()
+    applyOverlaySettings()
+    applyNavColorCycle()
 end sub
 
-sub highlightUser()
-    selectUser = m.top.findNode("overlayCurrentUserSelection")
-    if isValid(selectUser)
-        selectUser.visible = true
+function createNavItem(id as string, iconUri as string, labelText as string, blendColor = "" as string) as object
+    btn = createObject("roSGNode", "Group")
+    btn.id = id + "Btn"
+
+    icon = createObject("roSGNode", "Poster")
+    icon.uri = iconUri
+    icon.width = ICON_SIZE
+    icon.height = ICON_SIZE
+    icon.loadDisplayMode = "scaleToFit"
+    if blendColor <> "" then icon.blendColor = blendColor
+    btn.appendChild(icon)
+
+    label = createObject("roSGNode", "Label")
+    label.text = labelText
+    label.font = "font:SmallestBoldSystemFont"
+    label.font.size = LABEL_SIZE
+    label.height = NAV_HEIGHT
+    label.vertAlign = "center"
+    label.visible = false
+    btn.appendChild(label)
+
+    return { id: id, btn: btn, icon: icon, label: label, isLibChild: false, defaultBlendColor: blendColor, cycleInk: "" }
+end function
+
+function createLibraryChildItem(id as string, labelText as string) as object
+    btn = createObject("roSGNode", "Group")
+    btn.id = "lib_" + id
+
+    label = createObject("roSGNode", "Label")
+    label.text = labelText
+    label.font = "font:SmallestBoldSystemFont"
+    label.height = LIB_ITEM_HEIGHT
+    label.vertAlign = "center"
+    label.translation = [LIB_ITEM_PAD, 0]
+    btn.appendChild(label)
+
+    return { id: "lib_" + id, btn: btn, icon: invalid, label: label, isLibChild: true, cycleInk: "" }
+end function
+
+sub rebuildNavItems()
+    m.navItemsGroup.removeChildrenIndex(m.navItemsGroup.getChildCount(), 0)
+
+    m.navItems = []
+    m.navItems.push(m.homeItem)
+    m.navItems.push(m.searchItem)
+
+    if m.shuffleButtonEnabled then m.navItems.push(m.shuffleItem)
+    if m.favoritesButtonEnabled then m.navItems.push(m.favoritesItem)
+    if m.genresButtonEnabled then m.navItems.push(m.genresItem)
+
+    seerrEnabled = parseBoolSetting(m.global.session.user.settings["seerr.enabled"])
+    if seerrEnabled and m.seerrButtonEnabled
+        m.navItems.push(m.seerrItem)
+    end if
+
+    if m.librariesEnabled then m.navItems.push(m.librariesItem)
+
+    if m.librariesExpanded
+        for each libItem in m.libraryItems
+            m.navItems.push(libItem)
+        end for
+    end if
+
+    m.navItems.push(m.settingsItem)
+
+    for each item in m.navItems
+        m.navItemsGroup.appendChild(item.btn)
+    end for
+
+    if m.selectedIndex >= m.navItems.count() then m.selectedIndex = m.navItems.count() - 1
+    if m.selectedIndex < 0 then m.selectedIndex = 0
+    layoutNavbar()
+end sub
+
+sub layoutNavbar()
+    themed = themeChrome.IsActive()
+    focusIconColor = themed ? themeChrome.OnAccent() : "0x000000FF"
+    focusLabelColor = themed ? themeChrome.OnAccent() : "#000000"
+    idleIconColor = themed ? themeChrome.OnBackground() : invalid
+    idleLabelColor = themed ? themeChrome.OnBackground() : "#FFFFFF"
+
+    m.focusPill.blendColor = themed ? themeChrome.Accent() : "0xFFFFFFFF"
+
+    if themed and isValid(m.navbarBg)
+        m.navbarBg.blendColor = themeChrome.Surface()
+    end if
+
+    for i = 0 to m.navItems.count() - 1
+        item = m.navItems[i]
+        isFocused = (not m.avatarSelected and i = m.selectedIndex and m.navHasFocus)
+
+        if isValid(item.icon)
+            if isFocused
+                item.icon.blendColor = focusIconColor
+                item.icon.opacity = 1.0
+            else if isValidAndNotEmpty(item.cycleInk)
+                ' A colour cycle names each button outright, so it draws at full
+                ' strength rather than the muted white the rest sit at
+                item.icon.blendColor = item.cycleInk
+                item.icon.opacity = 1.0
+            else
+                if themed
+                    item.icon.blendColor = idleIconColor
+                else if item.defaultBlendColor <> ""
+                    item.icon.blendColor = item.defaultBlendColor
+                else
+                    item.icon.blendColor = invalid
+                end if
+                item.icon.opacity = 0.6
+            end if
+        end if
+
+        ' Library children always carry their name, and always expanded gives the
+        ' rest of the buttons the same treatment
+        if item.isLibChild or m.navbarAlwaysExpanded
+            item.label.visible = true
+            if isFocused
+                item.label.color = focusLabelColor
+                item.label.opacity = 1.0
+            else
+                item.label.color = idleLabelColor
+                item.label.opacity = 0.6
+            end if
+        else
+            ' Only ever seen on the focused button, so it is inked for the pill
+            item.label.visible = isFocused
+            item.label.color = focusLabelColor
+            item.label.opacity = 1.0
+        end if
+    end for
+
+    if m.avatarSelected
+        highlightUser()
+    else
+        dehighlightUser()
+    end if
+
+    itemPositions = []
+    xCursor = 0
+
+    for i = 0 to m.navItems.count() - 1
+        item = m.navItems[i]
+        if item.isLibChild then xCursor += LIB_ITEM_GAP
+
+        w = getItemWidth(item)
+        h = item.isLibChild ? LIB_ITEM_HEIGHT : NAV_HEIGHT
+        itemPositions.push({ x: xCursor, width: w, height: h })
+        item.btn.translation = [xCursor, (NAV_HEIGHT - h) / 2]
+        layoutNavItem(item)
+
+        xCursor += w
+        if i < m.navItems.count() - 1 then xCursor += ITEM_GAP
+    end for
+
+    m.totalContentWidth = xCursor
+    m.itemPositions = itemPositions
+
+    sizeBarAndClip()
+
+    if not m.avatarSelected
+        scrollToFocusedItem()
+    end if
+
+    if m.navHasFocus and not m.avatarSelected
+        positionFocusPill()
+    else
+        m.focusPill.visible = false
     end if
 end sub
 
-sub dehighlightUser()
-    selectUser = m.top.findNode("overlayCurrentUserSelection")
-    if isValid(selectUser)
-        selectUser.visible = false
+' A button opens out a little wider once it has a label to carry
+function itemPad(item as object) as integer
+    return item.label.visible ? ITEM_PAD_FOCUSED : ITEM_PAD
+end function
+
+' What a nav item takes up, its own padding included
+function getItemWidth(item as object) as integer
+    if item.isLibChild
+        return item.label.boundingRect().width + (LIB_ITEM_PAD * 2)
     end if
+
+    pad = itemPad(item)
+    if item.label.visible
+        return (pad * 2) + ICON_SIZE + ICON_LABEL_GAP + item.label.boundingRect().width
+    end if
+
+    return (pad * 2) + ICON_SIZE
+end function
+
+sub layoutNavItem(item as object)
+    if item.isLibChild then return
+
+    pad = itemPad(item)
+    item.icon.translation = [pad, (NAV_HEIGHT - ICON_SIZE) / 2]
+    item.label.translation = [pad + ICON_SIZE + ICON_LABEL_GAP, 0]
+end sub
+
+' The bar wraps whatever is in it and sits on the middle of the screen, growing
+' until it hits its cap and scrolling after that
+sub sizeBarAndClip()
+    barWidth = m.totalContentWidth
+    if barWidth > NAV_MAX_WIDTH then barWidth = NAV_MAX_WIDTH
+
+    m.clipWidth = barWidth
+    barX = SCREEN_MIDDLE - (barWidth / 2)
+
+    m.navbarBg.translation = [barX, NAV_TOP]
+    m.navbarBg.width = barWidth
+    m.navbarBg.height = NAV_HEIGHT
+    m.navContainer.translation = [barX, NAV_TOP]
+    m.navClipGroup.clippingRect = [0, 0, barWidth, NAV_HEIGHT]
+end sub
+
+' Everything fits until the bar reaches its cap, and past that the row slides to
+' keep the focused button in view
+sub scrollToFocusedItem()
+    if m.selectedIndex < 0 or m.selectedIndex >= m.itemPositions.count() then return
+
+    targetScroll = 0
+    if m.totalContentWidth > m.clipWidth
+        itemPos = m.itemPositions[m.selectedIndex]
+        targetScroll = m.scrollX
+
+        if itemPos.x + m.scrollX < 0
+            targetScroll = - itemPos.x
+        else if itemPos.x + itemPos.width + m.scrollX > m.clipWidth
+            targetScroll = m.clipWidth - (itemPos.x + itemPos.width)
+        end if
+
+        minScroll = m.clipWidth - m.totalContentWidth
+        if targetScroll < minScroll then targetScroll = minScroll
+        if targetScroll > 0 then targetScroll = 0
+    end if
+
+    if targetScroll <> m.scrollX
+        animateScroll(targetScroll)
+        m.scrollX = targetScroll
+    else
+        m.navItemsGroup.translation = [m.scrollX, 0]
+    end if
+end sub
+
+sub animateScroll(targetX as float)
+    if isValid(m.scrollPosInterp) and isValid(m.scrollAnim)
+        currentPos = m.navItemsGroup.translation
+        m.scrollPosInterp.keyValue = [[currentPos[0], 0], [targetX, 0]]
+        m.scrollAnim.control = "start"
+    else
+        m.navItemsGroup.translation = [targetX, 0]
+    end if
+end sub
+
+sub positionFocusPill()
+    if m.selectedIndex < 0 or m.selectedIndex >= m.itemPositions.count()
+        m.focusPill.visible = false
+        return
+    end if
+
+    itemPos = m.itemPositions[m.selectedIndex]
+
+    pillX = m.scrollX + itemPos.x
+    pillY = (NAV_HEIGHT - itemPos.height) / 2
+    pillWidth = itemPos.width
+
+    m.focusPill.height = itemPos.height
+
+    if m.firstFocusShow or not m.focusPill.visible
+        m.focusPill.translation = [pillX, pillY]
+        m.focusPill.width = pillWidth
+        m.focusPill.visible = true
+        m.firstFocusShow = false
+    else
+        currentPos = m.focusPill.translation
+        currentWidth = m.focusPill.width
+
+        if isValid(m.focusPillPosInterp) and isValid(m.focusPillWidthInterp) and isValid(m.focusPillAnim)
+            m.focusPillPosInterp.keyValue = [[currentPos[0], currentPos[1]], [pillX, pillY]]
+            m.focusPillWidthInterp.keyValue = [currentWidth, pillWidth]
+            m.focusPillAnim.control = "start"
+        else
+            m.focusPill.translation = [pillX, pillY]
+            m.focusPill.width = pillWidth
+        end if
+
+        m.focusPill.visible = true
+    end if
+end sub
+
+sub onFocusChanged()
+    if m.top.hasFocus() and isValid(m.navItemsGroup)
+        m.navItemsGroup.setFocus(true)
+    end if
+
+    navHasFocus = m.top.isInFocusChain()
+    if navHasFocus <> m.navHasFocus
+        m.navHasFocus = navHasFocus
+        layoutNavbar()
+    end if
+end sub
+
+sub loadLibraries()
+    m.libraryData = []
+    m.libraryItems = []
+    m.librariesExpanded = false
+
+    if isMultiServerEnabled()
+        sessions = getAllServerSessions()
+        if sessions.count() > 0
+            loadMultiServerLibraries(sessions)
+            return
+        end if
+    end if
+
+    ' Use a Task to avoid creating roUrlTransfer on the render thread
+    m.loadLibrariesTask = CreateObject("roSGNode", "LoadLibrariesTask")
+    m.loadLibrariesTask.userId = m.global.session.user.id
+    m.loadLibrariesTask.observeFieldScoped("result", "onLoadLibrariesComplete")
+    m.loadLibrariesTask.control = "RUN"
+end sub
+
+sub onLoadLibrariesComplete(msg as object)
+    node = msg.getRoSGNode()
+    if not isValid(node) then return
+    node.unobserveFieldScoped("result")
+
+    data = node.result
+    if not isChainValid(data, "items") then return
+
+    for each item in data.LookupCI("items")
+        libData = {
+            id: item.LookupCI("Id"),
+            name: item.LookupCI("name"),
+            type: item.LookupCI("Type"),
+            collectionType: item.LookupCI("CollectionType")
+        }
+        m.libraryData.push(libData)
+        m.libraryItems.push(createLibraryChildItem(libData.id, libData.name))
+    end for
+
+    rebuildNavItems()
+end sub
+
+sub loadMultiServerLibraries(sessions as object)
+    if not isValid(m.multiServerTask)
+        m.multiServerTask = CreateObject("roSGNode", "MultiServerTask")
+    else
+        m.multiServerTask.callFunc("reset")
+    end if
+
+    m.multiServerTask.sessions = sessions
+    m.multiServerTask.endpoint = "/Users/{userId}/Views"
+    m.multiServerTask.params = {}
+    m.multiServerTask.addFields({ metadata: { multipleServers: (sessions.count() > 1) } })
+    m.multiServerTask.observeField("isComplete", "onMultiServerLibrariesLoaded")
+    m.multiServerTask.control = "RUN"
+end sub
+
+sub onMultiServerLibrariesLoaded(msg as object)
+    node = msg.getRoSGNode()
+    if not isValid(node) then return
+    node.unobserveField("isComplete")
+
+    results = node.results
+    if not isValidAndNotEmpty(results) then return
+
+    uniqueServers = {}
+    for each item in results
+        if isValidAndNotEmpty(item._serverId) then uniqueServers[item._serverId] = true
+    end for
+    multipleServers = (uniqueServers.count() > 1)
+
+    allLibs = []
+    for each item in results
+        if not isValidAndNotEmpty(item.Id) or not isValidAndNotEmpty(item.Name) then continue for
+
+        serverSuffix = ""
+        if multipleServers and isValidAndNotEmpty(item._serverName)
+            serverSuffix = " (" + item._serverName + ")"
+        end if
+
+        allLibs.push({
+            id: item.Id, name: item.Name,
+            type: item.LookupCI("Type"), collectionType: item.LookupCI("CollectionType"),
+            serverUrl: item._serverUrl, userId: item._userId, authToken: item._authToken,
+            serverId: item._serverId, serverName: item._serverName, serverSuffix: serverSuffix
+        })
+    end for
+
+    sortedLibs = sortLibrariesAlphabetically(allLibs)
+    for each lib in sortedLibs
+        m.libraryData.push(lib)
+        displayName = lib.name
+        if not isValidAndNotEmpty(displayName) then displayName = "Library"
+        displayName += lib.serverSuffix
+        m.libraryItems.push(createLibraryChildItem(lib.id, displayName))
+    end for
+
+    rebuildNavItems()
+end sub
+
+function sortLibrariesAlphabetically(libraries as object) as object
+    if libraries.count() <= 1 then return libraries
+    sorted = []
+    for each lib in libraries
+        sorted.push(lib)
+    end for
+    for i = 0 to sorted.count() - 2
+        for j = 0 to sorted.count() - i - 2
+            n1 = LCase(sorted[j].name + sorted[j].serverSuffix)
+            n2 = LCase(sorted[j + 1].name + sorted[j + 1].serverSuffix)
+            if n1 > n2
+                temp = sorted[j]
+                sorted[j] = sorted[j + 1]
+                sorted[j + 1] = temp
+            end if
+        end for
+    end for
+    return sorted
+end function
+
+sub expandLibraries()
+    if m.librariesExpanded or m.libraryItems.count() = 0 then return
+    m.librariesExpanded = true
+    rebuildNavItems()
+end sub
+
+sub collapseLibraries()
+    if not m.librariesExpanded then return
+    m.librariesExpanded = false
+    rebuildNavItems()
+end sub
+
+sub loadNavbarSettings()
+    m.shuffleButtonEnabled = parseBoolSetting(m.global.session.user.settings["navbar.show_shuffle"], m.global.session.user.settings["show_shuffle_button"], true)
+    m.favoritesButtonEnabled = parseBoolSetting(m.global.session.user.settings["navbar.show_favorites"], invalid, true)
+    m.genresButtonEnabled = parseBoolSetting(m.global.session.user.settings["navbar.show_genres"], invalid, true)
+    m.librariesEnabled = parseBoolSetting(m.global.session.user.settings["navbar.show_libraries"], invalid, true)
+    m.seerrButtonEnabled = parseBoolSetting(m.global.session.user.settings["navbar.show_seerr"], invalid, true)
+    m.navbarAlwaysExpanded = parseBoolSetting(m.global.session.user.settings["navbar.alwaysExpanded"], invalid, false)
+
+    m.lastNavbarSettings = {
+        shuffle: m.global.session.user.settings["navbar.show_shuffle"],
+        favorites: m.global.session.user.settings["navbar.show_favorites"],
+        genres: m.global.session.user.settings["navbar.show_genres"],
+        libraries: m.global.session.user.settings["navbar.show_libraries"],
+        seerr: m.global.session.user.settings["seerr.enabled"],
+        showSeerr: m.global.session.user.settings["navbar.show_seerr"],
+        alwaysExpanded: m.global.session.user.settings["navbar.alwaysExpanded"]
+    }
+end sub
+
+function parseBoolSetting(primary as dynamic, fallback = invalid as dynamic, defaultVal = false as boolean) as boolean
+    val = primary
+    if not isValid(val) then val = fallback
+    if not isValid(val) then return defaultVal
+
+    if type(val) = "String" or type(val) = "roString"
+        return (LCase(val) = "true")
+    else if type(val) = "Integer" or type(val) = "roInt"
+        return (val = 1)
+    end if
+    return (val = true)
+end function
+
+sub onSessionChanged()
+    currentSettings = {
+        shuffle: parseBoolSetting(m.global.session.user.settings["navbar.show_shuffle"]),
+        favorites: parseBoolSetting(m.global.session.user.settings["navbar.show_favorites"]),
+        genres: parseBoolSetting(m.global.session.user.settings["navbar.show_genres"]),
+        libraries: parseBoolSetting(m.global.session.user.settings["navbar.show_libraries"]),
+        seerr: parseBoolSetting(m.global.session.user.settings["seerr.enabled"]),
+        showSeerr: parseBoolSetting(m.global.session.user.settings["navbar.show_seerr"], invalid, true),
+        alwaysExpanded: parseBoolSetting(m.global.session.user.settings["navbar.alwaysExpanded"])
+    }
+    lastSettings = {
+        shuffle: parseBoolSetting(m.lastNavbarSettings.shuffle),
+        favorites: parseBoolSetting(m.lastNavbarSettings.favorites),
+        genres: parseBoolSetting(m.lastNavbarSettings.genres),
+        libraries: parseBoolSetting(m.lastNavbarSettings.libraries),
+        seerr: parseBoolSetting(m.lastNavbarSettings.seerr),
+        showSeerr: parseBoolSetting(m.lastNavbarSettings.showSeerr, invalid, true),
+        alwaysExpanded: parseBoolSetting(m.lastNavbarSettings.alwaysExpanded)
+    }
+    if currentSettings.shuffle <> lastSettings.shuffle or currentSettings.favorites <> lastSettings.favorites or currentSettings.genres <> lastSettings.genres or currentSettings.libraries <> lastSettings.libraries or currentSettings.seerr <> lastSettings.seerr or currentSettings.showSeerr <> lastSettings.showSeerr or currentSettings.alwaysExpanded <> lastSettings.alwaysExpanded
+        loadNavbarSettings()
+        rebuildNavItems()
+    end if
+    applyOverlaySettings()
+end sub
+
+sub onOverlaySettingsChanged(_event as object)
+    applyOverlaySettings()
+    layoutNavbar()
+    applyNavColorCycle()
+end sub
+
+sub applyOverlaySettings()
+    if not isValid(m.global) or not isValid(m.global.session) then return
+
+    opacity = 0.5
+    if isValid(m.global.session.user) and isValid(m.global.session.user.settings)
+        opacitySetting = m.global.session.user.settings["navbar.opacity"]
+        if not isValid(opacitySetting)
+            opacitySetting = m.global.session.user.settings["ui.overlayOpacity"]
+        end if
+        if isValid(opacitySetting) then opacity = opacitySetting.toFloat()
+    end if
+
+    color = "0x475569FF"
+    if isValid(m.global.session.user) and isValid(m.global.session.user.settings)
+        navColor = m.global.session.user.settings["navbar.color"]
+        if not isValid(navColor)
+            navColor = m.global.session.user.settings["ui.overlayColor"]
+        end if
+        color = formatOverlayColor(navColor, color)
+    end if
+
+    if isValid(m.navbarBg)
+        m.navbarBg.opacity = opacity
+        m.navbarBg.blendColor = color
+    end if
+end sub
+
+' The other clients hand each button its own colour from the cycle, in the order
+' the buttons actually appear, so hiding one never doubles a colour on its
+' neighbours
+sub applyNavColorCycle()
+    cycleSetting = ""
+    if isValid(m.global) and isValid(m.global.session) and isValid(m.global.session.user) and isValid(m.global.session.user.settings)
+        cycleSetting = m.global.session.user.settings["ui.theme.navColorCycle"]
+    end if
+
+    colors = []
+    if isValidAndNotEmpty(cycleSetting)
+        parsed = ParseJson(cycleSetting)
+        if isValid(parsed) and (type(parsed) = "roArray" or type(parsed) = "Array")
+            for each c in parsed
+                color = normalizeSceneGraphColorString(c)
+                if isValidAndNotEmpty(color) then colors.push(color)
+            end for
+        end if
+    end if
+
+    cycleLength = colors.count()
+    slot = 0
+    for each item in m.navItems
+        if item.isLibChild then continue for
+
+        if cycleLength > 0
+            item.cycleInk = colors[slot mod cycleLength]
+            slot++
+        else
+            item.cycleInk = ""
+        end if
+    end for
+
+    layoutNavbar()
+end sub
+
+sub updateShuffleButtonVisibility()
+    rebuildNavItems()
 end sub
 
 sub onVisibleChange()
+    overhangContent = m.top.findNode("overhangContent")
     if m.top.disableMoveAnimation
-        m.top.translation = [54, 0]
+        if isValid(overhangContent) then overhangContent.translation = [0, 0]
         return
     end if
     if m.top.isVisible
-        m.slideDownAnimation.control = "start"
-        return
+        m.slideDownAnim.control = "start"
+    else
+        m.slideUpAnim.control = "start"
     end if
-
-    m.slideUpAnimation.control = "start"
-end sub
-
-sub updateTitle()
-    m.title.text = m.top.title
 end sub
 
 sub updateUser()
-    if isValid(m.overlayCurrentUser)
-        m.overlayCurrentUser.text = m.top.currentUser
-    end if
+    if isValid(m.overlayCurrentUser) then m.overlayCurrentUser.text = m.top.currentUser
 end sub
 
 sub updateUserProfileImage()
     m.profileImage.observeField("loadStatus", "onPosterLoadStatusChanged")
-    if isValid(m.profileImage)
-        m.profileImage.uri = m.top.currentUserProfileImage
-    end if
+    if isValid(m.profileImage) then m.profileImage.uri = m.top.currentUserProfileImage
 end sub
 
 sub onPosterLoadStatusChanged()
     if m.profileImage.loadStatus <> PosterLoadStatus.LOADING
         m.profileImage.unobserveField("loadStatus")
     end if
-
     if m.profileImage.loadStatus = PosterLoadStatus.FAILED
-        if m.profileImage.loadWidth = 0
-            m.profileImage.uri = "pkg:/images/baseline_person_white_48dp.png"
-        end if
+        if m.profileImage.loadWidth = 0 then m.profileImage.uri = "pkg:/images/baseline_person_white_48dp.png"
+    end if
+end sub
+
+sub highlightUser()
+    if isValid(m.overlayCurrentUserSelection)
+        m.overlayCurrentUserSelection.visible = true
+    end if
+end sub
+
+sub dehighlightUser()
+    if isValid(m.overlayCurrentUserSelection)
+        m.overlayCurrentUserSelection.visible = false
     end if
 end sub
 
 sub updateOptions()
-
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
-    if press
-        if isStringEqual(key, KeyCode.LEFT)
-            buttons = m.top.getscene().findNode("buttons")
-            if isValid(buttons)
-                if buttons.getChildCount() = 0 then return false
+    if not press then return false
 
-                lastButtonIndex = buttons.getChildCount() - 1
-                lastButton = buttons.getChild(lastButtonIndex)
-                if not isValid(lastButton) then return false
+    maxIndex = m.navItems.count() - 1
 
-                dehighlightUser()
-                lastButton.setfocus(true)
-                lastButton.focus = true
-                group = m.global.sceneManager.callFunc("getActiveScene")
-                group.lastFocus = lastButton
-                return true
-            end if
+    if key = KeyCode.LEFT
+        if m.avatarSelected
+            return true
+        else if m.selectedIndex = 0
+            m.avatarSelected = true
+            m.selectedIndex = -1
+            layoutNavbar()
+            return true
+        else
+            m.selectedIndex = m.selectedIndex - 1
+            layoutNavbar()
+            return true
         end if
 
-        if key = KeyCode.DOWN
-            homeRows = m.top.getscene().findNode("homeRows")
-            if isValid(homeRows)
-                if homeRows.content.getChildCount() = 0 then return false
-
-                dehighlightUser()
-                homeRows.setfocus(true)
-                group = m.global.sceneManager.callFunc("getActiveScene")
-                group.lastFocus = homeRows
-                return true
-            end if
+    else if key = KeyCode.RIGHT
+        if m.avatarSelected
+            m.avatarSelected = false
+            m.selectedIndex = 0
+            layoutNavbar()
+            return true
+        else if m.selectedIndex < maxIndex
+            m.selectedIndex = m.selectedIndex + 1
+            layoutNavbar()
+            return true
         end if
 
-        if key = KeyCode.OK
-            group = m.global.sceneManager.callFunc("getActiveScene")
-            panel = group.findNode("options")
-            panel.visible = true
-            panel.findNode("panelList").setFocus(true)
+    else if key = KeyCode.DOWN
+        return handleDownKey()
 
-            homeRows = m.top.getscene().findNode("homeRows")
-            if isValid(homeRows)
-                if homeRows.content.getChildCount() = 0
-                    group.lastFocus = m.top
-                end if
+    else if key = KeyCode.OK
+        return handleOKKey()
+    end if
+
+    return false
+end function
+
+function handleDownKey() as boolean
+    scene = m.top.getScene()
+    homeRows = scene.findNode("homeRows")
+    mediaBar = scene.findNode("mediaBar")
+
+    if isValid(mediaBar) and isValid(homeRows)
+        mediaBarCheck = homeRows.callFunc("isFeaturedMediaEnabled")
+        mediaBarEnabled = false
+        if isValid(mediaBarCheck) and type(mediaBarCheck) = "roBoolean"
+            mediaBarEnabled = mediaBarCheck
+        end if
+
+        if mediaBarEnabled
+            mediaBar.visible = true
+            mediaBar.hasFocus = true
+            mediaBar.setFocus(true)
+            mediaBarMode = m.global.session.user.settings["ui.home.mediaBarMode"] ?? "moonfin"
+            if mediaBarMode <> "banner"
+                homeRows.visible = false
             end if
+            mediaBar.callFunc("refreshCurrentDisplay")
+            return true
+        end if
+    end if
 
+    if isValid(homeRows)
+        if homeRows.content.getChildCount() = 0 then return false
+        dehighlightUser()
+        homeRows.setfocus(true)
+        group = m.global.sceneManager.callFunc("getActiveScene")
+        if not isValid(group.lastFocus) or not group.lastFocus.isSameNode(homeRows)
+            group.lastFocus = homeRows
+        end if
+        return true
+    else
+        group = m.global.sceneManager.callFunc("getActiveScene")
+        if isValid(group) and isValid(group.lastFocus)
             dehighlightUser()
+            group.lastFocus.setFocus(true)
             return true
         end if
     end if
 
     return false
+end function
+
+function handleOKKey() as boolean
+    if m.avatarSelected
+        group = m.global.sceneManager.callFunc("getActiveScene")
+        if isValid(group) then group.lastFocus = m.top
+
+        dialog = m.top.getScene().findNode("accountDialog")
+        if isValid(dialog)
+            dialog.returnFocus = m.top
+            dialog.callFunc("showDialog")
+        end if
+        dehighlightUser()
+        return true
+    end if
+
+    if m.selectedIndex < 0 or m.selectedIndex >= m.navItems.count() then return false
+
+    item = m.navItems[m.selectedIndex]
+
+    if item.id = "home"
+        while m.global.sceneManager.callFunc("getSceneCount") > 1
+            m.global.sceneManager.callFunc("popScene")
+        end while
+        m.top.itemSelected = "home"
+        return true
+
+    else if item.id = "search"
+        m.top.itemSelected = "search"
+        return true
+
+    else if item.id = "shuffle"
+        m.top.showShuffleDialog = not m.top.showShuffleDialog
+        return true
+
+    else if item.id = "favorites"
+        m.top.favoritesPressed = not m.top.favoritesPressed
+        return true
+
+    else if item.id = "genres"
+        m.top.genresPressed = not m.top.genresPressed
+        return true
+
+    else if item.id = "seerr"
+        seerrDiscovery = CreateObject("roSGNode", "SeerrDiscoveryScreen")
+        m.global.sceneManager.callFunc("pushScene", seerrDiscovery)
+        return true
+
+    else if item.id = "settings"
+        m.global.sceneManager.callFunc("settings")
+        return true
+
+    else if item.id = "libraries"
+        if m.librariesExpanded
+            collapseLibraries()
+        else
+            expandLibraries()
+            if m.libraryItems.count() > 0
+                m.selectedIndex = m.selectedIndex + 1
+            end if
+            layoutNavbar()
+        end if
+        return true
+
+    else if item.isLibChild
+        libIndex = getLibraryDataIndex(item.id)
+        if libIndex >= 0 and libIndex < m.libraryData.count()
+            libInfo = m.libraryData[libIndex]
+            libraryNode = createObject("roSGNode", "LibraryData")
+            libraryNode.id = libInfo.id
+            libraryNode.libraryId = libInfo.id
+            libraryNode.title = libInfo.name
+            libraryNode.collectionType = libInfo.collectionType
+
+            if isValidAndNotEmpty(libInfo.serverUrl)
+                libraryNode.serverUrl = libInfo.serverUrl
+                libraryNode.userId = libInfo.userId
+                libraryNode.authToken = libInfo.authToken
+                libraryNode.serverId = libInfo.serverId
+                libraryNode.serverName = libInfo.serverName
+            end if
+
+            m.top.librarySelected = libraryNode
+            return true
+        end if
+    end if
+
+    return false
+end function
+
+function getLibraryDataIndex(itemId as string) as integer
+    actualId = itemId.replace("lib_", "")
+    for i = 0 to m.libraryData.count() - 1
+        if m.libraryData[i].id = actualId then return i
+    end for
+    return -1
+end function
+
+function iif(condition as boolean, trueVal as dynamic, falseVal as dynamic) as dynamic
+    if condition then return trueVal
+    return falseVal
 end function

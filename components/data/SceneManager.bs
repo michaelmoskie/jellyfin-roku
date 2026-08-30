@@ -1,19 +1,70 @@
 import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/enums/String.bs"
+import "pkg:/source/utils/fontApply.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/themeChrome.bs"
+import "pkg:/source/utils/tvKeyboard.bs"
 
 sub init()
     m.params = {}
     m.groups = []
     m.scene = m.top.getScene()
     m.content = m.scene.findNode("content")
-    m.overhang = m.scene.findNode("overhang")
+    m.overhang = getActiveNav(m.scene)
+end sub
+
+sub refreshNavReference()
+    m.overhang = getActiveNav(m.scene)
+end sub
+
+'
+' Helper function to check if a node is a detail screen type
+' @param node - The scene node to check
+' @return boolean - True if node is an ItemDetails subtype
+function isDetailScreen(node as object) as boolean
+    if not isValid(node) then return false
+    return node.isSubType("ItemDetails") or node.isSubType("ModernItemDetails")
+end function
+
+'
+' Helper function to restore focus to a node
+' @param node - The scene node to restore focus to
+sub restoreFocusToNode(node as object)
+    if not isValid(node) then return
+
+    if node.lastFocus <> invalid
+        node.lastFocus.setFocus(true)
+    else
+        if node.focusedChild <> invalid
+            node.focusedChild.setFocus(true)
+        else
+            node.setFocus(true)
+        end if
+    end if
+end sub
+
+'
+' Helper function to set overhang visibility
+' @param visible - Boolean indicating if overhang should be visible
+sub setOverhangVisibility(visible as boolean)
+    if not isValid(m.overhang) then return
+    m.overhang.visible = visible
+    m.overhang.isVisible = visible
+end sub
+
+' The rail down the left is a fixture of every screen, so a screen asking for a
+' clear top only hides the bar that would sit over its content
+sub setContentNavVisibility(visible as boolean)
+    if not isValid(m.overhang) then return
+
+    setOverhangVisibility(visible or m.overhang.isSubType("Sidebar"))
 end sub
 
 '
 ' Push a new group onto the stack, replacing the existing group on the screen
 sub pushScene(newGroup)
     currentGroup = m.groups.peek()
+
     if isValid(newGroup)
         if isValid(currentGroup)
             'Search through group and store off last focused item
@@ -29,10 +80,6 @@ sub pushScene(newGroup)
                 currentGroup.setFocus(false)
             end if
 
-            if currentGroup.isSubType("JFGroup")
-                unregisterOverhangData(currentGroup)
-            end if
-
             currentGroup.visible = false
 
             if currentGroup.isSubType("JFScreen")
@@ -42,7 +89,7 @@ sub pushScene(newGroup)
         end if
 
         ' If we are moving in to a movie detail view, reset preferred audio track index
-        if newGroup.isSubType("MovieDetails")
+        if isDetailScreen(newGroup)
             m.global.queueManager.callFunc("setPreferredAudioTrackIndex", -1)
             m.global.queueManager.callFunc("setPreferredAudioTrackName", string.EMPTY)
         end if
@@ -55,8 +102,11 @@ sub pushScene(newGroup)
             m.content.appendChild(newGroup)
         end if
 
+        fontApply.ApplyThemeFonts(newGroup)
+        themeChrome.ApplyThemeChrome(newGroup)
+
         if newGroup.isSubType("JFScreen")
-            newGroup.callFunc("OnScreenShown")
+            newGroup.callFunc("OnScreenShown", false)
         end if
 
         'observe info about new group, set overhang title, etc.
@@ -69,10 +119,24 @@ sub pushScene(newGroup)
                 newGroup.setFocus(true)
             end if
         end if
+
+        ' Observe buttonSelected field for detail screens if needed
+        ' Note: ShowScenes.bs observes buttonSelected before pushing (in Main context)
+        ' We need to observe here for scenes pushed from components (like Home.bs genres flow)
+        ' To avoid double observation, we always observe here and let it relay to our field
+        ' The Main.bs event loop will handle our sceneManager.buttonSelected field
+        if isDetailScreen(newGroup)
+            newGroup.observeFieldScoped("buttonSelected", "onDetailButtonSelected")
+        end if
     else
         currentGroup.focusedChild.setFocus(true)
     end if
 
+end sub
+
+' Relay buttonSelected events from detail screens to our own field for Main to observe
+sub onDetailButtonSelected(event as object)
+    m.top.buttonSelected = event.getData()
 end sub
 
 '
@@ -80,14 +144,19 @@ end sub
 sub popScene()
     group = m.groups.pop()
     if isValid(group)
-        if group.isSubType("JFGroup")
-            unregisterOverhangData(group)
+        if group.isSubType("VideoPlayerView")
+            m.global.homeNeedsRefresh = true
         end if
 
         group.visible = false
 
         if group.isSubType("JFScreen")
             group.callFunc("OnScreenHidden")
+        end if
+
+        ' Unobserve buttonSelected field if this was a detail screen
+        if isDetailScreen(group)
+            group.unobserveFieldScoped("buttonSelected")
         end if
     else
         ' Exit app if for some reason we don't have anything on the stack
@@ -100,28 +169,20 @@ sub popScene()
         registerOverhangData(group)
 
         ' If we are moving back to anything other than a movie detail view, reset preferred audio track index
-        if not group.isSubType("MovieDetails")
+        if not isDetailScreen(group)
             m.global.queueManager.callFunc("setPreferredAudioTrackIndex", -1)
             m.global.queueManager.callFunc("setPreferredAudioTrackName", string.EMPTY)
         end if
 
         group.visible = true
-
         m.content.replaceChild(group, 0)
 
-        if group.isSubType("JFScreen")
-            group.callFunc("OnScreenShown")
+        ' Call OnScreenShown with isReturning=true to let the screen handle return logic
+        if group.isSubtype("JFScreen")
+            group.callFunc("OnScreenShown", true)
         else
-            ' Restore focus
-            if group.lastFocus <> invalid
-                group.lastFocus.setFocus(true)
-            else
-                if group.focusedChild <> invalid
-                    group.focusedChild.setFocus(true)
-                else
-                    group.setFocus(true)
-                end if
-            end if
+            ' For non-JFScreen components, just restore focus
+            restoreFocusToNode(group)
         end if
     else
         ' Exit app if the stack is empty after removing group
@@ -140,11 +201,22 @@ end function
 ' Clear all content from group stack
 sub clearScenes()
     if m.content <> invalid then m.content.removeChildrenIndex(m.content.getChildCount(), 0)
+
+    ' Properly clean up all scenes before clearing
     for each group in m.groups
-        if type(group) = "roSGNode" and group.isSubtype("JFScreen")
-            group.callFunc("OnScreenHidden")
+        if type(group) = "roSGNode"
+            ' Unobserve detail screen buttonSelected observers
+            if isDetailScreen(group)
+                group.unobserveFieldScoped("buttonSelected")
+            end if
+
+            ' Call OnScreenHidden for JFScreen components
+            if group.isSubtype("JFScreen")
+                group.callFunc("OnScreenHidden")
+            end if
         end if
     end for
+
     m.groups = []
 end sub
 
@@ -169,13 +241,29 @@ end function
 '
 ' Display user/device settings screen
 sub settings()
-    hideMiniPlayer()
-    if m.global.audioPlayer.state = "playing"
-        m.global.audioPlayer.control = "stop"
+    if not isValid(m.scene)
+        return
     end if
 
+    existingSettings = m.scene.findNode("settingsOverlayPanel")
+    if isValid(existingSettings)
+        existingSettings.setFocus(true)
+        return
+    end if
+
+    restoreMiniPlayerOnClose = false
+    audioMiniPlayer = m.scene.findNode("audioMiniPlayer")
+    if isValid(audioMiniPlayer)
+        restoreMiniPlayerOnClose = audioMiniPlayer.callFunc("isVisible")
+    end if
+
+    hideMiniPlayer()
+
     settingsScreen = createObject("roSGNode", "Settings")
-    pushScene(settingsScreen)
+    settingsScreen.id = "settingsOverlayPanel"
+    settingsScreen.restoreMiniPlayerOnClose = restoreMiniPlayerOnClose
+    m.scene.appendChild(settingsScreen)
+    settingsScreen.callFunc("OnScreenShown", false)
 end sub
 
 sub hideMiniPlayer()
@@ -190,24 +278,24 @@ end sub
 '
 ' Register observers for overhang data
 sub registerOverhangData(group)
-    if group.isSubType("SetServerScreen")
-        m.overhang.visible = false
+    ' Safety check - ensure overhang exists
+    if not isValid(m.overhang) then return
+
+    ' Hide overhang for login/setup screens only
+    if group.isSubType("SetServerScreen") or group.isSubType("UserSelect") or group.isSubType("SigninScene")
+        setOverhangVisibility(false)
         return
     end if
 
-    if group.isSubType("MovieDetails")
-        m.overhang.visible = false
-        return
-    end if
-
+    ' Show overhang for Home screen
     if group.isSubType("Home")
-        m.overhang.isVisible = true
+        setOverhangVisibility(true)
         return
     end if
 
-    if group.isSubType("JFGroup")
-        if group.overhangTitle <> invalid then m.overhang.title = group.overhangTitle
-
+    ' For all other screens (including detail screens), show overhang by default
+    ' Individual screens can override by setting overhangVisible field
+    if group.isSubType("JFGroup") or group.isSubType("JFScreen")
         if group.optionsAvailable
             m.overhang.showOptions = true
         else
@@ -215,32 +303,27 @@ sub registerOverhangData(group)
         end if
         group.observeField("optionsAvailable", "updateOptions")
 
-        group.observeField("overhangTitle", "updateOverhangTitle")
-
-        if group.overhangVisible
-            m.overhang.visible = true
+        ' Show overhang by default, unless screen explicitly sets overhangVisible = false
+        if isValid(group.overhangVisible)
+            setContentNavVisibility(group.overhangVisible)
         else
-            m.overhang.visible = false
+            setOverhangVisibility(true)
         end if
 
         group.observeField("overhangVisible", "updateOverhangVisible")
     else
-        print `registerOverhangData(): Unexpected group type. ${group.subtype()}`
+        ' For any other screen types, show overhang by default
+        setOverhangVisibility(true)
     end if
-end sub
 
-'
-' Remove observers for overhang data
-sub unregisterOverhangData(group)
-    group.unobserveField("optionsAvailable")
-    group.unobserveField("overhangTitle")
-    group.unobserveField("overhangVisible")
-end sub
-
-'
-' Update overhang title
-sub updateOverhangTitle(msg)
-    m.overhang.title = msg.getData()
+    if group.isSubType("VideoPlayerView")
+        if group.state = "playing" or group.state = "paused"
+            setOverhangVisibility(false)
+        else
+            setOverhangVisibility(true)
+        end if
+        return
+    end if
 end sub
 
 '
@@ -252,7 +335,7 @@ end sub
 '
 ' Update whether the overhang is visible or not
 sub updateOverhangVisible(msg)
-    m.overhang.visible = msg.getData()
+    setContentNavVisibility(msg.getData())
 end sub
 
 '
@@ -299,8 +382,15 @@ end sub
 ' Display What's New dialog to user with an OK button
 sub whatsNewDialog()
     dialog = createObject("roSGNode", "WhatsNewDialog")
-    dialog.observeField("buttonSelected", "dismissDialog")
+    dialog.observeField("whatsNewClosed", "onWhatsNewDialogClosed")
     m.scene.dialog = dialog
+end sub
+
+sub onWhatsNewDialogClosed()
+    dismissDialog()
+
+    group = getActiveScene()
+    restoreFocusToNode(group)
 end sub
 
 '
@@ -414,9 +504,8 @@ sub radioDialog(title, message, buttons = [tr("OK")], id = "OKDialog")
     dialog.observeField("buttonSelected", "radioButtonSelected")
     dialog.observeField("wasClosed", "optionClosed")
     dialog.title = title
-    dialog.contentData = message
-    dialog.buttons = buttons
-    dialog.id = id
+    dialog.contentData = { data: message }
+    dialog.buttons = [tr("OK")]
 
     m.scene.dialog = dialog
 end sub
@@ -431,67 +520,62 @@ sub radioButtonSelected()
     dismissDialog()
 end sub
 
-'
-' Display remote subtitle dialog to user with OK and cancel buttons
-sub remoteSubtitleDialog(title, message)
-    dialog = createObject("roSGNode", "RemoteSubtitleDialog")
-    dlgPalette = createObject("roSGNode", "RSGPalette")
-    dlgPalette.colors = {
-        DialogBackgroundColor: chainLookupReturn(m.global.session, "user.settings.colorDialogBackground", ColorPalette.ELEMENTBACKGROUND),
-        DialogFocusColor: chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT),
-        DialogFocusItemColor: chainLookupReturn(m.global.session, "user.settings.colorDialogSelectedText", ColorPalette.WHITE),
-        DialogSecondaryTextColor: ColorPalette.RED,
-        DialogSecondaryItemColor: chainLookupReturn(m.global.session, "user.settings.colorDialogBorderLine", ColorPalette.LIGHTBLUE),
-        DialogTextColor: chainLookupReturn(m.global.session, "user.settings.colorDialogText", ColorPalette.WHITE)
-    }
-    dialog.palette = dlgPalette
-    dialog.observeField("buttonSelected", "dismissDialog")
-    dialog.title = title
-    dialog.contentData = message
-    dialog.buttons = [tr("OK"), tr("Cancel")]
-
-    m.scene.dialog = dialog
-end sub
-
-sub keyboardDialog(id, title, message, buttons, hintText, itemID)
+sub standardKeyboardDialog(id, title, message, buttons, hintText, itemID)
     m.buttonData = buttons
     m.itemID = itemID
+    m.keyboardDialogId = id
     m.top.dataReturned = false
     m.top.returnData = invalid
     m.userselection = false
 
-    dialog = createObject("roSGNode", "StandardKeyboardDialog")
-    dialog.id = id
-    dlgPalette = createObject("roSGNode", "RSGPalette")
-    dlgPalette.colors = {
-        DialogBackgroundColor: chainLookupReturn(m.global.session, "user.settings.colorDialogBackground", ColorPalette.ELEMENTBACKGROUND),
-        DialogFocusColor: chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT),
-        DialogFocusItemColor: chainLookupReturn(m.global.session, "user.settings.colorDialogSelectedText", ColorPalette.WHITE),
-        DialogSecondaryTextColor: ColorPalette.RED,
-        DialogSecondaryItemColor: chainLookupReturn(m.global.session, "user.settings.colorDialogBorderLine", ColorPalette.LIGHTBLUE),
-        DialogTextColor: chainLookupReturn(m.global.session, "user.settings.colorDialogText", ColorPalette.WHITE)
-    }
-    dialog.palette = dlgPalette
-    dialog.observeField("buttonSelected", "optionSelected")
-    dialog.observeField("wasClosed", "optionClosed")
-    dialog.title = title
-    dialog.message = message
-    dialog.text = hintText
-    if isStringEqual(type(buttons[0]), "rostring")
-        dialog.buttons = buttons
-    else
-        objectTitles = []
-        for each playlist in buttons
-            objectTitles.push(playlist.title)
-        end for
-        dialog.buttons = objectTitles
-    end if
-
-    m.scene.dialog = dialog
+    m.keyboard = tvKeyboard.Open(m.scene, {
+        title: title,
+        hint: message,
+        text: hintText
+    })
+    m.keyboard.observeField("submitted", "onKeyboardDialogButton")
+    m.keyboard.observeField("cancelled", "onKeyboardDialogCancelled")
 end sub
 
-'
-' Display dialog to user with an OK button
+sub releaseKeyboardDialog()
+    tvKeyboard.Release(m.keyboard, ["submitted", "cancelled"])
+    m.keyboard = invalid
+end sub
+
+' Finishing on the keyboard is taken as the first of the buttons the caller
+' offered, since these dialogs only ever carry one thing to go on with
+sub onKeyboardDialogButton(event as object)
+    enteredText = event.getRoSGNode().text
+    releaseKeyboardDialog()
+
+    m.userselection = true
+    m.top.returnData = {
+        id: m.keyboardDialogId,
+        itemID: m.itemID,
+        params: m.params,
+        indexSelected: 0,
+        buttonSelected: m.buttonData[0],
+        text: enteredText
+    }
+    m.top.dataReturned = true
+end sub
+
+sub onKeyboardDialogCancelled(event as object)
+    enteredText = event.getRoSGNode().text
+    releaseKeyboardDialog()
+    if m.userselection then return
+
+    m.top.returnData = {
+        id: m.keyboardDialogId,
+        itemID: m.itemID,
+        params: m.params,
+        indexSelected: -1,
+        buttonSelected: "",
+        text: enteredText
+    }
+    m.top.dataReturned = true
+end sub
+
 sub optionDialog(id, title, message, buttons, params)
     m.buttonData = buttons
     m.itemID = params.LookupCI("id")

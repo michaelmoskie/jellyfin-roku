@@ -10,12 +10,8 @@
             <Rectangle id="progressBar" color="#00a4dcFF" width="0" height="16" visible="false" />
           </Rectangle>
         </Poster>
-
-        <LayoutGroup id="text" layoutDirection="vert" itemSpacings="[10]">
-          <Poster id="null" height="1" />
-          <ScrollingText id="title" font="font:MediumBoldSystemFont" maxWidth="540" />
-
-          <LayoutGroup id="infoBar" layoutDirection="horiz" itemSpacings="[15]">
+        <LayoutGroup id="text" layoutDirection="vert" itemSpacings="[15]">
+          <LayoutGroup id="infoBar" layoutDirection="horiz" itemSpacings="[20]">
             <Text id="runtime" font="font:SmallestSystemFont" />
 
             <LayoutGroup id="rating" layoutDirection="horiz" itemSpacings="[-5]">

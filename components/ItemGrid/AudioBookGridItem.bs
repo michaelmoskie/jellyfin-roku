@@ -2,6 +2,7 @@ import "pkg:/source/enums/AnimationControl.bs"
 import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/themeApply.bs"
 
 sub init()
     m.titleGroup = m.top.findNode("title_group")
@@ -10,9 +11,9 @@ sub init()
     m.posterText.font.size = 26
     m.subText = m.top.findNode("subText")
     m.subText.font.size = 23
-    m.backdrop = m.top.findNode("backdrop")
+    m.focusBorder = m.top.findNode("focusBorder")
     m.itemProgress = m.top.findNode("progress")
-    m.itemProgress.color = ColorPalette.TRIADBLUE
+    m.itemProgress.color = "#00a4dc"
     m.itemProgressBackground = m.top.findNode("progressBackground")
     m.showProgressBarAnimation = m.top.findNode("showProgressBar")
     m.showProgressBarField = m.top.findNode("showProgressBarField")
@@ -27,7 +28,7 @@ sub init()
         m.itemPoster.loadDisplayMode = m.topParent.imageDisplayMode
     end if
 
-    m.gridTitles = m.global.session.user.settings["itemgrid.gridTitles"]
+    themeApply.ApplyToItem(m.top)
 end sub
 
 sub onHeightChanged()
@@ -38,13 +39,11 @@ sub onHeightChanged()
         calculatedHeight -= 65
     end if
 
-    m.backdrop.height = calculatedHeight
     m.itemPoster.height = calculatedHeight
     m.titleGroup.translation = [0, calculatedHeight + 20]
 end sub
 
 sub onWidthChanged()
-    m.backdrop.width = m.top.width
     m.itemPoster.width = m.top.width
     m.posterText.maxwidth = m.top.width
     m.subText.maxWidth = m.top.width
@@ -58,19 +57,9 @@ sub drawProgressBar(itemData)
 end sub
 
 sub itemContentChanged()
-    m.backdrop.blendColor = "#101010"
-
     itemData = m.top.itemContent
 
     if not isValid(itemData) then return
-
-    if LCase(itemData.type) = "musicalbum"
-        m.backdrop.uri = "pkg:/images/icons/album.png"
-    else if LCase(itemData.type) = "musicartist"
-        m.backdrop.uri = "pkg:/images/missingArtist.png"
-    else if LCase(itemData.json.type) = "musicgenre"
-        m.backdrop.uri = "pkg:/images/icons/musicFolder.png"
-    end if
 
     if isChainValid(itemData, "json.userdata.PlayedPercentage")
         if itemData.json.userdata.PlayedPercentage > 0
@@ -82,10 +71,6 @@ sub itemContentChanged()
     m.posterText.text = itemData.title
     m.subText.text = itemData.json.AlbumArtist
 
-    'If Poster not loaded, ensure "blue box" is shown until loaded
-    if m.itemPoster.loadStatus <> "ready"
-        m.backdrop.visible = true
-    end if
     if m.top.itemHasFocus then focusChanged()
 end sub
 
@@ -100,7 +85,5 @@ end sub
 
 'Hide backdrop and text when poster loaded
 sub onPosterLoadStatusChanged()
-    if m.itemPoster.loadStatus = "ready"
-        m.backdrop.visible = false
-    end if
+    ' Backdrop removed - no action needed
 end sub

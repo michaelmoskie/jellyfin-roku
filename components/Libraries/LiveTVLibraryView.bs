@@ -1,4 +1,3 @@
-import "pkg:/source/api/baserequest.bs"
 import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/enums/ImageLayout.bs"
 import "pkg:/source/enums/KeyCode.bs"
@@ -8,26 +7,25 @@ import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/deviceCapabilities.bs"
 import "pkg:/source/utils/misc.bs"
 
+' Aspect ratios for different layouts
+' Using NO_TITLE ratios for itemSize ensures focus rectangle only wraps the poster,
+' not the title text below. Title can extend beyond itemSize bounds.
 const ASPECT_RATIO_PORTRAIT_NO_TITLE = 1.52173
 const ASPECT_RATIO_LANDSCAPE_NO_TITLE = .825
-const ASPECT_RATIO_PORTRAIT_WITH_TITLE = 1.69565
-const ASPECT_RATIO_LANDSCAPE_WITH_TITLE = .925
+const ASPECT_RATIO_PORTRAIT_WITH_TITLE = 1.52173 ' Use NO_TITLE ratio for itemSize
+const ASPECT_RATIO_LANDSCAPE_WITH_TITLE = .825 ' Use NO_TITLE ratio for itemSize
 
 sub init()
     m.top.imageDisplayMode = "scaleToZoom"
     m.top.showItemTitles = "showonhover"
 
-    overhang = m.top.getScene().findNode("overhang")
-    overhang.isVisible = false
 
     m.options = m.top.findNode("options")
 
     m.tvGuide = invalid
     m.channelFocused = invalid
 
-    m.epgLaunchBeaconSignaled = false
-
-    m.data = CreateObject("roSGNode", "ContentNode")
+    m.data = createSGNode("ContentNode")
 
     m.itemGrid = m.top.findNode("itemGrid")
     m.itemGrid.focusBitmapBlendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
@@ -40,23 +38,10 @@ sub init()
     m.loadedRows = 0
     m.loadedItems = 0
 
-    group = m.global.sceneManager.callFunc("getActiveScene")
-    group.lastFocus = m.itemGrid
+    setLastFocus(m.itemGrid)
 
-    'Voice filter setup
-    m.voiceBox = m.top.findNode("voiceBox")
-    m.voiceBox.voiceEnabled = true
-    m.voiceBox.active = true
-    m.voiceBox.observeField("text", "onvoiceFilter")
-    'set voice help text
-    m.voiceBox.hintText = tr("Use voice remote to search")
-
-    channelOrder = chainLookupReturn(m.global.session, "display.livetv.sortField", LiveTVChannelSortOrder.NUMBER)
-    if isStringEqual(channelOrder, LiveTVChannelSortOrder.DATEPLAYED)
-        m.sortField = "DatePlayed"
-    else
-        m.sortField = "SortName"
-    end if
+    'Item sort - maybe load defaults from user prefs?
+    m.sortField = "SortName"
     m.sortAscending = true
 
     m.filter = "All"
@@ -69,10 +54,7 @@ sub init()
     m.loadItemsTask.observeField("content", "ItemDataLoaded")
     m.loadItemsTask.totalRecordCount = 0
 
-    m.alpha = m.top.findNode("alpha")
-    m.alphaMenu = m.alpha.findNode("alphaMenu")
-
-    m.top.gridTitles = m.global.session.user.settings["itemgrid.gridTitles"]
+    m.top.gridTitles = "showalways"
 end sub
 
 sub setColumnSizes(layout = ImageLayout.PORTRAIT as string)
@@ -82,7 +64,7 @@ sub setColumnSizes(layout = ImageLayout.PORTRAIT as string)
         imageWidthData = val(chainLookupReturn(m.global.session, "user.settings.numberOfColumnsPortraitData", "230"))
     else
         numberOfColumns = chainLookupReturn(m.global.session, "user.settings.numberOfColumnsLandscape", "4")
-        imageWidthData = val(chainLookupReturn(m.global.session, "user.settings.numberOfColumnsLandscapeData", "400"))
+        imageWidthData = val(chainLookupReturn(m.global.session, "user.settings.numberOfColumnsLandscapeData", "418"))
     end if
 
     if isStringEqual(m.top.showItemTitles, "hidealways")
@@ -106,7 +88,7 @@ sub loadInitialItems()
     m.loadItemsTask.control = "stop"
     startLoadingSpinner()
 
-    if m.top.parentItem.json.Type = "CollectionFolder"
+    if isValid(m.top.parentItem) and isValid(m.top.parentItem.json) and m.top.parentItem.json.Type = "CollectionFolder"
         m.top.HomeLibraryItem = m.top.parentItem.Id
     end if
 
@@ -120,36 +102,17 @@ sub loadInitialItems()
         if isValid(m.tvGuide)
             m.tvGuide.opacity = 0
         end if
-        m.alpha.visible = true
         m.itemGrid.opacity = 1
     end if
-    m.sortField = m.global.session.user.settings["display.livetv.sortField"]
-    sortAscendingStr = m.global.session.user.settings["display.livetv.sortAscending"]
+    m.sortField = chainLookupReturn(m.global.session, "user.settings.`display.livetv.sortField`", "SortName")
+    m.sortAscending = chainLookupReturn(m.global.session, "user.settings.`display.livetv.sortAscending`", true)
     m.filter = m.global.session.user.settings["display.livetv.filter"]
 
     if not isValidAndNotEmpty(m.filter) then m.filter = "All"
 
-    if not isValidAndNotEmpty(m.sortField)
-        m.sortField = "SortName"
-    end if
-
-    if sortAscendingStr = invalid or sortAscendingStr = true
-        m.sortAscending = true
-    else
-        m.sortAscending = false
-    end if
-
     m.loadItemsTask.itemId = m.top.parentItem.Id
 
-    ' if we already searched for this alpha text than reset filter
-    if m.loadItemsTask.nameStartsWith = m.top.alphaSelected
-        m.loadItemsTask.nameStartsWith = string.EMPTY
-        m.top.alphaSelected = string.EMPTY
-    else
-        m.loadItemsTask.nameStartsWith = m.alpha.letterSelected
-    end if
-
-    m.loadItemsTask.searchTerm = m.voiceBox.text
+    m.loadItemsTask.searchTerm = string.EMPTY
     m.emptyText.visible = false
     m.loadItemsTask.sortField = m.sortField
     m.loadItemsTask.sortAscending = m.sortAscending
@@ -224,21 +187,6 @@ sub setLiveTvOptions(options)
 end sub
 
 ' Return parent collection type
-function getCollectionType() as string
-    if m.top.parentItem.collectionType = invalid
-        return m.top.parentItem.Type
-    else
-        return m.top.parentItem.CollectionType
-    end if
-end function
-
-' Search string array for search value. Return if it's found
-function inStringArray(array, searchValue) as boolean
-    for each item in array
-        if lcase(item) = lcase(searchValue) then return true
-    end for
-    return false
-end function
 
 ' Data to display when options button selected
 sub SetUpOptions()
@@ -281,7 +229,13 @@ end sub
 sub ItemDataLoaded(msg)
     itemData = msg.GetData()
 
-    if not isValidAndNotEmpty(itemData)
+    if not isValid(itemData)
+        ' Check if this is initial load or pagination
+        if m.loadedItems = 0
+            ' Initial load failed - show error message
+            m.emptyText.text = tr("Error loading channels. Please check your connection and try again.")
+            m.emptyText.visible = true
+        end if
         stopLoadingSpinner()
         return
     end if
@@ -290,17 +244,9 @@ sub ItemDataLoaded(msg)
         m.data.appendChild(item)
     end for
 
-    ' keep focus on alpha menu when loading new data
-    if m.top.alphaActive
-        m.alphaMenu.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.alphaMenu
-    else
-        if not isStringEqual(m.global.session.user.settings["display.livetv.landing"], "guide") or isStringEqual(m.options.view, "livetv")
-            m.itemGrid.setFocus(true)
-            group = m.global.sceneManager.callFunc("getActiveScene")
-            group.lastFocus = m.itemGrid
-        end if
+    if not isStringEqual(m.global.session.user.settings["display.livetv.landing"], "guide") or isStringEqual(m.options.view, "livetv")
+        m.itemGrid.setFocus(true)
+        setLastFocus(m.itemGrid)
     end if
 
     'Update the stored counts
@@ -336,11 +282,11 @@ sub onItemFocused()
         return
     end if
 
-    m.selectedFavoriteItem = m.itemGrid.content.getChild(m.itemGrid.itemFocused)
+    m.selectedFavoriteItem = getItemGridFocusedItem(m.itemGrid)
 
-    ' Load more data if focus is within last 5 rows, and there are more items to load
-    if m.loadItemsTask.totalRecordCount > 14
-        if focusedRow >= m.loadedRows - m.itemGrid.numRows and m.loadeditems < m.loadItemsTask.totalRecordCount
+    ' Load more data if focus is within last 3 rows, and there are more items to load
+    if m.loadItemsTask.totalRecordCount > m.loadedItems
+        if focusedRow >= m.loadedRows - 3
             loadMoreData()
         end if
     end if
@@ -348,7 +294,9 @@ end sub
 
 'Load next set of items
 sub loadMoreData()
-    if isStringEqual(m.loadItemsTask.state, TaskControl.RUN) then return
+    if m.Loading = true then return
+    ' Stop if we've already loaded all items
+    if m.loadedItems >= m.loadItemsTask.totalRecordCount then return
 
     startLoadingSpinner(false)
     m.loadItemsTask.startIndex = m.loadedItems
@@ -358,56 +306,6 @@ end sub
 'Item Selected
 sub onItemSelected()
     m.top.selectedItem = m.itemGrid.content.getChild(m.itemGrid.itemSelected)
-end sub
-
-sub alphaSelectedChanged()
-    if m.top.alphaSelected <> string.EMPTY
-        m.loadItemsTask.control = TaskControl.STOP
-        m.loadedRows = 0
-        m.loadedItems = 0
-        m.data = CreateObject("roSGNode", "ContentNode")
-        m.itemGrid.content = m.data
-        m.loadItemsTask.searchTerm = string.EMPTY
-        m.VoiceBox.text = string.EMPTY
-
-        loadInitialItems()
-    end if
-end sub
-
-sub onvoiceFilter()
-    if m.VoiceBox.text = string.EMPTY then return
-
-    if isStringEqual(m.voiceBox.text, "reset search") then m.voiceBox.text = string.EMPTY
-    if isStringEqual(m.voiceBox.text, "clear search") then m.voiceBox.text = string.EMPTY
-
-    m.loadedRows = 0
-    m.loadedItems = 0
-    m.data = CreateObject("roSGNode", "ContentNode")
-    m.itemGrid.content = m.data
-    m.top.alphaSelected = string.EMPTY
-    m.loadItemsTask.NameStartsWith = " "
-    m.loadItemsTask.searchTerm = m.voiceBox.text
-    m.loadItemsTask.recursive = true
-
-    ' If user searched for a letter, selected it from the alpha menu
-    if m.voiceBox.text.len() = 1
-        alphaMenu = m.top.findNode("alphaMenu")
-        intConversion = m.voiceBox.text.ToInt() ' non numeric input returns as 0
-
-        if m.voiceBox.text = "0" or (isValid(intConversion) and intConversion <> 0)
-            alphaMenu.jumpToItem = 0
-        else
-            ' loop through each option until we find a match
-            for i = 1 to alphaMenu.numRows - 1
-                alphaMenuOption = alphaMenu.content.getChild(i)
-                if Lcase(alphaMenuOption.TITLE) = Lcase(m.voiceBox.text)
-                    alphaMenu.jumpToItem = i
-                    exit for
-                end if
-            end for
-        end if
-    end if
-    loadInitialItems()
 end sub
 
 'Check if options updated and any reloading required
@@ -424,7 +322,9 @@ sub optionsClosed()
         else
             m.view = "livetv"
             set_user_setting("display.livetv.landing", "channels")
-            m.alpha.visible = true
+            if isValid(m.tvGuide)
+                m.tvGuide.opacity = 0
+            end if
             m.itemGrid.opacity = 1
 
             ' Fully tear down the guide so nothing leaks across re-entry
@@ -457,7 +357,7 @@ sub optionsClosed()
         end if
         m.loadedRows = 0
         m.loadedItems = 0
-        m.data = CreateObject("roSGNode", "ContentNode")
+        m.data = createSGNode("ContentNode")
         m.itemGrid.content = m.data
         loadInitialItems()
     end if
@@ -505,15 +405,13 @@ sub showTVGuide()
     m.tvGuide.observeField("focusedChannel", "onChannelFocused")
 
     m.tvGuide.filter = m.filter
-    m.tvGuide.searchTerm = m.voiceBox.text
+    m.tvGuide.searchTerm = string.EMPTY
     m.top.insertChild(m.tvGuide, 1)
 
     m.scheduleGrid = m.top.findNode("scheduleGrid")
     m.tvGuide.lastFocus.setFocus(true)
     group = m.global.sceneManager.callFunc("getActiveScene")
     group.lastFocus = m.tvGuide.lastFocus
-
-    m.alpha.visible = false
 
     m.tvGuide.opacity = 1
     m.itemGrid.opacity = 0
@@ -538,8 +436,8 @@ end sub
 
 'Returns Focused Item
 function getItemFocused()
-    if m.itemGrid.isinFocusChain() and isValid(m.itemGrid.itemFocused)
-        return m.itemGrid.content.getChild(m.itemGrid.itemFocused)
+    if m.itemGrid.isinFocusChain()
+        return getItemGridFocusedItem(m.itemGrid)
     else if isValid(m.scheduleGrid) and m.scheduleGrid.isinFocusChain() and isValid(m.scheduleGrid.itemFocused)
         return m.scheduleGrid.content.getChild(m.scheduleGrid.itemFocused)
     end if
@@ -548,20 +446,6 @@ end function
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
-
-    if m.itemGrid.opacity = 1
-        topGrp = m.itemGrid
-    else
-        topGrp = m.scheduleGrid
-    end if
-    searchGrp = m.top.findNode("voiceBox")
-
-    if key = "left" and searchGrp.isinFocusChain()
-        topGrp.setFocus(true)
-        searchGrp.setFocus(false)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = topGrp
-    end if
 
     if key = "options"
         if m.options.visible = true
@@ -615,20 +499,6 @@ function onKeyEvent(key as string, press as boolean) as boolean
             m.top.quickPlayNode = itemToPlay
             return true
         end if
-    else if key = "left" and topGrp.isinFocusChain() and m.alpha.visible
-        m.top.alphaActive = true
-        topGrp.setFocus(false)
-        m.alphaMenu.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.alphaMenu
-        return true
-    else if key = "right" and m.alpha.isinFocusChain()
-        m.top.alphaActive = false
-        m.alphaMenu.setFocus(false)
-        topGrp.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = topGrp
-        return true
     end if
 
     return false

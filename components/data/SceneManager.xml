@@ -10,7 +10,6 @@
     <function name="userMessage" />
     <function name="standardDialog" />
     <function name="whatsNewDialog" />
-    <function name="remoteSubtitleDialog" />
     <function name="radioDialog" />
     <function name="checkboxDialog" />
     <function name="colorDialog" />
@@ -18,12 +17,13 @@
     <function name="dismissDialog" />
     <function name="isDialogOpen" />
     <function name="optionDialog" />
-    <function name="keyboardDialog" />
+    <function name="standardKeyboardDialog" />
     <function name="deleteSceneAtIndex" />
     <function name="getSceneCount" />
+    <function name="refreshNavReference" />
     <field id="currentUser" type="string" onChange="updateUser" />
     <field id="returnData" type="assocarray" />
     <field id="dataReturned" type="boolean" />
-    <field id="currentSpeed" type="float" value="1.0" />
+    <field id="buttonSelected" type="string" alwaysNotify="true" />
   </interface>
 </component>

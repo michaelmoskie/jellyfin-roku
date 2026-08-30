@@ -2,24 +2,26 @@
 <component name="searchResults" extends="JFScreen">
   <children>
     <Rectangle width="1920" height="1080" color="#000000" opacity="0.75" />
-    <LayoutGroup layoutDirection="horiz" id="SearchAlphabox" translation="[70, 120]">
-      <SearchBox id="SearchBox" visible="true" focusable="true" />
-    </LayoutGroup>
-    <LayoutGroup layoutDirection="vert" id="searchResults" translation="[470, 150]">
-      <Text id="SearchHelpText" text="" />
+    <!-- Clear of both navs at once, since either one may be showing: in from
+        the side for the rail, and down for the bar across the top -->
+    <SearchBox id="SearchBox" translation="[96, 120]" focusable="true" />
+    <DetailTabBar id="searchTabs" translation="[96, 220]" visible="false" />
+    <Text id="SearchHelpText" text="" translation="[96, 224]" />
+    <LayoutGroup layoutDirection="vert" id="searchResults" translation="[96, 306]" clippingRect="[0, 0, 1728, 1280]">
       <SearchRow
         id="searchRow"
         itemComponentName="GridItemMedium"
-        visible="true"
-        itemSize="[1350, 360]"
+        itemSize="[1350, 500]"
         rowItemSpacing="[ [40, 0] ]"
-        itemSpacing="[0, 60]"
-        numColumns="1"
-        vertFocusAnimationStyle="fixed"
+        itemSpacing="[0, 50]"
+        vertFocusAnimationStyle="fixedFocus"
+        rowFocusAnimationStyle="fixedFocus"
+        drawFocusFeedback="true"
+        focusBitmapUri="pkg:/images/hd_focus.9.png"
         numRows="2"
-        rowSize="3"
         showRowLabel="[true]"
         showRowCounter="[true]"
+        rowLabelOffset="[[0, 10]]"
         focusable="true" />
     </LayoutGroup>
     <OptionsSlider id="options" />
@@ -28,7 +30,6 @@
     <field id="query" type="string" alwaysNotify="true" />
     <field id="selectedItem" type="node" alwaysNotify="true" />
     <field id="quickPlayNode" type="node" alwaysNotify="true" />
-    <field id="imageDisplayMode" type="string" value="" />
     <field id="searchAlpha" type="string" alias="SearchBox.search_values" alwaysNotify="true" onChange="searchMedias" />
   </interface>
 </component>

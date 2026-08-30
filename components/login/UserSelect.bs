@@ -1,194 +1,168 @@
-import "pkg:/source/enums/AnimationControl.bs"
-import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/enums/KeyCode.bs"
-import "pkg:/source/enums/String.bs"
 import "pkg:/source/utils/config.bs"
+import "pkg:/source/utils/loginStyle.bs"
 import "pkg:/source/utils/misc.bs"
 
 sub init()
+    m.userRow = m.top.findNode("UserRow")
     m.top.optionsAvailable = false
 
-    m.unhideUsers = m.top.findNode("unhideUsers")
-    m.unhideUsers.color = ColorPalette.ELEMENTBACKGROUND
+    m.userRow = m.top.findNode("userRow")
+    m.userRow.observeField("itemFocused", "onUserFocusChanged")
 
-    m.hiddenUsers = m.top.findNode("hiddenUsers")
-    m.manageHiddenUsers = m.top.findNode("manageHiddenUsers")
+    m.addUser = m.top.findNode("addUser")
+    loginStyle.ApplyButton(m.addUser)
 
-    m.hiddenUsers.focusBitmapBlendColor = ColorPalette.HIGHLIGHT
-    m.hiddenUsers.focusedColor = ColorPalette.WHITE
+    m.changeServer = m.top.findNode("changeServer")
+    loginStyle.ApplyButton(m.changeServer)
+    m.changeServer.observeField("buttonSelected", "onChangeServerSelected")
 
-    m.manualLogin = m.top.findNode("manualLogin")
-    m.manualLogin.background = ColorPalette.LIGHTBLUE
-    m.manualLogin.color = ColorPalette.DARKGREY
-    m.manualLogin.focusBackground = ColorPalette.HIGHLIGHT
-    m.manualLogin.focusColor = ColorPalette.WHITE
-
-    m.hiddenUserAnimation = m.top.findNode("hiddenUserAnimation")
-    m.hiddenUserSlider = m.top.findNode("hiddenUserSlider")
-    m.viewContentSlider = m.top.findNode("viewContentSlider")
+    initServerName()
 end sub
 
-sub onHiddenUserListChanged()
-    if not isValidAndNotEmpty(m.top.hiddenUserList)
-        m.hiddenUsers.content = CreateObject("roSGNode", "ContentNode")
-        if m.hiddenUsers.isInFocusChain()
-            m.hiddenUserSlider.reverse = true
-            m.viewContentSlider.reverse = true
-            m.hiddenUserAnimation.control = AnimationControl.START
+sub initServerName()
+    serverName = m.global.session.server.name
+    if not isValidAndNotEmpty(serverName)
+        serverUrl = get_setting("server") ?? ""
+        if serverUrl = "" then return
 
-            m.manualLogin.focus = true
-            m.manualLogin.setFocus(true)
-        end if
-        m.manageHiddenUsers.visible = false
-        return
+        serverName = serverUrl.replace("https://", "").replace("http://", "")
+        colonPos = serverName.instr(":")
+        slashPos = serverName.instr("/")
+        endPos = serverName.len()
+        if colonPos >= 0 and colonPos < endPos then endPos = colonPos
+        if slashPos >= 0 and slashPos < endPos then endPos = slashPos
+        serverName = serverName.left(endPos)
     end if
+    m.top.findNode("serverName").text = serverName
+end sub
 
-    m.manageHiddenUsers.visible = true
-
-    hiddenUserList = CreateObject("roSGNode", "ContentNode")
-
-    for each user in m.top.hiddenUserList
-        if user.id = string.EMPTY then continue for
-
-        row = CreateObject("roSGNode", "PublicUserData")
-        row.title = user.Name
-        row.id = user.id
-        row.Name = user.Name
-        row.isPublic = user.isPublic
-        row.imageURL = user.imageURL
-
-        hiddenUserList.appendChild(row)
-    end for
-
-    m.hiddenUsers.content = hiddenUserList
+sub onChangeServerSelected()
+    if m.changeServer.buttonSelected
+        m.top.changeServer = true
+    end if
 end sub
 
 sub itemContentChanged()
     stopLoadingSpinner()
-    m.top.findNode("UserRow").ItemContent = m.top.itemContent
+    m.userRow.itemContent = m.top.itemContent
     if m.top.itemContent.count() = 0
-        m.top.findNode("UserRow").setFocus(false)
-        m.manualLogin.setFocus(true)
-        m.manualLogin.focus = true
+        m.userRow.setFocus(false)
+        m.addUser.setFocus(true)
+        m.addUser.focus = true
     end if
     redraw()
 end sub
 
+const ITEM_WIDTH = 220
+const ITEM_SPACING = 32
+const CLIP_WIDTH = 1120
+
 sub redraw()
     userCount = m.top.itemContent.Count()
-    topBorder = 310
-    leftBorder = 130
-    itemWidth = 300
-    itemSpacing = 40
+    if userCount = 0 then return
 
-    if userCount < 5
-        leftBorder = (1920 - ((userCount * itemWidth) + ((userCount - 1) * itemSpacing))) / 2
+    rowWidth = (userCount * ITEM_WIDTH) + ((userCount - 1) * ITEM_SPACING)
+
+    if rowWidth <= CLIP_WIDTH
+        centerOffset = (CLIP_WIDTH - rowWidth) / 2
+        m.userRow.translation = [centerOffset, 0]
+    else
+        scrollUserRow()
     end if
-
-    m.top.findNode("UserRow").translation = [leftBorder, topBorder]
 end sub
 
-' JFScreen hook called when the screen is displayed by the screen manager
-sub OnScreenShown()
+sub onUserFocusChanged()
+    scrollUserRow()
+end sub
+
+sub scrollUserRow()
+    userCount = m.top.itemContent.Count()
+    if userCount = 0 then return
+
+    rowWidth = (userCount * ITEM_WIDTH) + ((userCount - 1) * ITEM_SPACING)
+    if rowWidth <= CLIP_WIDTH then return
+
+    focusedIndex = m.userRow.itemFocused
+    if focusedIndex < 0 then focusedIndex = 0
+
+    focusedItemLeft = focusedIndex * (ITEM_WIDTH + ITEM_SPACING)
+    focusedItemRight = focusedItemLeft + ITEM_WIDTH
+
+    currentOffset = -m.userRow.translation[0]
+
+    if focusedItemRight > currentOffset + CLIP_WIDTH
+        currentOffset = focusedItemRight - CLIP_WIDTH
+    else if focusedItemLeft < currentOffset
+        currentOffset = focusedItemLeft
+    end if
+
+    maxOffset = rowWidth - CLIP_WIDTH
+    if currentOffset < 0 then currentOffset = 0
+    if currentOffset > maxOffset then currentOffset = maxOffset
+
+    m.userRow.translation = [-currentOffset, 0]
+end sub
+
+sub OnScreenShown(_isReturning = false as boolean)
     scene = m.top.getScene()
-    overhang = scene.findNode("overhang")
-    if isValid(overhang)
-        overhang.isVisible = false
+    activeNav = getActiveNav(scene)
+    if isValid(activeNav)
+        activeNav.isVisible = false
     end if
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
 
-    if key = KeyCode.RIGHT
-        if m.hiddenUsers.hasFocus()
-            m.manageHiddenUsers.color = ColorPalette.HIGHLIGHT
-            m.manageHiddenUsers.setFocus(true)
-
-            m.viewContentSlider.reverse = true
-            m.hiddenUserSlider.reverse = true
-            m.hiddenUserAnimation.control = AnimationControl.START
-            return true
-        end if
-    end if
-
-    if key = KeyCode.OK
-        if m.manualLogin.hasFocus()
-            m.manualLogin.selected = not m.manualLogin.selected
-            return true
-        end if
-
-        if m.manageHiddenUsers.hasFocus()
-            m.viewContentSlider.reverse = false
-            m.hiddenUserSlider.reverse = false
-            m.hiddenUserAnimation.control = AnimationControl.START
-            m.hiddenUsers.setFocus(true)
-            m.manageHiddenUsers.color = ColorPalette.WHITE
-            return true
-        end if
-
-        if m.hiddenUsers.isInFocusChain()
-            m.top.showUser = m.hiddenUsers.content.getChild(m.hiddenUsers.itemFocused)
-            return true
-        end if
-        return false
-    end if
-
-    if key = KeyCode.OPTIONS
-        userRow = m.top.findNode("UserRow")
-        userList = userRow.itemContent
-        user = userList[userRow.rowItemFocused[1]]
-
-        if not isValid(user) then return false
-
-        if user.isPublic
-            m.top.hideUser = user
-            return true
-        end if
-
-        m.top.forgetUser = user.id
-        return true
-    end if
-
     if key = KeyCode.BACK
         m.top.backPressed = true
         return true
     end if
 
+    if key = KeyCode.RIGHT and m.addUser.hasFocus()
+        m.addUser.focus = false
+        m.changeServer.setFocus(true)
+        m.changeServer.focus = true
+        return true
+    end if
+
+    if key = KeyCode.LEFT and m.changeServer.hasFocus()
+        m.changeServer.focus = false
+        m.addUser.setFocus(true)
+        m.addUser.focus = true
+        return true
+    end if
+
     if key = KeyCode.UP
-        if m.manualLogin.hasFocus()
-            if m.top.itemContent.count() = 0 then return false
-            m.top.findNode("UserRow").setFocus(true)
-            m.manualLogin.focus = false
-            return true
+        if m.addUser.hasFocus()
+            if m.top.itemContent.count() > 0
+                m.userRow.setFocus(true)
+                m.addUser.focus = false
+                return true
+            end if
+            return false
         end if
 
-        if m.manageHiddenUsers.hasFocus()
-            m.manualLogin.setFocus(true)
-            m.manualLogin.focus = true
-            m.manageHiddenUsers.color = ColorPalette.WHITE
-            return true
+        if m.changeServer.hasFocus()
+            if m.top.itemContent.count() > 0
+                m.userRow.setFocus(true)
+                m.changeServer.focus = false
+                return true
+            end if
+            return false
         end if
 
         return false
     end if
 
     if key = KeyCode.DOWN
-        if m.top.findNode("UserRow").isInFocusChain()
-            m.manualLogin.setFocus(true)
-            m.manualLogin.focus = true
+        if m.userRow.isInFocusChain()
+            m.addUser.setFocus(true)
+            m.addUser.focus = true
             return true
         end if
 
-        if m.manualLogin.hasFocus()
-            if not m.manageHiddenUsers.visible
-                return false
-            end if
-            m.manageHiddenUsers.setFocus(true)
-            m.manualLogin.focus = false
-            m.manageHiddenUsers.color = ColorPalette.HIGHLIGHT
-            return true
-        end if
         return false
     end if
 

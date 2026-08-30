@@ -295,7 +295,7 @@ sub processAddToQueueButtonVisibility(audioMiniPlayerVisible = false)
     end if
 end sub
 
-sub OnScreenShown()
+sub OnScreenShown(_isReturning = false as boolean)
     scene = m.top.getScene()
 
     audioMiniPlayer = scene.findNode("audioMiniPlayer")
@@ -308,12 +308,7 @@ sub OnScreenShown()
     end if
     m.global.audioPlayer.observeFieldScoped("state", "onAudioMiniPlayerStateChange")
 
-
-    overhang = scene.findNode("overhang")
-
-    if overhang.isVisible
-        overhang.isVisible = false
-    end if
+    hideContentNav(scene)
 
     if isValid(m.top.lastFocus)
         m.top.lastFocus.setFocus(true)
@@ -722,7 +717,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
             if not isValidAndNotEmpty(focusedSong) then return false
 
             dialogData = [tr("Add To Playlist")]
-            m.global.sceneManager.callFunc("optionDialog", "libraryitem", focusedSong.LookupCI("title") ?? tr("Options"), [], dialogData, { id: focusedSong.LookupCI("id") })
+            m.global.sceneManager.callFunc("optionDialog", "libraryitem", focusedSong.LookupCI("title"), [], dialogData, { id: focusedSong.LookupCI("id") })
 
             return true
         end if
@@ -939,9 +934,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
 end function
 
 sub createFullDscrDlg()
-    albumTitle = m.top.findNode("albumTitle")
-    if isAllValid([albumTitle.text, m.overview.text])
-        m.global.sceneManager.callFunc("standardDialog", albumTitle.text, { data: ["<p>" + m.overview.text + "</p>"] })
+    if isAllValid([m.top.itemContent.json.name, m.dscr.text])
+        m.global.sceneManager.callFunc("standardDialog", m.top.itemContent.json.name, { data: ["<p>" + m.dscr.text + "</p>"] })
     end if
 end sub
 

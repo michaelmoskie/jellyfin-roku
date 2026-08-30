@@ -1,0 +1,499 @@
+import "pkg:/source/api/baserequest.bs"
+import "pkg:/source/utils/config.bs"
+import "pkg:/source/utils/misc.bs"
+
+namespace moonfinPlugin
+
+    function Ping() as object
+        req = APIRequest("/Moonfin/Ping")
+        if not isValid(req) then return invalid
+
+        result = getJson(req)
+        if not isValid(result) then return invalid
+
+        return normalizeKeys(result)
+    end function
+
+    ' What the server calls its Seerr instance, so a fork is named as it is configured
+    function SeerrDisplayName() as string
+        req = APIRequest("/Moonfin/Seerr/Config")
+        if not isValid(req) then return ""
+
+        result = getJson(req)
+        if not isValid(result) then return ""
+
+        return normalizeKeys(result).displayName ?? ""
+    end function
+
+    function FetchRatings(contentType as string, tmdbId as string) as object
+        if not isValidAndNotEmpty(contentType) or not isValidAndNotEmpty(tmdbId) then return []
+
+        ' profile=tv makes the plugin filter with the same profile TV apps sync their
+        ' settings to, rather than the global one.
+        req = APIRequest("/Moonfin/MdbList/Ratings", {
+            type: contentType,
+            tmdbId: tmdbId,
+            profile: "tv"
+        })
+        if not isValid(req) then return []
+
+        result = getJson(req)
+        if not isValid(result) then return []
+
+        result = normalizeKeys(result)
+        if (result.success ?? true) = false
+            errorMsg = result.error ?? ""
+            if errorMsg <> "" then print "[MoonfinPlugin] MDBList ratings error: "; errorMsg
+            return []
+        end if
+
+        ratingsArr = result.ratings
+        if not isValidAndNotEmpty(ratingsArr) then return []
+
+        ratings = []
+        for each r in ratingsArr
+            r = normalizeKeys(r)
+            ratings.push({
+                source: r.source ?? "",
+                value: r.value,
+                score: r.score,
+                votes: r.votes,
+                url: r.url
+            })
+        end for
+
+        return ratings
+    end function
+
+    function GetIconPath(source as string, rating = invalid as object) as string
+        score = invalid
+        if isValid(rating) then score = rating.score
+
+        if source = "tomatoes" and isValid(score) and score > 0
+            if score >= 75 then return "pkg:/images/icons/ratings/rt-certified.png"
+            if score < 60 then return "pkg:/images/icons/ratings/rt-rotten.png"
+        end if
+
+        ' The plugin echoes the configured source id, so RT Audience arrives as
+        ' "tomatoes_audience" ("popcorn" is MDBList's raw name for the same source)
+        if (source = "popcorn" or source = "tomatoes_audience") and isValid(score) and score > 0
+            if score >= 90 then return "pkg:/images/icons/ratings/rt-verified.png"
+            if score < 60 then return "pkg:/images/icons/ratings/rt-audience-down.png"
+        end if
+
+        if source = "metacritic" and isValid(score) and score >= 81
+            return "pkg:/images/icons/ratings/metacritic-score.png"
+        end if
+
+        iconFile = moonfinPlugin.GetIconFilename(source)
+        if iconFile = "" then return ""
+
+        return `pkg:/images/icons/ratings/${iconFile}`
+    end function
+
+    function GetIconFilename(source as string) as string
+        if source = "imdb" then return "imdb.png"
+        if source = "tmdb" then return "tmdb.png"
+        if source = "tmdb_episode" then return "tmdb.png"
+        if source = "trakt" then return "trakt.png"
+        if source = "tomatoes" then return "rt-fresh.png"
+        if source = "popcorn" or source = "tomatoes_audience" then return "rt-audience-up.png"
+        if source = "metacritic" then return "metacritic.png"
+        if source = "metacriticuser" then return "metacritic-user.png"
+        if source = "letterboxd" then return "letterboxd.png"
+        if source = "rogerebert" then return "rogerebert.png"
+        if source = "myanimelist" then return "mal.png"
+        if source = "anilist" then return "anilist.png"
+        return ""
+    end function
+
+    function FormatRating(rating as object) as string
+        if not isValid(rating) or not isValid(rating.source) then return ""
+
+        source = LCase(rating.source)
+        value = rating.value
+        score = rating.score
+
+        if not isValid(value) and not isValid(score) then return ""
+
+        if source = "imdb"
+            if isValid(value) then return formatDecimal(value, 1)
+            if isValid(score) then return formatDecimal(score / 10, 1)
+        else if source = "tmdb"
+            if isValid(value) then return `${formatDecimal(value, 0)}%`
+            if isValid(score) then return `${formatDecimal(score, 0)}%`
+        else if source = "trakt"
+            if isValid(score) then return `${formatDecimal(score, 0)}%`
+        else if source = "tmdb_episode"
+            ' Per-episode TMDB vote average, 0-10 scale
+            if isValid(value) then return formatDecimal(value, 1)
+            if isValid(score) then return formatDecimal(score, 1)
+        else if source = "tomatoes" or source = "popcorn" or source = "tomatoes_audience" or source = "metacritic" or source = "metacriticuser"
+            if isValid(score) then return `${formatDecimal(score, 0)}%`
+            if isValid(value) then return `${formatDecimal(value, 0)}%`
+        else if source = "letterboxd"
+            if isValid(value) then return `${formatDecimal(value, 1)}/5`
+            if isValid(score) then return `${formatDecimal(score / 20, 1)}/5`
+        else if source = "rogerebert"
+            if isValid(value)
+                ' Show half-star precision only when needed (3.5/4 not 4.0/4)
+                if value = int(value)
+                    return `${formatDecimal(value, 0)}/4`
+                else
+                    return `${formatDecimal(value, 1)}/4`
+                end if
+            end if
+            if isValid(score) then return `${formatDecimal(score, 0)}%`
+        else if source = "myanimelist"
+            if isValid(value) then return formatDecimal(value, 1)
+            if isValid(score) then return formatDecimal(score / 10, 1)
+        else if source = "anilist"
+            if isValid(score) then return `${formatDecimal(score, 0)}%`
+        else
+            if isValid(score) then return `${formatDecimal(score, 0)}%`
+            if isValid(value) then return value.toStr()
+        end if
+
+        return ""
+    end function
+
+    function GetContentType(itemType as string) as string
+        if isStringEqual(itemType, "Movie") then return "movie"
+        if isStringEqual(itemType, "Series") then return "show"
+        ' MDBList has no episode or season ratings, and episode/season provider
+        ' ids are a different TMDB id space than /Ratings?type=show expects
+        return ""
+    end function
+
+    ' TMDB rating for a single episode via the plugin's TMDB proxy. Takes the
+    ' SERIES tmdb id (not the episode's own provider id, which is a different
+    ' id space). Returns the normalized response AA or invalid on failure.
+    function FetchEpisodeRating(seriesTmdbId as string, season as integer, episode as integer) as object
+        if not isValidAndNotEmpty(seriesTmdbId) then return invalid
+
+        req = APIRequest("/Moonfin/Tmdb/EpisodeRating", {
+            tmdbId: seriesTmdbId,
+            season: season,
+            episode: episode
+        })
+        if not isValid(req) then return invalid
+
+        result = getJson(req)
+        if not isValid(result) then return invalid
+
+        result = normalizeKeys(result)
+        if (result.success ?? true) = false then return invalid
+
+        return result
+    end function
+
+    ' TMDB ratings for every episode of a season. Takes the SERIES tmdb id.
+    ' Returns an array of {episodeNumber, voteAverage} or invalid on failure.
+    function FetchSeasonRatings(seriesTmdbId as string, season as integer) as object
+        if not isValidAndNotEmpty(seriesTmdbId) then return invalid
+
+        req = APIRequest("/Moonfin/Tmdb/SeasonRatings", {
+            tmdbId: seriesTmdbId,
+            season: season
+        })
+        if not isValid(req) then return invalid
+
+        result = getJson(req)
+        if not isValid(result) then return invalid
+
+        result = normalizeKeys(result)
+        if (result.success ?? true) = false then return invalid
+
+        episodesArr = result.episodes
+        if not isValidAndNotEmpty(episodesArr) then return invalid
+
+        episodes = []
+        for each e in episodesArr
+            e = normalizeKeys(e)
+            episodes.push({
+                episodeNumber: e.episodeNumber,
+                voteAverage: e.voteAverage
+            })
+        end for
+
+        return episodes
+    end function
+
+    function GetTmdbId(providerIds as object) as string
+        if not isValid(providerIds) then return ""
+        return providerIds.Tmdb ?? providerIds.tmdb ?? ""
+    end function
+
+    ' The TMDB studio endpoints want movie or tv.
+    function GetTmdbType(itemType as string) as string
+        if isStringEqual(itemType, "Series") or isStringEqual(itemType, "Episode") or isStringEqual(itemType, "Season") then return "tv"
+        return "movie"
+    end function
+
+    function IsTmdbEnabled() as boolean
+        if not moonfinPlugin.IsPluginInstalled() then return false
+        pluginInfo = m.global.session.pluginInfo
+        if not isValid(pluginInfo) then return false
+        return pluginInfo.tmdbAvailable = true
+    end function
+
+    ' Fetches the item's TMDB production companies from the plugin, which caches
+    ' the logos server-side. Returns an array of {id, name, hasLogo}.
+    function GetProductionCompanies(tmdbId as string, mediaType as string) as object
+        if not isValidAndNotEmpty(tmdbId) or not isValidAndNotEmpty(mediaType) then return []
+
+        req = APIRequest("/Moonfin/Tmdb/ProductionCompanies", {
+            tmdbId: tmdbId,
+            type: mediaType
+        })
+        if not isValid(req) then return []
+
+        result = getJson(req)
+        if not isValid(result) then return []
+
+        result = normalizeKeys(result)
+        if (result.success ?? true) = false then return []
+
+        companiesArr = result.companies
+        if not isValidAndNotEmpty(companiesArr) then return []
+
+        companies = []
+        for each c in companiesArr
+            c = normalizeKeys(c)
+            companies.push({
+                id: c.id,
+                name: c.name ?? "",
+                hasLogo: c.hasLogo = true
+            })
+        end for
+
+        return companies
+    end function
+
+    ' Builds a Poster uri for a cached TMDB studio logo. The endpoint takes the
+    ' access token as an api_key query param.
+    function StudioImageURL(companyId as dynamic) as string
+        if not isValid(companyId) then return ""
+        token = getAuthTokenFromRegistry()
+        if not isValidAndNotEmpty(token) then return ""
+        return buildURL("/Moonfin/Tmdb/StudioImage/" + `${companyId}`, { api_key: token })
+    end function
+
+    function ParseBoolSetting(value as dynamic, defaultVal as boolean) as boolean
+        if value = invalid then return defaultVal
+
+        valueType = Type(value)
+        if valueType = "Boolean" or valueType = "roBoolean" then return value
+        if valueType = "Integer" or valueType = "LongInteger" or valueType = "roInt" or valueType = "roInteger" then return (value = 1)
+
+        if valueType = "String" or valueType = "roString"
+            normalized = LCase(value.Trim())
+            if normalized = "true" then return true
+            if normalized = "false" then return false
+        end if
+
+        return defaultVal
+    end function
+
+    function IsEnabled() as boolean
+        return moonfinPlugin.ParseBoolSetting(chainLookupReturn(m.global.session, "user.settings.`plugin.enabled`", false), false)
+    end function
+
+    function IsPluginInstalled() as boolean
+        pluginInfo = m.global.session.pluginInfo
+        if not isValid(pluginInfo) then return false
+        return pluginInfo.installed = true
+    end function
+
+    function IsRatingsEnabled() as boolean
+        if not moonfinPlugin.IsEnabled() then return false
+        return moonfinPlugin.ParseBoolSetting(chainLookupReturn(m.global.session, "user.settings.`plugin.mdblist.enabled`", true), true)
+    end function
+
+    ' TMDB per-episode ratings on episode detail pages (plugin.tmdb.episodeRatings)
+    function IsEpisodeRatingsEnabled() as boolean
+        if not moonfinPlugin.IsEnabled() then return false
+        return moonfinPlugin.ParseBoolSetting(chainLookupReturn(m.global.session, "user.settings.`plugin.tmdb.episodeRatings`", true), true)
+    end function
+
+    ' The sources the viewer picked, lowercased, or invalid when they have not narrowed them,
+    ' which is also how a missing plugin and an empty list both let everything through.
+    ' The order they picked is the order the ratings are shown in.
+    function EnabledRatingSources() as object
+        if not moonfinPlugin.IsEnabled() then return invalid
+
+        raw = chainLookupReturn(m.global.session, "user.settings.`plugin.mdblist.ratingSources`", "")
+        if not isValidAndNotEmpty(raw) then return invalid
+
+        sources = ParseJson(raw)
+        if not isValidAndNotEmpty(sources) then return invalid
+
+        picked = []
+        for each entry in sources
+            if isValid(entry) then picked.push(LCase(entry.toStr()))
+        end for
+
+        if picked.count() = 0 then return invalid
+        return picked
+    end function
+
+    ' An episode's TMDB rating keeps its own source name because it is scored out of ten
+    ' rather than a hundred, but the picker only offers TMDB, so it follows that choice.
+    function SelectionSource(source as string) as string
+        if LCase(source) = "tmdb_episode" then return "tmdb"
+        return LCase(source)
+    end function
+
+    function IsRatingSourceEnabled(source as string) as boolean
+        picked = moonfinPlugin.EnabledRatingSources()
+        if not isValid(picked) then return true
+
+        wanted = moonfinPlugin.SelectionSource(source)
+        for each entry in picked
+            if entry = wanted then return true
+        end for
+        return false
+    end function
+
+    ' Restartable debounce shared by the ratings fetch call sites. Creates the
+    ' timer on first use, restarting it keeps only the last focused item's fetch.
+    ' The fire handler resolves in the calling component's scope.
+    function StartRatingsDebounce(timer as dynamic, handlerName as string) as object
+        if isValid(timer)
+            timer.control = "stop"
+        else
+            timer = createObject("roSGNode", "Timer")
+            timer.duration = 0.3
+            timer.repeat = false
+            timer.observeFieldScoped("fire", handlerName)
+        end if
+        timer.control = "start"
+        return timer
+    end function
+
+    function BuildDisplayRatings(ratings as object) as object
+        if not isValidAndNotEmpty(ratings) then return []
+
+        picked = moonfinPlugin.EnabledRatingSources()
+        result = []
+
+        for each rating in ratings
+            source = LCase(rating.source ?? "")
+            if source = "" then continue for
+
+            if isValid(picked) and not moonfinPlugin.IsRatingSourceEnabled(source) then continue for
+
+            formatted = moonfinPlugin.FormatRating(rating)
+            if formatted = "" then continue for
+
+            result.push({
+                source: source,
+                name: moonfinPlugin.GetSourceName(source),
+                formatted: formatted,
+                iconPath: moonfinPlugin.GetIconPath(source, rating),
+                score: rating.score,
+                value: rating.value
+            })
+        end for
+
+        return moonfinPlugin.InPickedOrder(result, picked)
+    end function
+
+    ' The picker's order is the order they are shown in, with anything it does not name
+    ' left where the plugin put it
+    function InPickedOrder(ratings as object, picked as object) as object
+        if not isValid(picked) or ratings.count() < 2 then return ratings
+
+        ordered = []
+        for each wanted in picked
+            for each rating in ratings
+                if moonfinPlugin.SelectionSource(rating.source) = wanted then ordered.push(rating)
+            end for
+        end for
+
+        for each rating in ratings
+            found = false
+            for each placed in ordered
+                if placed.source = rating.source then found = true
+            end for
+            if not found then ordered.push(rating)
+        end for
+
+        return ordered
+    end function
+
+    function GetSourceName(source as string) as string
+        if source = "imdb" then return "IMDb"
+        if source = "tmdb" then return "TMDB"
+        if source = "tmdb_episode" then return "TMDB"
+        if source = "trakt" then return "Trakt"
+        if source = "tomatoes" then return "Rotten Tomatoes"
+        if source = "popcorn" or source = "tomatoes_audience" then return "RT Audience"
+        if source = "metacritic" then return "Metacritic"
+        if source = "metacriticuser" then return "Metacritic User"
+        if source = "letterboxd" then return "Letterboxd"
+        if source = "rogerebert" then return "Roger Ebert"
+        if source = "myanimelist" then return "MyAnimeList"
+        if source = "anilist" then return "AniList"
+        return source
+    end function
+
+    function formatDecimal(num as dynamic, places as integer) as string
+        if not isValid(num) then return ""
+        if places = 0
+            return int(num).toStr()
+        end if
+        multiplier = 10 ^ places
+        rounded = int(num * multiplier + 0.5) / multiplier
+        intPart = int(rounded)
+        fracPart = int((rounded - intPart) * multiplier + 0.5)
+        fracStr = fracPart.toStr()
+        while fracStr.len() < places
+            fracStr = "0" + fracStr
+        end while
+        return `${intPart}.${fracStr}`
+    end function
+
+    function normalizeKeys(obj as object) as object
+        if not isValid(obj) then return invalid
+        result = {}
+        for each key in obj
+            normalized = LCase(key.left(1)) + key.mid(1)
+            result[normalized] = obj[key]
+        end for
+        return result
+    end function
+
+    function GetThemes() as object
+        req = APIRequest("/Moonfin/Themes")
+        if not isValid(req) then return []
+
+        result = getJson(req)
+        if not isValid(result) then return []
+
+        themesArr = result
+        if type(result) = "roAssociativeArray" or type(result) = "AssociativeArray"
+            normalized = moonfinPlugin.normalizeKeys(result)
+            themesArr = normalized.themes
+        end if
+
+        if not isValidAndNotEmpty(themesArr) then return []
+        if type(themesArr) <> "roArray" and type(themesArr) <> "Array" then return []
+
+        return themesArr
+    end function
+
+    function GetTheme(id as string) as object
+        if not isValidAndNotEmpty(id) then return invalid
+
+        req = APIRequest("/Moonfin/Themes/" + id)
+        if not isValid(req) then return invalid
+
+        result = getJson(req)
+        if not isValid(result) then return invalid
+        if type(result) <> "roAssociativeArray" and type(result) <> "AssociativeArray" then return invalid
+
+        return result
+    end function
+
+end namespace

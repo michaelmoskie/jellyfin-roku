@@ -1,0 +1,779 @@
+import "pkg:/source/enums/ColorPalette.bs"
+import "pkg:/source/enums/String.bs"
+import "pkg:/source/utils/seerrBrowseRows.bs"
+import "pkg:/source/utils/SeerrUtils.bs"
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.categoryRows = m.top.findNode("categoryRows")
+    m.loadingLabel = m.top.findNode("loadingLabel")
+    m.errorLabel = m.top.findNode("errorLabel")
+    m.itemTitle = m.top.findNode("itemTitle")
+    m.itemOverview = m.top.findNode("itemOverview")
+    m.metadataText = m.top.findNode("metadataText")
+    m.backdrop = m.top.findNode("backdrop")
+    m.backdropPrev = m.top.findNode("backdropPrev")
+
+    m.backdrop.observeField("loadStatus", "onBackdropLoadStatusChange")
+    m.backdropFadeIn = m.top.findNode("backdropFadeIn")
+    m.backdropPrevFadeOut = m.top.findNode("backdropPrevFadeOut")
+    m.backdropFadeInInterp = m.top.findNode("backdropFadeInInterp")
+    m.backdropPrevFadeOutInterp = m.top.findNode("backdropPrevFadeOutInterp")
+    m.backdropCrossfading = false
+    m.backdropTargetOpacity = 1.0
+
+    m.categoryData = []
+    m.rowsLoading = {}
+    m.apiTasks = {}
+    m.rowPages = {} ' Track current page for each row
+    m.rowHasMore = {} ' Track if row has more pages
+    m.isLoadingMore = {} ' Track if currently loading more for a row
+
+    ' Cache frequently accessed data
+    m.configCache = GetSeerrConfig()
+    m.blockNsfwCache = true
+    if m.configCache <> invalid and m.configCache.blockNsfw <> invalid
+        m.blockNsfwCache = m.configCache.blockNsfw
+    end if
+
+    m.categoryRows.visible = true
+    m.categoryRows.itemSize = [1703, 380]
+    m.categoryRows.itemSpacing = [0, 60]
+    m.categoryRows.rowItemSpacing = [20, 0]
+
+    ' Default item size for regular poster rows
+    m.normalItemSize = [180, 270]
+    ' Larger size for genre/network/studio rows (2x width, wider aspect for logos)
+    m.largeItemSize = [320, 160]
+
+    ' Per-row item sizes: Genre at index 2, Studios at 3, TV Genres at 5, Networks at 6
+    ' Row indices: 0=Trending, 1=Popular Movies, 2=Movie Genres, 3=Studios, 4=Popular TV,
+    '              5=TV Genres, 6=Networks, 7=Upcoming Movies, 8=Upcoming TV, 9=Requests
+    m.categoryRows.rowItemSize = [
+        m.normalItemSize, ' 0: Trending
+        m.normalItemSize, ' 1: Popular Movies
+        m.largeItemSize, ' 2: Movie Genres
+        m.largeItemSize, ' 3: Studios
+        m.normalItemSize, ' 4: Popular TV Series
+        m.largeItemSize, ' 5: TV Genres
+        m.largeItemSize, ' 6: Networks
+        m.normalItemSize, ' 7: Upcoming Movies
+        m.normalItemSize, ' 8: Upcoming TV Series
+        m.normalItemSize ' 9: Your Requests
+    ]
+
+    m.categoryRows.focusBitmapUri = "pkg:/images/posterFocus.9.png"
+    m.categoryRows.focusBitmapBlendColor = ColorPalette.WHITE
+    m.categoryRows.focusFootprintBitmapUri = string.EMPTY
+    m.categoryRows.focusFootprintBlendColor = ColorPalette.TRANSPARENT
+    m.categoryRows.rowLabelOffset = [[0, 15]]
+    m.categoryRows.drawFocusFeedback = true
+
+    m.categoryRows.observeField("rowItemFocused", "onRowItemFocused")
+    m.categoryRows.observeField("rowItemSelected", "onRowItemSelected")
+
+    ' Reload config when screen gains focus (after auth, user switch, etc.)
+    m.top.observeField("focusedChild", "onScreenFocusChanged")
+
+    LoadDiscoveryCategories()
+end sub
+
+sub onScreenFocusChanged()
+    ' Reload config when returning to this screen
+    if m.top.hasFocus() or m.top.isInFocusChain()
+        oldConfig = m.configCache
+        m.configCache = GetSeerrConfig()
+
+        ' If config changed from invalid to valid, reload categories
+        if oldConfig <> invalid and m.configCache <> invalid
+            if not IsValidSeerrConfig(oldConfig) and IsValidSeerrConfig(m.configCache)
+                LoadDiscoveryCategories()
+            end if
+        end if
+    end if
+end sub
+
+sub LoadDiscoveryCategories()
+    ShowLoading()
+
+    categories = [
+        {
+            name: "Trending",
+            endpoint: "/api/v1/discover/trending",
+            queryParams: { page: "1", language: "en" },
+            mediaType: "all"
+        },
+        {
+            name: "Popular Movies",
+            endpoint: "/api/v1/discover/movies",
+            queryParams: { page: "1" },
+            mediaType: "movie"
+        },
+        {
+            name: "Movie Genres",
+            endpoint: "/api/v1/discover/genreslider/movie",
+            queryParams: {},
+            mediaType: "movie",
+            isGenreRow: true
+        },
+        {
+            name: "Studios",
+            endpoint: "static:studios",
+            queryParams: {},
+            mediaType: "movie",
+            isStudioRow: true
+        },
+        {
+            name: "Popular TV Series",
+            endpoint: "/api/v1/discover/tv",
+            queryParams: { page: "1" },
+            mediaType: "tv"
+        },
+        {
+            name: "TV Genres",
+            endpoint: "/api/v1/discover/genreslider/tv",
+            queryParams: {},
+            mediaType: "tv",
+            isGenreRow: true
+        },
+        {
+            name: "Networks",
+            endpoint: "static:networks",
+            queryParams: {},
+            mediaType: "tv",
+            isNetworkRow: true
+        },
+        {
+            name: "Upcoming Movies",
+            endpoint: "/api/v1/discover/movies/upcoming",
+            queryParams: { language: "en" },
+            mediaType: "movie"
+        },
+        {
+            name: "Upcoming TV Series",
+            endpoint: "/api/v1/discover/tv/upcoming",
+            queryParams: { language: "en" },
+            mediaType: "tv"
+        },
+        {
+            name: "Your Requests",
+            endpoint: "/api/v1/request",
+            queryParams: { take: "50", skip: "0", sort: "modified", filter: "all" },
+            mediaType: "requests",
+            isRequestsRow: true
+        }
+    ]
+
+    m.categoryData = categories
+    contentNode = CreateObject("roSGNode", "ContentNode")
+
+    for i = 0 to categories.Count() - 1
+        category = categories[i]
+
+        rowNode = CreateObject("roSGNode", "ContentNode")
+        rowNode.title = category.name
+        rowNode.addFields({
+            endpoint: category.endpoint,
+            queryParams: category.queryParams,
+            mediaType: category.mediaType,
+            isRequestsRow: category.isRequestsRow = true,
+            isGenreRow: category.isGenreRow = true,
+            isNetworkRow: category.isNetworkRow = true,
+            isStudioRow: category.isStudioRow = true
+        })
+        contentNode.appendChild(rowNode)
+    end for
+
+    m.categoryRows.content = contentNode
+
+    m.pendingRowsToLoad = categories.Count()
+    for i = 0 to categories.Count() - 1
+        LoadRowContent(i)
+    end for
+end sub
+
+sub LoadRowContent(rowIndex as integer, isLoadingMore = false as boolean)
+    if rowIndex < 0 or rowIndex >= m.categoryRows.content.getChildCount()
+        return
+    end if
+
+    row = m.categoryRows.content.getChild(rowIndex)
+
+    ' Skip if already has content and not loading more
+    if not isLoadingMore and row.getChildCount() > 0
+        m.pendingRowsToLoad = m.pendingRowsToLoad - 1
+        if m.pendingRowsToLoad <= 0 and m.rowsLoading.count() = 0
+            HideLoading()
+        end if
+        return
+    end if
+
+    rowKey = "row_" + rowIndex.toStr()
+
+    ' Prevent loading more if row has no more pages
+    if isLoadingMore and m.rowHasMore[rowKey] = false
+        return
+    end if
+
+    ' Prevent concurrent requests for same row
+    if m.isLoadingMore[rowKey] = true
+        return
+    end if
+
+    m.rowsLoading[rowKey] = true
+    m.isLoadingMore[rowKey] = true
+
+    ' Initialize pagination tracking for this row
+    if not m.rowPages.doesExist(rowKey)
+        m.rowPages[rowKey] = 1
+        ' Check if this row supports pagination (has page parameter)
+        if row.queryParams.doesExist("page")
+            m.rowHasMore[rowKey] = true
+        else
+            ' Rows without page parameter (e.g., upcoming) don't support pagination
+            m.rowHasMore[rowKey] = false
+        end if
+    else if isLoadingMore
+        ' Increment page for loading more
+        m.rowPages[rowKey] = m.rowPages[rowKey] + 1
+    end if
+
+    ' Use cached config
+    if not IsValidSeerrConfig(m.configCache)
+        ShowError("Seerr not configured")
+        m.rowsLoading.delete(rowKey)
+        m.isLoadingMore[rowKey] = false
+        if m.rowsLoading.count() = 0
+            HideLoading()
+        end if
+        return
+    end if
+
+    endpoint = row.endpoint
+
+    ' Handle static data rows (networks, studios)
+    ' HandleStaticRow will clean up its own loading state
+    if Left(endpoint, 7) = "static:"
+        HandleStaticRow(rowIndex, endpoint)
+        return
+    end if
+
+    if Left(endpoint, 4) <> "/api"
+        endpoint = "/api/v1" + endpoint
+    end if
+
+    apiTask = CreateObject("roSGNode", "SeerrAPITask")
+    apiTask.addFields({ rowIndex: rowIndex, isLoadingMore: isLoadingMore })
+    m.apiTasks[rowKey] = apiTask
+
+    ' Build query params with current page number
+    queryParams = {}
+    for each key in row.queryParams
+        queryParams[key] = row.queryParams[key]
+    end for
+
+    ' Update page parameter
+    currentPage = m.rowPages[rowKey]
+    if queryParams.doesExist("page")
+        queryParams["page"] = currentPage.toStr()
+    end if
+
+    apiTask.request = {
+        method: "GET",
+        endpoint: endpoint,
+        queryParams: queryParams
+    }
+
+    apiTask.observeField("response", "onDiscoveryResponse")
+    apiTask.control = "RUN"
+end sub
+
+sub onRowItemFocused(event as object)
+    focusedIndex = event.getData()
+
+    if focusedIndex.count() > 0
+        rowIndex = focusedIndex[0]
+
+        ' Only load row content if it hasn't been loaded yet
+        row = m.categoryRows.content.getChild(rowIndex)
+        if row <> invalid and row.getChildCount() = 0
+            LoadRowContent(rowIndex)
+        end if
+
+        if focusedIndex.count() > 1
+            itemIndex = focusedIndex[1]
+
+            ' Check if user is near end of row - load more if available
+            if row <> invalid and itemIndex < row.getChildCount()
+                focusedItem = row.getChild(itemIndex)
+                UpdateDetailsSection(focusedItem)
+
+                ' Trigger load more when within 5 items of the end
+                itemsFromEnd = row.getChildCount() - itemIndex
+                rowKey = "row_" + rowIndex.toStr()
+                if itemsFromEnd <= 5 and m.rowHasMore[rowKey] = true and m.isLoadingMore[rowKey] <> true
+                    LoadRowContent(rowIndex, true) ' isLoadingMore = true
+                end if
+            end if
+        end if
+    end if
+end sub
+
+sub UpdateDetailsSection(item as object)
+    if item = invalid then return
+
+    m.itemTitle.text = item.title
+    metaParts = []
+    if item.releaseYear <> invalid and item.releaseYear <> ""
+        metaParts.push(item.releaseYear)
+    end if
+    if item.mediaType <> invalid and item.mediaType <> ""
+        mediaTypeLabel = item.mediaType
+        if item.mediaType = "movie" then mediaTypeLabel = "Movie"
+        if item.mediaType = "tv" then mediaTypeLabel = "TV Series"
+        metaParts.push(mediaTypeLabel)
+    end if
+    if item.rating <> invalid and item.rating <> ""
+        metaParts.push("★ " + item.rating)
+    end if
+
+    m.metadataText.text = metaParts.join(" • ")
+
+    if item.overview <> invalid and item.overview <> ""
+        m.itemOverview.text = item.overview
+    else
+        m.itemOverview.text = ""
+    end if
+
+    if item.backdropUrl <> invalid and item.backdropUrl <> ""
+        if isValid(m.backdropFadeIn) then m.backdropFadeIn.control = "stop"
+        if isValid(m.backdropPrevFadeOut) then m.backdropPrevFadeOut.control = "stop"
+
+        if isValid(m.backdropPrev) and m.backdrop.uri <> ""
+            m.backdropPrev.uri = m.backdrop.uri
+            m.backdropPrev.opacity = 1.0
+        end if
+
+        m.backdrop.opacity = 0.0
+        m.backdrop.uri = item.backdropUrl
+        m.backdropCrossfading = true
+    end if
+end sub
+
+sub onBackdropLoadStatusChange()
+    if isValid(m.backdrop) and m.backdrop.loadStatus = "ready" and isValidAndNotEmpty(m.backdrop.uri)
+        if m.backdropCrossfading
+            targetOpacity = m.backdropTargetOpacity
+            if isValid(m.backdropFadeInInterp)
+                m.backdropFadeInInterp.keyValue = [0.0, targetOpacity]
+            end if
+            if isValid(m.backdropPrevFadeOutInterp)
+                m.backdropPrevFadeOutInterp.keyValue = [targetOpacity, 0.0]
+            end if
+            if isValid(m.backdropFadeIn)
+                m.backdropFadeIn.control = "start"
+            end if
+            if isValid(m.backdropPrevFadeOut)
+                m.backdropPrevFadeOut.control = "start"
+            end if
+            m.backdropCrossfading = false
+        else
+            if isValid(m.backdropPrev)
+                m.backdropPrev.uri = m.backdrop.uri
+            end if
+        end if
+    end if
+end sub
+
+sub onRowItemSelected(event as object)
+    selectedIndex = event.getData()
+    if selectedIndex.count() > 0
+        itemIndex = selectedIndex[1]
+        rowIndex = selectedIndex[0]
+        row = m.categoryRows.content.getChild(rowIndex)
+        selectedItem = row.getChild(itemIndex)
+
+        if selectedItem <> invalid
+            if selectedItem.hasField("isGenre") and selectedItem.isGenre = true
+                ShowGenreBrowse(selectedItem)
+            else if selectedItem.hasField("isNetwork") and selectedItem.isNetwork = true
+                ShowNetworkBrowse(selectedItem)
+            else if selectedItem.hasField("isStudio") and selectedItem.isStudio = true
+                ShowStudioBrowse(selectedItem)
+            else
+                ShowSeerrDetails(selectedItem)
+            end if
+        end if
+    end if
+end sub
+
+' Navigate to browse content by genre
+sub ShowGenreBrowse(genreItem as object)
+    genreId = genreItem.genreId
+    genreName = genreItem.title
+    mediaType = genreItem.mediaType
+
+    genreBrowseScreen = CreateObject("roSGNode", "SeerrGenreBrowseScreen")
+    genreBrowseScreen.browseType = "genre"
+    genreBrowseScreen.mediaType = mediaType
+    genreBrowseScreen.genreName = genreName
+    genreBrowseScreen.genreId = genreId
+
+    m.global.sceneManager.callFunc("pushScene", genreBrowseScreen)
+end sub
+
+' Navigate to browse content by network
+sub ShowNetworkBrowse(networkItem as object)
+    networkId = networkItem.networkId
+    networkName = networkItem.title
+
+    browseScreen = CreateObject("roSGNode", "SeerrGenreBrowseScreen")
+    browseScreen.browseType = "network"
+    browseScreen.mediaType = "tv"
+    browseScreen.genreName = networkName
+    browseScreen.genreId = networkId
+
+    m.global.sceneManager.callFunc("pushScene", browseScreen)
+end sub
+
+' Navigate to browse content by studio
+sub ShowStudioBrowse(studioItem as object)
+    studioId = studioItem.studioId
+    studioName = studioItem.title
+
+    browseScreen = CreateObject("roSGNode", "SeerrGenreBrowseScreen")
+    browseScreen.browseType = "studio"
+    browseScreen.mediaType = "movie"
+    browseScreen.genreName = studioName
+    browseScreen.genreId = studioId
+
+    m.global.sceneManager.callFunc("pushScene", browseScreen)
+end sub
+
+sub OnScreenHidden()
+    CleanupObservers()
+end sub
+
+sub CleanupObservers()
+    if isValid(m.apiTasks)
+        for each key in m.apiTasks
+            task = m.apiTasks[key]
+            if isValid(task)
+                task.unobserveField("response")
+            end if
+        end for
+    end if
+end sub
+
+sub onDiscoveryResponse(event as object)
+    response = event.getData()
+    apiTask = event.getRoSGNode()
+    rowIndex = apiTask.rowIndex
+
+    row = m.categoryRows.content.getChild(rowIndex)
+    rowKey = "row_" + rowIndex.toStr()
+
+    ' Clear loading states
+    m.rowsLoading.delete(rowKey)
+    m.isLoadingMore[rowKey] = false
+    m.apiTasks.delete(rowKey)
+
+    if m.rowsLoading.count() = 0
+        HideLoading()
+    end if
+
+    if response.success and response.data <> invalid
+        row = m.categoryRows.content.getChild(rowIndex)
+        categoryData = m.categoryData[rowIndex]
+
+        ' Check if this is the requests row
+        if categoryData <> invalid and categoryData.isRequestsRow = true
+            ' Mark requests row as having no more pages (single load only)
+            m.rowHasMore[rowKey] = false
+
+            ' The /api/v1/request endpoint returns minimal data, so we need to enrich each request
+            results = response.data.results
+            if results <> invalid and type(results) = "roArray"
+                ' Store requests to process
+                m.requestsToEnrich = []
+                m.enrichedRequestItems = []
+                m.requestsRowIndex = rowIndex
+
+                for i = 0 to results.Count() - 1
+                    request = results[i]
+                    if request.media <> invalid and request.media.tmdbId <> invalid
+                        requestInfo = {
+                            tmdbId: request.media.tmdbId,
+                            type: request.type,
+                            mediaInfo: request.media
+                        }
+                        m.requestsToEnrich.Push(requestInfo)
+                    end if
+                end for
+
+                ' Start fetching full details for each request
+                if m.requestsToEnrich.Count() > 0
+                    EnrichNextRequest()
+                end if
+            end if
+        else if categoryData <> invalid and categoryData.isGenreRow = true
+            ' Handle genre slider data - response.data is the array directly
+            m.rowHasMore[rowKey] = false
+
+            genres = response.data
+            if type(genres) = "roArray" and genres.count() > 0
+                for i = 0 to genres.count() - 1
+                    genre = genres[i]
+                    genreNode = CreateGenreContentNode(genre, categoryData.mediaType)
+                    if genreNode <> invalid
+                        row.appendChild(genreNode)
+                    end if
+                end for
+
+                ' Set focus on first load
+                if rowIndex = 0 and not m.categoryRows.hasFocus() and not apiTask.isLoadingMore
+                    m.categoryRows.setFocus(true)
+                    m.categoryRows.jumpToRowItem = [0, 0]
+                end if
+            end if
+        else
+            ' Handle regular discovery data
+            results = response.data.results
+
+            if results <> invalid and type(results) = "roArray"
+                ' Use cached NSFW setting
+                blockNsfw = m.blockNsfwCache
+
+                ' Three-stage filter: library availability, blacklist, NSFW
+                filteredResults = []
+
+                for i = 0 to results.Count() - 1
+                    item = results[i]
+                    includeItem = true
+
+                    if IsItemAvailable(item)
+                        includeItem = false
+                    else if IsItemBlacklisted(item)
+                        includeItem = false
+                    else if blockNsfw and IsItemNsfw(item)
+                        includeItem = false
+                    end if
+
+                    if includeItem
+                        filteredResults.push(item)
+                    end if
+                end for
+
+                results = filteredResults
+
+                ' Check if there are more pages (typically 20 results per page)
+                if results.Count() < 20
+                    m.rowHasMore[rowKey] = false
+                end if
+
+                for i = 0 to results.Count() - 1
+                    item = results[i]
+
+                    mediaNode = CreateMediaContentNode(item)
+                    if mediaNode <> invalid
+                        row.appendChild(mediaNode)
+                    end if
+                end for
+
+                ' Only set focus on first load, not when loading more pages
+                if rowIndex = 0 and not m.categoryRows.hasFocus() and not apiTask.isLoadingMore
+                    m.categoryRows.setFocus(true)
+                    m.categoryRows.jumpToRowItem = [0, 0]
+                end if
+            end if
+        end if
+    else
+        errorMsg = "Failed to load media"
+        if response.error <> invalid
+            errorMsg = errorMsg + ": " + response.error
+        end if
+
+        ShowError(errorMsg)
+    end if
+
+end sub
+
+sub ShowMediaDetails(mediaItem as object)
+    ShowSeerrDetails(mediaItem)
+end sub
+
+' Handle static data rows like networks and studios
+sub HandleStaticRow(rowIndex as integer, endpoint as string)
+    rowKey = "row_" + rowIndex.toStr()
+    m.rowsLoading.delete(rowKey)
+    m.isLoadingMore[rowKey] = false
+    m.rowHasMore[rowKey] = false
+
+    if m.rowsLoading.count() = 0
+        HideLoading()
+    end if
+
+    row = m.categoryRows.content.getChild(rowIndex)
+
+    staticType = Mid(endpoint, 8) ' Get string after "static:"
+
+    if staticType = "networks"
+        LoadStaticNetworks(row)
+    else if staticType = "studios"
+        LoadStaticStudios(row)
+    end if
+end sub
+
+' Load popular TV networks, drawn as white logos the way Seerr does
+sub LoadStaticNetworks(row as object)
+    networks = seerrBrowseRows.Networks()
+
+    for each network in networks
+        networkNode = CreateObject("roSGNode", "ContentNode")
+        networkNode.title = network.name
+
+        networkNode.addField("networkId", "integer", false)
+        networkNode.networkId = network.id
+
+        networkNode.addField("mediaType", "string", false)
+        networkNode.mediaType = "tv"
+
+        networkNode.addField("isNetwork", "boolean", false)
+        networkNode.isNetwork = true
+
+        if network.logoPath <> invalid and network.logoPath <> ""
+            logoUrl = seerrBrowseRows.LogoUrl(network.logoPath)
+            networkNode.hdPosterUrl = logoUrl
+            networkNode.sdPosterUrl = logoUrl
+        end if
+
+        row.appendChild(networkNode)
+    end for
+end sub
+
+' Load popular movie studios, drawn as white logos the way Seerr does
+sub LoadStaticStudios(row as object)
+    studios = seerrBrowseRows.Studios()
+
+    for each studio in studios
+        studioNode = CreateObject("roSGNode", "ContentNode")
+        studioNode.title = studio.name
+
+        studioNode.addField("studioId", "integer", false)
+        studioNode.studioId = studio.id
+
+        studioNode.addField("mediaType", "string", false)
+        studioNode.mediaType = "movie"
+
+        studioNode.addField("isStudio", "boolean", false)
+        studioNode.isStudio = true
+
+        if studio.logoPath <> invalid and studio.logoPath <> ""
+            logoUrl = seerrBrowseRows.LogoUrl(studio.logoPath)
+            studioNode.hdPosterUrl = logoUrl
+            studioNode.sdPosterUrl = logoUrl
+        end if
+
+        row.appendChild(studioNode)
+    end for
+end sub
+
+sub ShowLoading()
+    m.loadingLabel.visible = true
+    m.errorLabel.visible = false
+end sub
+
+sub HideLoading()
+    m.loadingLabel.visible = false
+end sub
+
+sub ShowError(message as string)
+    m.errorLabel.text = message
+    m.errorLabel.visible = true
+    m.loadingLabel.visible = false
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+
+    if key = "up"
+        if isValid(m.categoryRows) and m.categoryRows.hasFocus()
+            rowIndex = m.categoryRows.rowItemFocused[0]
+            if rowIndex = 0
+                m.top.lastFocus = m.categoryRows
+                return FocusNav(m.top)
+            end if
+        end if
+    end if
+
+    ' Open Seerr Settings with * key
+    if key = "*"
+        settingsScreen = CreateObject("roSGNode", "SeerrSettingsScreen")
+        m.top.getScene().appendChild(settingsScreen)
+        settingsScreen.setFocus(true)
+        return true
+    end if
+
+    ' Handle back button
+    if key = "back"
+        m.global.sceneManager.callFunc("popScene")
+        return true
+    end if
+
+    return false
+end function
+
+' Enrich requests by fetching full TMDB details
+sub EnrichNextRequest()
+    if m.requestsToEnrich.Count() = 0
+        ' All requests enriched, update the row
+        row = m.categoryRows.content.getChild(m.requestsRowIndex)
+        for each item in m.enrichedRequestItems
+            row.appendChild(item)
+        end for
+        ' Content is already updated via appendChild, no need to reassign
+        return
+    end if
+
+    ' Get next request to enrich
+    requestInfo = m.requestsToEnrich.Shift()
+    tmdbId = requestInfo.tmdbId
+    mediaType = requestInfo.type
+
+    ' Create API task for this request
+    enrichTask = CreateObject("roSGNode", "SeerrAPITask")
+    endpoint = "/api/v1/" + mediaType + "/" + tmdbId.toStr()
+
+    enrichTask.request = {
+        method: "GET",
+        endpoint: endpoint
+    }
+
+    enrichTask.observeField("response", "onEnrichResponse")
+
+    ' Store current request info for the callback
+    m.currentEnrichRequest = requestInfo
+
+    enrichTask.control = "RUN"
+end sub
+
+sub onEnrichResponse(event as object)
+    response = event.getData()
+    requestInfo = m.currentEnrichRequest
+
+    if response.success and response.data <> invalid
+        ' Create content node from full TMDB details
+        mediaNode = CreateMediaContentNode(response.data)
+        if mediaNode <> invalid
+            ' Add the media info from the request
+            mediaNode.addField("mediaInfo", "assocarray", false)
+            mediaNode.mediaInfo = requestInfo.mediaInfo
+            m.enrichedRequestItems.Push(mediaNode)
+        end if
+    end if
+
+    ' Process next request
+    EnrichNextRequest()
+end sub
+
+

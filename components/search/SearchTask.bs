@@ -1,15 +1,252 @@
-import "pkg:/source/api/Items.bs"
 import "pkg:/source/api/baserequest.bs"
-import "pkg:/source/utils/config.bs"
 import "pkg:/source/api/Image.bs"
+import "pkg:/source/api/Items.bs"
+import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/deviceCapabilities.bs"
+import "pkg:/source/utils/SeerrUtils.bs"
+import "pkg:/source/utils/multiserver.bs"
 
 sub init()
     m.top.functionName = "search"
 end sub
 
 sub search()
-    if m.top.query <> invalid and m.top.query <> ""
-        m.top.results = searchMedia(m.top.query)
+    query = m.top.query
+    requestToken = m.top.requestToken
+
+    if query = invalid or query = ""
+        publishSearchResults({ Items: [], TotalRecordCount: 0 }, "", requestToken, true)
+        return
     end if
+
+    allSessions = []
+
+    if m.top.enableMultiServer and isMultiServerEnabled()
+        allSessions = getAllServerSessions()
+    end if
+
+    if allSessions.Count() = 0
+        results = normalizeSearchResults(searchMedia(query))
+        publishSearchResults(results, query, requestToken, false)
+
+        if isSearchRequestStale(requestToken) then return
+        appendSeerrResults(results, query)
+        if isSearchRequestStale(requestToken) then return
+
+        publishSearchResults(results, query, requestToken, true)
+        return
+    end if
+
+    port = CreateObject("roMessagePort")
+    activeRequests = {}
+    allItems = []
+    totalCount = 0
+
+    for each userSession in allSessions
+        itemsInfo = startSearchRequest(userSession, port, "items", query)
+        if isValid(itemsInfo)
+            activeRequests[itemsInfo.id] = { session: userSession, type: "items", request: itemsInfo.request }
+        end if
+
+        personsInfo = startSearchRequest(userSession, port, "persons", query)
+        if isValid(personsInfo)
+            activeRequests[personsInfo.id] = { session: userSession, type: "persons", request: personsInfo.request }
+        end if
+    end for
+
+    startTime = CreateObject("roDateTime").AsSeconds()
+
+    while activeRequests.Count() > 0
+        msg = wait(500, port)
+
+        currentTime = CreateObject("roDateTime").AsSeconds()
+        if currentTime - startTime > 10
+            for each requestId in activeRequests
+                requestInfo = activeRequests[requestId]
+                if isValid(requestInfo) and isValid(requestInfo.request)
+                    requestInfo.request.AsyncCancel()
+                end if
+            end for
+            exit while
+        end if
+
+        if msg = invalid then continue while
+
+        if type(msg) = "roUrlEvent"
+            requestId = msg.GetSourceIdentity().ToStr()
+            requestInfo = activeRequests[requestId]
+
+            if isValid(requestInfo)
+                activeRequests.Delete(requestId)
+
+                userSession = requestInfo.session
+                responseCode = msg.GetResponseCode()
+
+                if responseCode = 200
+                    responseBody = msg.GetString()
+                    data = ParseJson(responseBody)
+
+                    if isValid(data) and isChainValid(data, "Items")
+                        for each item in data.Items
+                            searchNode = transformToSearchData(item, userSession)
+                            if isValid(searchNode)
+                                allItems.push(searchNode)
+                                totalCount++
+                            end if
+                        end for
+                    end if
+                end if
+            end if
+        end if
+    end while
+
+    results = normalizeSearchResults({
+        Items: allItems,
+        TotalRecordCount: totalCount
+    })
+
+    publishSearchResults(results, query, requestToken, false)
+    if isSearchRequestStale(requestToken) then return
+
+    appendSeerrResults(results, query)
+    if isSearchRequestStale(requestToken) then return
+
+    publishSearchResults(results, query, requestToken, true)
 end sub
+
+sub appendSeerrResults(results as object, query as string)
+    config = GetSeerrConfig()
+    if config = invalid or not SeerrParseBool(config.enabled, false) then return
+
+    seerrResults = SearchSeerr(query, 1500)
+    if not isValidAndNotEmpty(seerrResults) then return
+
+    if not isValid(results.Items) or type(results.Items) <> "roArray"
+        results.Items = []
+    end if
+
+    for each seerrItem in seerrResults
+        results.Items.push(seerrItem)
+    end for
+
+    results.TotalRecordCount = results.Items.Count()
+end sub
+
+function startSearchRequest(userSession as object, port as object, searchType as string, query as string) as object
+    url = ""
+
+    if searchType = "items"
+        url = buildURLForSession(userSession, "/Users/" + userSession.userId + "/Items", {
+            searchTerm: query,
+            fields: "ChildCount,ItemCounts,Genres,RecursiveItemCount,ImageTags,BackdropImageTags",
+            IncludeItemTypes: "LiveTvChannel,Movie,BoxSet,Series,Episode,Video,Audio,MusicAlbum,MusicArtist,Playlist",
+            EnableTotalRecordCount: false,
+            ImageTypeLimit: 1,
+            Recursive: true,
+            limit: 100
+        })
+    else if searchType = "persons"
+        url = buildURLForSession(userSession, "/Persons", {
+            userId: userSession.userId,
+            searchTerm: query,
+            EnableTotalRecordCount: false,
+            ImageTypeLimit: 1,
+            limit: 100
+        })
+    end if
+
+    if url = "" then return invalid
+
+    authHeader = buildAuthHeaderForSession(userSession)
+
+    request = CreateObject("roUrlTransfer")
+    request.SetUrl(url)
+    request.AddHeader("Authorization", authHeader)
+    request.AddHeader("Content-Type", "application/json")
+    request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    request.InitClientCertificates()
+    request.SetMessagePort(port)
+    request.EnableEncodings(true)
+
+    if request.AsyncGetToString()
+        return {
+            id: request.GetIdentity().ToStr(),
+            request: request
+        }
+    end if
+
+    return invalid
+end function
+
+function transformToSearchData(item as object, userSession as object) as object
+    if not isValid(item) then return invalid
+
+    tmp = CreateObject("roSGNode", "SearchData")
+
+    item._serverUrl = userSession.serverUrl
+    item._userId = userSession.userId
+    item._authToken = userSession.authToken
+    item._serverName = userSession.serverName
+
+    if isValidAndNotEmpty(item.Id) and isValidAndNotEmpty(userSession.serverUrl)
+        imgParams = { maxWidth: 300, quality: 90 }
+        if isValid(item.ImageTags) and isValidAndNotEmpty(item.ImageTags.Primary)
+            imgParams.tag = item.ImageTags.Primary
+        end if
+        tmp.image = PosterImageForServer(userSession.serverUrl, item.Id, imgParams)
+    end if
+    tmp.id = item.LookupCI("Id")
+    tmp.title = item.LookupCI("Name")
+    tmp.AlbumArtist = item.LookupCI("AlbumArtist")
+    tmp.album = item.LookupCI("Album")
+    tmp.type = item.LookupCI("Type")
+    tmp.RunTimeTicks = item.LookupCI("RunTimeTicks")
+    tmp.ProductionYear = item.LookupCI("ProductionYear")
+    tmp.EndDate = item.LookupCI("EndDate")
+    tmp.OfficialRating = item.LookupCI("OfficialRating")
+    tmp.IndexNumber = item.LookupCI("IndexNumber")
+    tmp.seriesname = item.LookupCI("SeriesName")
+    tmp.SeasonName = item.LookupCI("SeasonName")
+    tmp.IndexNumberEnd = item.LookupCI("IndexNumberEnd")
+    tmp.ParentIndexNumber = item.LookupCI("ParentIndexNumber")
+    tmp.json = item
+
+    return tmp
+end function
+
+function normalizeSearchResults(results as dynamic) as object
+    if not isValid(results) or type(results) = "roArray"
+        return { Items: [], TotalRecordCount: 0 }
+    end if
+
+    items = results.Items
+    if not isValid(items) or type(items) <> "roArray"
+        items = []
+    end if
+
+    totalRecordCount = results.TotalRecordCount
+    if not isValid(totalRecordCount)
+        totalRecordCount = items.Count()
+    end if
+
+    return {
+        Items: items,
+        TotalRecordCount: totalRecordCount
+    }
+end function
+
+sub publishSearchResults(results as object, query as string, requestToken as string, isComplete as boolean)
+    payload = normalizeSearchResults(results)
+    payload.query = query
+    payload.requestToken = requestToken
+    payload.isComplete = isComplete
+    m.top.results = payload
+end sub
+
+function isSearchRequestStale(requestToken as string) as boolean
+    currentToken = m.top.requestToken
+    if not isValid(currentToken) or not isValid(requestToken)
+        return false
+    end if
+    return currentToken <> requestToken
+end function

@@ -1,0 +1,207 @@
+import "pkg:/source/enums/ColorPalette.bs"
+import "pkg:/source/enums/TaskControl.bs"
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.top.optionsAvailable = false
+    m.top.overhangVisible = false
+
+    m.pageTitle = m.top.findNode("pageTitle")
+    m.genreGrid = m.top.findNode("genreGrid")
+    m.loadingGroup = m.top.findNode("loadingGroup")
+    m.emptyStateGroup = m.top.findNode("emptyStateGroup")
+
+    m.genreGrid.focusBitmapBlendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
+    m.genreGrid.content = createSGNode("ContentNode")
+    m.genreGrid.observeFieldScoped("itemSelected", "onGenreCardSelected")
+
+    m.genreMap = {}
+    m.isLoading = false
+    m.pageTitle.text = tr("Genres")
+
+    m.loadGenresTask = createObject("roSGNode", "LoadGenresTask")
+    m.loadGenresTask.observeField("genreResults", "onGenresLoaded")
+    m.loadGenresTask.observeField("error", "onLoadError")
+end sub
+
+sub OnScreenShown(_isReturning = false as boolean)
+    if m.genreMap.Count() = 0
+        loadGenres()
+    else
+        m.genreGrid.setFocus(true)
+    end if
+end sub
+
+sub OnScreenHidden()
+end sub
+
+sub loadGenres()
+    if m.isLoading then return
+
+    m.isLoading = true
+    showLoading(true)
+    hideEmptyState()
+
+    m.loadGenresTask.control = TaskControl.RUN
+end sub
+
+sub onGenresLoaded(event as object)
+    genreMap = event.getData()
+    m.isLoading = false
+    showLoading(false)
+
+    if not isValid(genreMap) or genreMap.Count() = 0
+        m.genreMap = {}
+        showEmptyState()
+        return
+    end if
+
+    m.genreMap = genreMap
+    buildGenreCards()
+    m.genreGrid.setFocus(true)
+end sub
+
+sub onLoadError()
+    m.isLoading = false
+    showLoading(false)
+    showEmptyState()
+end sub
+
+' Build genre card content nodes from the genre map
+sub buildGenreCards()
+    content = createSGNode("ContentNode")
+
+    ' Sort genres alphabetically
+    genreKeys = m.genreMap.Keys()
+    sortedKeys = sortArray(genreKeys)
+
+    for each genreKey in sortedKeys
+        genreData = m.genreMap[genreKey]
+        if not isValid(genreData) or not isValid(genreData.items) then continue for
+        if genreData.items.Count() = 0 then continue for
+
+        card = createSGNode("ContentNode")
+        card.addField("json", "assocarray", false)
+        card.title = genreData.displayName
+
+        ' Find a backdrop image from this genre's items
+        backdropUrl = ""
+        for each item in genreData.items
+            if isValidAndNotEmpty(item.backdropUrl)
+                backdropUrl = item.backdropUrl
+                exit for
+            end if
+        end for
+
+        card.json = {
+            itemCount: genreData.items.Count(),
+            backdropUrl: backdropUrl,
+            genreKey: genreKey
+        }
+
+        content.appendChild(card)
+    end for
+
+    m.genreGrid.content = content
+end sub
+
+' Handle genre card selection — push VisualLibraryScene filtered to this genre
+sub onGenreCardSelected()
+    selectedIndex = m.genreGrid.itemSelected
+    selectedCard = m.genreGrid.content.getChild(selectedIndex)
+    if not isValid(selectedCard) or not isValid(selectedCard.json) then return
+
+    genreKey = selectedCard.json.genreKey
+    if not m.genreMap.DoesExist(genreKey) then return
+
+    genreData = m.genreMap[genreKey]
+    genreName = genreData.displayName
+
+    ' Create a parent item node for the genre browse scene
+    genreBrowseItem = createSGNode("ContentNode")
+    genreBrowseItem.addField("id", "string", false)
+    genreBrowseItem.addField("name", "string", false)
+    genreBrowseItem.addField("type", "string", false)
+    genreBrowseItem.addField("collectionType", "string", false)
+
+    genreBrowseItem.id = ""
+    genreBrowseItem.name = genreName
+    genreBrowseItem.type = "movies"
+    genreBrowseItem.collectionType = "movies"
+
+    ' Create a VisualLibraryScene filtered to this genre by name
+    group = createObject("roSGNode", "VisualLibraryScene")
+    group.mediaType = "Movie"
+    group.genreFilter = {
+        genreId: "",
+        genreName: genreName,
+        libraryId: "",
+        parentFolder: "",
+        itemType: "Movie,Series"
+    }
+    group.parentItem = genreBrowseItem
+    group.observeField("selectedItem", "onVisualLibraryItemSelected")
+    group.observeField("quickPlayNode", "onVisualLibraryQuickPlay")
+
+    m.global.sceneManager.callFunc("pushScene", group)
+end sub
+
+' Relay item selection from VisualLibraryScene to GenresScreen's selectedItem
+sub onVisualLibraryItemSelected(event as object)
+    selectedItem = event.getData()
+    if isValid(selectedItem)
+        m.top.selectedItem = selectedItem
+    end if
+end sub
+
+' Relay quick play from VisualLibraryScene to GenresScreen's quickPlayNode
+sub onVisualLibraryQuickPlay(event as object)
+    quickPlayNode = event.getData()
+    if isValid(quickPlayNode)
+        m.top.quickPlayNode = quickPlayNode
+    end if
+end sub
+
+function sortArray(arr as object) as object
+    if arr.Count() <= 1 then return arr
+
+    result = []
+    for each item in arr
+        result.push(item)
+    end for
+
+    n = result.Count()
+    for i = 0 to n - 2
+        for j = 0 to n - 2 - i
+            if LCase(result[j]) > LCase(result[j + 1])
+                temp = result[j]
+                result[j] = result[j + 1]
+                result[j + 1] = temp
+            end if
+        end for
+    end for
+
+    return result
+end function
+
+' Loading / Empty state helpers
+sub showLoading(visible as boolean)
+    m.loadingGroup.visible = visible
+    m.genreGrid.visible = not visible
+end sub
+
+sub showEmptyState()
+    m.emptyStateGroup.visible = true
+    m.genreGrid.visible = false
+end sub
+
+sub hideEmptyState()
+    m.emptyStateGroup.visible = false
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = "" then return false
+
+    return false
+end function

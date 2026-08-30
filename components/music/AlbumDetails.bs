@@ -1,0 +1,423 @@
+import "pkg:/source/api/baserequest.bs"
+import "pkg:/source/api/Image.bs"
+import "pkg:/source/enums/ColorPalette.bs"
+import "pkg:/source/enums/KeyCode.bs"
+import "pkg:/source/enums/TaskControl.bs"
+import "pkg:/source/enums/ViewLoadStatus.bs"
+import "pkg:/source/utils/detailButtons.bs"
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.loadStatus = ViewLoadStatus.INIT
+    m.top.optionsAvailable = false
+    m.top.overhangVisible = false
+
+    m.backdrop = m.top.findNode("backdrop")
+    m.albumCover = m.top.findNode("albumCover")
+    m.playedIndicator = m.top.findNode("playedIndicator")
+    m.albumTitle = m.top.findNode("albumTitle")
+    m.artistName = m.top.findNode("artistName")
+    m.albumMeta = m.top.findNode("albumMeta")
+    m.albumOverview = m.top.findNode("albumOverview")
+    m.buttonRow = m.top.findNode("buttonRow")
+    m.trackList = m.top.findNode("trackList")
+    m.tracksLabel = m.top.findNode("tracksLabel")
+    m.trackCount = m.top.findNode("trackCount")
+    m.scrollableContent = m.top.findNode("scrollableContent")
+
+    m.buttonGroups = []
+    m.currentButtonIndex = 0
+
+    m.trackList.focusBitmapBlendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
+
+    m.favoriteTask = createObject("roSGNode", "FavoriteItemsTask")
+
+    m.LoadBackdropImageTask = CreateObject("roSGNode", "LoadItemsTask")
+    m.LoadBackdropImageTask.itemsToLoad = "backdropImage"
+end sub
+
+' ============================================
+' Screen lifecycle
+' ============================================
+
+sub OnScreenShown(_isReturning = false as boolean)
+    if isValid(m.top.lastFocus)
+        m.top.lastFocus.setFocus(true)
+        setLastFocus(m.top.lastFocus)
+    else if m.buttonGroups.count() > 0
+        m.buttonGroups[0].setFocus(true)
+        m.top.lastFocus = m.buttonGroups[0]
+        highlightButton(0)
+    end if
+
+    stopLoadingSpinner()
+end sub
+
+sub OnScreenHidden()
+end sub
+
+' ============================================
+' Data loading
+' ============================================
+
+sub onPageContentChanged()
+    pageContent = m.top.pageContent
+    if not isValid(pageContent) then return
+
+    json = pageContent.json
+    if not isValid(json) then return
+
+    startLoadingSpinner()
+
+    imgParams = { "maxHeight": 420, "maxWidth": 420 }
+    m.albumCover.uri = ImageURL(json.Id, "Primary", imgParams)
+
+    m.playedIndicator.data = {
+        favorite: chainLookupReturn(json, "UserData.IsFavorite", false)
+    }
+
+    ' Set backdrop from artist if available
+    if isValid(json.ArtistItems) and json.ArtistItems.count() > 0
+        artistID = json.ArtistItems[0].LookupCI("id")
+        if isValidAndNotEmpty(artistID)
+            m.LoadBackdropImageTask.itemId = artistID
+            m.LoadBackdropImageTask.observeField("content", "onBackdropImageLoaded")
+            m.LoadBackdropImageTask.control = TaskControl.RUN
+        end if
+    else
+        m.backdrop.uri = ImageURL(json.Id, "Backdrop", { "maxWidth": 1920 })
+    end if
+
+    m.albumTitle.text = isValid(json.name) ? json.name : ""
+
+    albumArtist = json.LookupCI("AlbumArtist")
+    if isValidAndNotEmpty(albumArtist)
+        m.artistName.text = albumArtist
+    else if isValid(json.Artists) and json.Artists.count() > 0
+        m.artistName.text = json.Artists.join(", ")
+    else
+        m.artistName.text = ""
+    end if
+
+    overview = json.LookupCI("Overview")
+    if isValidAndNotEmpty(overview)
+        m.albumOverview.text = overview
+        m.albumOverview.visible = true
+    else
+        m.albumOverview.visible = false
+    end if
+
+    ' Meta (song count, runtime, year, genres)
+    metaParts = []
+    if isValid(json.ChildCount)
+        count = json.ChildCount
+        metaParts.push(count = 1 ? "1 Song" : `${stri(count).trim()} Songs`)
+    end if
+    if isValid(json.RunTimeTicks)
+        if type(json.RunTimeTicks) = "roInt" or type(json.RunTimeTicks) = "LongInteger"
+            totalMins = int(json.RunTimeTicks / 600000000.0)
+            if totalMins >= 60
+                hours = int(totalMins / 60)
+                mins = totalMins mod 60
+                if mins > 0
+                    metaParts.push(`${stri(hours).trim()} hr ${stri(mins).trim()} min`)
+                else
+                    metaParts.push(`${stri(hours).trim()} hr`)
+                end if
+            else if totalMins > 0
+                metaParts.push(`${stri(totalMins).trim()} min`)
+            end if
+        end if
+    end if
+    if isValid(json.ProductionYear)
+        metaParts.push(stri(json.ProductionYear).trim())
+    end if
+    if isValid(json.Genres) and json.Genres.count() > 0
+        metaParts.push(json.Genres.join(", "))
+    end if
+    m.albumMeta.text = metaParts.join(" · ")
+
+    buildButtons()
+end sub
+
+sub onBackdropImageLoaded()
+    m.LoadBackdropImageTask.control = TaskControl.STOP
+    data = m.LoadBackdropImageTask.content[0]
+    m.LoadBackdropImageTask.unobserveField("content")
+
+    if isValidAndNotEmpty(data)
+        m.backdrop.uri = data
+    end if
+end sub
+
+sub onAlbumDataChanged()
+    albumData = m.top.albumData
+    if not isValid(albumData) then return
+
+    content = CreateObject("roSGNode", "ContentNode")
+    children = albumData.getChildren(-1, 0)
+    for each item in children
+        ' Create PlaylistItemData-compatible nodes for PlaylistItemRow
+        tmp = CreateObject("roSGNode", "PlaylistItemData")
+        tmp.id = item.id
+        tmp.title = item.title
+        tmp.type = "Audio"
+        tmp.RunTimeTicks = item.RunTimeTicks
+
+        ' Build artist string from ArtistItems array
+        if isValid(item.LookupCI("ArtistItems")) and item.ArtistItems.count() > 0
+            artistNames = []
+            for each artistItem in item.ArtistItems
+                if isValid(artistItem.LookupCI("Name"))
+                    artistNames.push(artistItem.Name)
+                end if
+            end for
+            tmp.artists = artistNames
+        else if isValid(item.LookupCI("artists"))
+            tmp.artists = item.artists
+        end if
+
+        ' Set album name from parent page content
+        if isValid(m.top.pageContent) and isValid(m.top.pageContent.json)
+            tmp.album = m.top.pageContent.json.name
+        end if
+
+        tmp.IndexNumber = item.LookupCI("trackNumber")
+
+        content.appendChild(tmp)
+    end for
+    m.trackList.content = content
+
+    totalCount = children.count()
+    m.trackCount.text = stri(totalCount).trim()
+
+    stopLoadingSpinner()
+    m.loadStatus = ViewLoadStatus.LOADED
+
+    if m.buttonGroups.count() > 0
+        m.buttonGroups[0].setFocus(true)
+        m.top.lastFocus = m.buttonGroups[0]
+        highlightButton(0)
+    end if
+end sub
+
+' ============================================
+' Buttons
+' ============================================
+
+sub buildButtons()
+    m.buttonRow.removeChildrenIndex(m.buttonRow.getChildCount(), 0)
+    m.buttonGroups = []
+    m.currentButtonIndex = 0
+
+    addButton({
+        icon: "pkg:/images/icons/play.png",
+        label: "Play All",
+        action: "playAll",
+        id: "playAllButton"
+    })
+
+    addButton({
+        icon: "pkg:/images/icons/shuffle.png",
+        label: "Shuffle",
+        action: "shuffle",
+        id: "shuffleButton"
+    })
+
+    addButton({
+        icon: "pkg:/images/icons/instantMix.png",
+        label: "Instant Mix",
+        action: "instantMix",
+        id: "instantMixButton"
+    })
+
+    addButton({
+        icon: "pkg:/images/icons/favorite.png",
+        label: "Favorite",
+        action: "favorite",
+        id: "favoriteButton"
+    })
+end sub
+
+sub addButton(config as object)
+    buttonGroup = detailButtons.createButton(config, m.buttonGroups.count())
+    buttonGroup.observeField("focusedChild", "onButtonFocusChanged")
+    m.buttonRow.appendChild(buttonGroup)
+    m.buttonGroups.push(buttonGroup)
+end sub
+
+sub highlightButton(index as integer)
+    detailButtons.highlight(index, m.buttonGroups)
+end sub
+
+sub unhighlightAllButtons()
+    detailButtons.unhighlightAll(m.buttonGroups)
+end sub
+
+sub onButtonFocusChanged(event as object)
+    button = event.getRoSGNode()
+    if button <> invalid and button.buttonIndex <> invalid
+        if button.hasFocus() or button.isInFocusChain()
+            m.currentButtonIndex = button.buttonIndex
+            highlightButton(m.currentButtonIndex)
+        end if
+    end if
+end sub
+
+' ============================================
+' Button actions
+' ============================================
+
+sub handleButtonSelect()
+    if m.currentButtonIndex < 0 or m.currentButtonIndex >= m.buttonGroups.count() then return
+
+    button = m.buttonGroups[m.currentButtonIndex]
+    if not isValid(button) then return
+
+    action = button.buttonAction
+
+    if action = "playAll"
+        m.top.playAlbumSelected = true
+    else if action = "shuffle"
+        m.top.shuffleAlbumSelected = true
+    else if action = "instantMix"
+        m.top.instantMixSelected = true
+    else if action = "favorite"
+        toggleFavorite()
+    end if
+end sub
+
+sub toggleFavorite()
+    pageContent = m.top.pageContent
+    if not isChainValid(pageContent, "json") then return
+
+    isFavorite = chainLookupReturn(pageContent.json, "UserData.IsFavorite", false)
+    newStatus = not isFavorite
+
+    m.favoriteTask.itemId = pageContent.json.id
+    m.favoriteTask.favTask = newStatus ? "favorite" : "unfavorite"
+    m.favoriteTask.control = "RUN"
+
+    if not isChainValid(pageContent.json, "UserData")
+        pageContent.json.UserData = { "IsFavorite": newStatus }
+    else
+        pageContent.json.UserData.IsFavorite = newStatus
+    end if
+
+    m.playedIndicator.data = {
+        favorite: newStatus
+    }
+end sub
+
+' ============================================
+' Scrolling
+' ============================================
+
+sub scrollContentTo(yOffset as integer)
+    if isValid(m.scrollableContent)
+        m.scrollableContent.translation = [0, yOffset]
+    end if
+end sub
+
+' ============================================
+' Key handling
+' ============================================
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+
+    isButtonFocused = false
+    if m.buttonGroups.count() > 0
+        for each btn in m.buttonGroups
+            if btn.hasFocus() or btn.isInFocusChain()
+                isButtonFocused = true
+                exit for
+            end if
+        end for
+    end if
+
+    isTrackListFocused = m.trackList.isInFocusChain()
+
+    if isButtonFocused
+        if key = KeyCode.LEFT
+            if m.currentButtonIndex > 0
+                newIndex = m.currentButtonIndex - 1
+                m.buttonGroups[newIndex].setFocus(true)
+                m.top.lastFocus = m.buttonGroups[newIndex]
+                m.currentButtonIndex = newIndex
+                highlightButton(newIndex)
+                setLastFocus(m.buttonGroups[newIndex])
+            else
+                return FocusSidebar(m.top)
+            end if
+            return true
+
+        else if key = KeyCode.RIGHT
+            if m.currentButtonIndex < m.buttonGroups.count() - 1
+                newIndex = m.currentButtonIndex + 1
+                m.buttonGroups[newIndex].setFocus(true)
+                m.top.lastFocus = m.buttonGroups[newIndex]
+                m.currentButtonIndex = newIndex
+                highlightButton(newIndex)
+                setLastFocus(m.buttonGroups[newIndex])
+            end if
+            return true
+
+        else if key = KeyCode.OK
+            handleButtonSelect()
+            return true
+
+        else if key = KeyCode.DOWN
+            m.trackList.setFocus(true)
+            m.top.lastFocus = m.trackList
+            setLastFocus(m.trackList)
+            unhighlightAllButtons()
+            scrollContentTo(-420)
+            return true
+
+        else if key = KeyCode.UP
+            return true
+        end if
+    end if
+
+    if isTrackListFocused
+        if key = KeyCode.UP
+            if m.trackList.itemFocused = 0
+                if m.buttonGroups.count() > 0
+                    m.buttonGroups[m.currentButtonIndex].setFocus(true)
+                    m.top.lastFocus = m.buttonGroups[m.currentButtonIndex]
+                    highlightButton(m.currentButtonIndex)
+                    setLastFocus(m.buttonGroups[m.currentButtonIndex])
+                    scrollContentTo(0)
+                    return true
+                end if
+            end if
+            return false
+
+        else if key = KeyCode.OK
+            m.top.playSong = m.trackList.itemFocused
+            return true
+
+        else if key = KeyCode.PLAY
+            m.top.playSong = m.trackList.itemFocused
+            return true
+        end if
+    end if
+
+    if key = KeyCode.BACK
+        if isTrackListFocused
+            if m.buttonGroups.count() > 0
+                m.buttonGroups[m.currentButtonIndex].setFocus(true)
+                m.top.lastFocus = m.buttonGroups[m.currentButtonIndex]
+                highlightButton(m.currentButtonIndex)
+                setLastFocus(m.buttonGroups[m.currentButtonIndex])
+            end if
+            scrollContentTo(0)
+            return true
+        end if
+
+        return false
+    end if
+
+    return false
+end function

@@ -1,0 +1,106 @@
+import "pkg:/source/api/sdk.bs"
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.top.functionName = "loadOptions"
+end sub
+
+sub loadOptions()
+    m.top.errorMessage = ""
+    settingName = m.top.settingName
+    userId = m.top.userId
+
+    if not isValidAndNotEmpty(userId)
+        m.top.errorMessage = "Missing user id"
+        m.top.options = []
+        return
+    end if
+
+    options = []
+
+    if isStringEqual(settingName, "ui.home.mediaBarLibraryIds")
+        req = APIRequest(`/Users/${userId}/Views`)
+        if isValid(req)
+            response = getJson(req)
+            views = chainLookupReturn(response, "Items", [])
+
+            contentType = LCase(toStringValue(m.top.contentType))
+            allowedCollectionTypes = { movies: true, tvshows: true }
+            if isStringEqual(contentType, "movies")
+                allowedCollectionTypes = { movies: true }
+            else if isStringEqual(contentType, "tvshows")
+                allowedCollectionTypes = { tvshows: true }
+            end if
+
+            filteredViews = []
+            for each view in views
+                collectionType = LCase(toStringValue(chainLookupReturn(view, "CollectionType", chainLookupReturn(view, "collectionType", ""))))
+                if allowedCollectionTypes.DoesExist(collectionType)
+                    filteredViews.push(view)
+                end if
+            end for
+
+            options = normalizeMediaBarPickerOptions(filteredViews)
+        end if
+    else if isStringEqual(settingName, "ui.home.mediaBarCollectionIds")
+        req = APIRequest(`/Users/${userId}/Items`, {
+            UserId: userId,
+            IncludeItemTypes: "BoxSet,Playlist",
+            Recursive: "true",
+            SortBy: "SortName",
+            SortOrder: "Ascending",
+            Limit: "500"
+        })
+        if isValid(req)
+            response = getJson(req)
+            options = normalizeMediaBarPickerOptions(chainLookupReturn(response, "Items", []))
+        end if
+    else if isStringEqual(settingName, "ui.home.mediaBarExcludedGenres")
+        genres = api.genres.Get({
+            UserId: userId,
+            SortBy: "SortName",
+            SortOrder: "Ascending"
+        })
+        options = normalizeMediaBarPickerOptions(chainLookupReturn(genres, "Items", []))
+    end if
+
+    m.top.options = options
+end sub
+
+function toStringValue(value as dynamic) as string
+    if not isValid(value) then return ""
+
+    valueType = type(value)
+    if isStringEqual(valueType, "Boolean") or isStringEqual(valueType, "roBoolean")
+        if value then return "true"
+        return "false"
+    end if
+
+    return value.toStr()
+end function
+
+function normalizeMediaBarPickerOptions(items as dynamic) as object
+    options = []
+    if not isValid(items) then return options
+
+    for each item in items
+        optionId = chainLookupReturn(item, "id", chainLookupReturn(item, "Id", ""))
+        optionTitle = chainLookupReturn(item, "name", chainLookupReturn(item, "Name", chainLookupReturn(item, "title", chainLookupReturn(item, "Title", ""))))
+
+        if not isValidAndNotEmpty(optionId)
+            optionId = optionTitle
+        end if
+        if not isValidAndNotEmpty(optionId) then continue for
+
+        if not isValidAndNotEmpty(optionTitle)
+            optionTitle = optionId
+        end if
+
+        options.push({
+            id: optionId.toStr(),
+            title: optionTitle.toStr()
+        })
+    end for
+
+    return options
+end function

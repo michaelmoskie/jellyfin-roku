@@ -1,17 +1,78 @@
 import "pkg:/source/api/baserequest.bs"
 import "pkg:/source/api/Image.bs"
+import "pkg:/source/api/sdk.bs"
+import "pkg:/source/enums/ColorPalette.bs"
+import "pkg:/source/enums/KeyCode.bs"
 import "pkg:/source/utils/config.bs"
+import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/multiserver.bs"
 
 sub init()
+    m.name = m.top.findNode("name")
+    m.birthInfo = m.top.findNode("birthInfo")
     m.dscr = m.top.findNode("description")
-    m.vidsList = m.top.findNode("extrasGrid")
-    m.btnGrp = m.top.findNode("buttons")
-    m.btnGrp.observeField("escape", "onButtonGroupEscaped")
-    m.favBtn = m.top.findNode("favorite-button")
-    m.favBtn.observeField("buttonSelected", "onFavoriteButtonSelected")
-    m.extrasGrp = m.top.findNode("extrasGrp")
-    m.extrasGrp.opacity = 1.0
+    m.personImage = m.top.findNode("personImage")
+    m.playedIndicator = m.top.findNode("playedIndicator")
+    m.filmographyLabel = m.top.findNode("filmographyLabel")
+
+    m.favoriteButtonGroup = m.top.findNode("favoriteButtonGroup")
+    m.favoriteIcon = m.top.findNode("favoriteIcon")
+    m.favoriteButtonBg = m.top.findNode("favoriteButtonBg")
+
+    if isValid(m.favoriteButtonGroup)
+        m.favoriteButtonGroup.observeField("focusedChild", "onFavoriteButtonFocusChanged")
+    end if
+
+    m.backdrop = m.top.findNode("backdrop")
+    m.backdropPrev = m.top.findNode("backdropPrev")
+    m.backdropFadeIn = m.top.findNode("backdropFadeIn")
+    m.backdropPrevFadeOut = m.top.findNode("backdropPrevFadeOut")
+    m.backdropFadeInInterp = m.top.findNode("backdropFadeInInterp")
+    m.backdropPrevFadeOutInterp = m.top.findNode("backdropPrevFadeOutInterp")
+    m.backdropCrossfading = false
+
+    if isValid(m.backdrop)
+        m.backdrop.observeField("loadStatus", "onBackdropLoadStatusChange")
+    end if
+
+    m.favoriteTask = createObject("roSGNode", "FavoriteItemsTask")
+
+    m.extrasGrid = m.top.findNode("extrasGrid")
+    if isValid(m.extrasGrid)
+        m.extrasGrid.observeField("focusedItem", "onFilmographyItemFocused")
+    end if
+
     m.top.optionsAvailable = false
+
+    m.filmographyItemCount = 0
+end sub
+
+sub onFavoriteButtonFocusChanged()
+    updateFavoriteFocusVisual()
+end sub
+
+sub updateFavoriteFocusVisual()
+    if not isValid(m.favoriteButtonBg) or not isValid(m.favoriteButtonGroup) then return
+
+    isFocused = m.favoriteButtonGroup.hasFocus() or m.favoriteButtonGroup.isInFocusChain()
+    fave = false
+    if isValid(m.top.itemContent) and isChainValid(m.top.itemContent, "json")
+        fave = chainLookupReturn(m.top.itemContent.json, "UserData.IsFavorite", false)
+    end if
+
+    if isFocused
+        m.favoriteButtonBg.blendColor = ColorPalette.WHITE
+        m.favoriteButtonBg.opacity = 1.0
+        if isValid(m.favoriteIcon)
+            m.favoriteIcon.blendColor = fave ? "#CC3333" : "#000000"
+        end if
+    else
+        m.favoriteButtonBg.blendColor = "#444444"
+        m.favoriteButtonBg.opacity = 0.6
+        if isValid(m.favoriteIcon)
+            m.favoriteIcon.blendColor = fave ? "#CC3333" : "#FFFFFF"
+        end if
+    end if
 end sub
 
 sub loadPerson()
@@ -19,148 +80,282 @@ sub loadPerson()
     item.observeField("favorite", "setFavoriteColor")
     itemData = item.json
     m.top.Id = itemData.id
-    name = m.top.findNode("Name")
-    name.Text = itemData.Name
-    name.font.size = 70
-    if itemData.PremiereDate <> invalid and itemData.PremiereDate <> ""
-        lifeStringLabel = createObject("rosgnode", "Label")
-        lifeStringLabel.id = "premierDate"
-        lifeStringLabel.font = "font:SmallestBoldSystemFont"
-        lifeStringLabel.height = "100"
-        lifeStringLabel.vertAlign = "bottom"
-        name.vertAlign = "top"
-        name.font.size = 60
-        m.top.findNode("title_rectangle").appendChild(lifeStringLabel)
+
+    if isValid(m.name) and isValid(itemData.Name)
+        m.name.text = itemData.Name
+    end if
+
+    if isValid(m.birthInfo) and isValidAndNotEmpty(itemData.PremiereDate)
         birthDate = CreateObject("roDateTime")
         birthDate.FromISO8601String(itemData.PremiereDate)
-        deathDate = CreateObject("roDatetime")
-        lifeString = tr("Born") + ": " + birthDate.AsDateString("short-month-no-weekday")
 
-        if itemData.EndDate <> invalid and itemData.EndDate <> ""
+        birthString = tr("Born") + ": " + birthDate.AsDateString("long-date-no-weekday")
+
+        if isValidAndNotEmpty(itemData.EndDate)
+            deathDate = CreateObject("roDateTime")
             deathDate.FromISO8601String(itemData.EndDate)
-            lifeString = lifeString + " * " + tr("Died") + ": " + deathDate.AsDateString("short-month-no-weekday")
-
+            birthString += " — " + tr("Died") + ": " + deathDate.AsDateString("long-date-no-weekday")
         end if
-        ' Calculate age
-        age = deathDate.getYear() - birthDate.getYear()
-        if deathDate.getMonth() < birthDate.getMonth()
-            age--
-        else if deathDate.getMonth() = birthDate.getMonth()
-            if deathDate.getDayOfMonth() < birthDate.getDayOfMonth()
-                age--
-            end if
+
+        m.birthInfo.text = birthString
+    end if
+
+    if isValid(m.dscr)
+        if isValidAndNotEmpty(itemData.Overview)
+            m.dscr.text = itemData.Overview
+        else
+            m.dscr.text = tr("Biographical information for this person is not currently available.")
         end if
-        lifeString = lifeString + " * " + tr("Age") + ": " + stri(age)
-        lifeStringLabel.Text = lifeString
     end if
-    if itemData.Overview <> invalid and itemData.Overview <> ""
-        m.dscr.text = itemData.Overview
+
+    if isValid(m.personImage)
+        if isValidAndNotEmpty(item.posterURL)
+            m.personImage.uri = item.posterURL
+        else
+            m.personImage.uri = "pkg:/images/baseline_person_white_48dp.png"
+        end if
+    end if
+
+    if isValidAndNotEmpty(item.backdropUrl)
+        setBackdrop(item.backdropUrl)
+    end if
+
+    if isValid(m.extrasGrid)
+        loadPersonVideos()
+    end if
+
+    updateFavoriteFocusVisual()
+    updateFilmographyLabel(0)
+
+    m.playedIndicator.data = {
+        favorite: chainLookupReturn(itemData, "UserData.IsFavorite", false)
+    }
+end sub
+
+sub OnScreenShown(_isReturning = false as boolean)
+    if isValid(m.top.lastFocus)
+        m.top.lastFocus.setFocus(true)
+        setLastFocus(m.top.lastFocus)
     else
-        m.dscr.text = tr("Biographical information for this person is not currently available.")
-        m.dscr.horizAlign = "center"
-        m.dscr.vertAlign = "center"
+        if isValid(m.favoriteButtonGroup)
+            timer = CreateObject("roSGNode", "Timer")
+            timer.duration = 0.05
+            timer.repeat = false
+            timer.observeField("fire", "focusFavoriteButton")
+            timer.control = "start"
+            m.focusTimer = timer
+        end if
     end if
-    if item.posterURL <> invalid and item.posterURL <> ""
-        m.top.findnode("personImage").uri = item.posterURL
+end sub
+
+sub focusFavoriteButton()
+    if isValid(m.favoriteButtonGroup)
+        m.favoriteButtonGroup.setFocus(true)
+        setLastFocus(m.favoriteButtonGroup)
+        m.top.lastFocus = m.favoriteButtonGroup
+    end if
+    updateFavoriteFocusVisual()
+end sub
+
+' ===== Backdrop Management =====
+
+sub setBackdrop(url as string)
+    if not isValid(m.backdrop) or not isValidAndNotEmpty(url) then return
+
+    ' Don't reload the same image
+    if m.backdrop.uri = url then return
+
+    ' Stop any running animations
+    if isValid(m.backdropFadeIn) then m.backdropFadeIn.control = "stop"
+    if isValid(m.backdropPrevFadeOut) then m.backdropPrevFadeOut.control = "stop"
+
+    ' Copy current backdrop to prev layer
+    if isValid(m.backdropPrev) and m.backdrop.uri <> ""
+        m.backdropPrev.uri = m.backdrop.uri
+        m.backdropPrev.opacity = m.backdrop.opacity
+    end if
+
+    ' Set new backdrop, hidden until loaded
+    m.backdrop.opacity = 0.0
+    m.backdrop.uri = url
+    m.backdropCrossfading = true
+end sub
+
+sub onBackdropLoadStatusChange()
+    if not isValid(m.backdrop) then return
+    if m.backdrop.loadStatus <> "ready" then return
+    if not isValidAndNotEmpty(m.backdrop.uri) then return
+
+    if m.backdropCrossfading
+        targetOpacity = 0.4
+
+        if isValid(m.backdropFadeInInterp)
+            m.backdropFadeInInterp.keyValue = [0.0, targetOpacity]
+        end if
+        if isValid(m.backdropPrevFadeOutInterp)
+            m.backdropPrevFadeOutInterp.keyValue = [targetOpacity, 0.0]
+        end if
+
+        if isValid(m.backdropFadeIn)
+            m.backdropFadeIn.control = "start"
+        end if
+        if isValid(m.backdropPrevFadeOut)
+            m.backdropPrevFadeOut.control = "start"
+        end if
+
+        m.backdropCrossfading = false
     else
-        m.top.findnode("personImage").uri = "pkg:/images/baseline_person_white_48dp.png"
-    end if
-    m.vidsList.callFunc("loadPersonVideos", m.top.Id)
-
-    setFavoriteColor()
-    if not m.favBtn.hasFocus() then dscrShowFocus()
-end sub
-
-sub dscrShowFocus()
-    m.dscr.setFocus(true)
-    group = m.global.sceneManager.callFunc("getActiveScene")
-    group.lastFocus = m.dscr
-    m.dscr.opacity = 1.0
-    m.top.findNode("dscrBorder").color = "#d0d0d0ff"
-end sub
-
-sub onButtonGroupEscaped()
-    key = m.btnGrp.escape
-    if key = "down"
-        m.dscr.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.dscr
-        m.dscr.opacity = 1.0
-        m.top.findNode("dscrBorder").color = "#d0d0d0ff"
+        if isValid(m.backdropPrev)
+            m.backdropPrev.uri = m.backdrop.uri
+        end if
     end if
 end sub
 
-sub onFavoriteButtonSelected()
-    m.top.buttonSelected = "favorite-button"
+sub onFilmographyItemFocused()
+    if not isValid(m.extrasGrid) then return
+
+    focusedItem = m.extrasGrid.focusedItem
+    if not isValid(focusedItem) then return
+
+    ' Update backdrop from focused filmography item
+    if isValidAndNotEmpty(focusedItem.backdropUrl)
+        setBackdrop(focusedItem.backdropUrl)
+    end if
 end sub
+
+' ===== Key Handling =====
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
 
-    if key = "OK"
-        if m.dscr.hasFocus()
-            createFullDscrDlg()
+    if key = KeyCode.OK
+        if m.favoriteButtonGroup.hasFocus()
+            toggleFavorite()
             return true
         end if
         return false
     end if
 
-    if key = "back"
+    if key = KeyCode.BACK
         m.global.sceneManager.callfunc("popScene")
         return true
     end if
 
-    if key = "down"
-        if m.dscr.hasFocus()
-            m.dscr.opacity = 0.6
-            m.top.findNode("dscrBorder").color = "#data202020ff"
-            m.vidsList.setFocus(true)
-            group = m.global.sceneManager.callFunc("getActiveScene")
-            group.lastFocus = m.vidsList
-            m.top.findNode("VertSlider").reverse = false
-            m.top.findNode("pplAnime").control = "start"
-            return true
+    if key = KeyCode.DOWN
+        if m.favoriteButtonGroup.hasFocus()
+            if isValid(m.extrasGrid) and m.extrasGrid.hasItems
+                m.extrasGrid.setFocus(true)
+                setLastFocus(m.extrasGrid)
+                m.top.lastFocus = m.extrasGrid
+                return true
+            end if
         end if
-    else if key = "up"
-        if m.dscr.hasFocus()
-            m.favBtn.setFocus(true)
-            group = m.global.sceneManager.callFunc("getActiveScene")
-            group.lastFocus = m.favBtn
-            m.dscr.opacity = 0.6
-            m.top.findNode("dscrBorder").color = "#data202020ff"
-            return true
-        else if m.vidsList.isInFocusChain() and m.vidsList.itemFocused = 0
-            m.top.findNode("VertSlider").reverse = true
-            m.top.findNode("pplAnime").control = "start"
-            dscrShowFocus()
-            return true
+    else if key = KeyCode.LEFT
+        if m.favoriteButtonGroup.hasFocus()
+            return FocusSidebar(m.top)
+        end if
+    else if key = KeyCode.UP
+        if m.favoriteButtonGroup.hasFocus()
+            return FocusOverhang(m.top)
+        else if isValid(m.extrasGrid) and m.extrasGrid.isInFocusChain()
+            focusedRow = m.extrasGrid.rowItemFocused
+            if isValid(focusedRow) and focusedRow.count() > 0 and focusedRow[0] = 0
+                m.favoriteButtonGroup.setFocus(true)
+                setLastFocus(m.favoriteButtonGroup)
+                m.top.lastFocus = m.favoriteButtonGroup
+                return true
+            end if
         end if
     end if
+
     return false
 end function
 
-sub setFavoriteColor()
-    fave = m.top.itemContent.favorite
-    fave_button = m.top.findNode("favorite-button")
-    if fave <> invalid and fave
-        fave_button.textColor = "#00ff00ff"
-        fave_button.focusedTextColor = "#269926ff"
-        fave_button.text = tr("Favorite")
+' ===== Data Loading =====
+
+sub loadPersonVideos()
+    loadTask = CreateObject("roSGNode", "LoadExtrasTask")
+    loadTask.itemId = m.top.Id
+    loadTask.isPersonMode = true
+
+    ' Pass multi-server metadata if present
+    item = m.top.itemContent
+    if isValid(item) and isChainValid(item, "json")
+        itemData = item.json
+
+        if isValidAndNotEmpty(itemData._serverUrl)
+            loadTask.serverUrl = itemData._serverUrl
+        end if
+        if isValidAndNotEmpty(itemData._userId)
+            loadTask.serverUserId = itemData._userId
+        end if
+        if isValidAndNotEmpty(itemData._authToken)
+            loadTask.serverAuthToken = itemData._authToken
+        end if
+    end if
+
+    loadTask.observeField("content", "onPersonVideosLoaded")
+    loadTask.control = "RUN"
+end sub
+
+sub onPersonVideosLoaded(event as object)
+    content = event.getData()
+    if isValid(content) and isValid(m.extrasGrid)
+        m.filmographyItemCount = content.getChildCount()
+        updateFilmographyLabel(m.filmographyItemCount)
+        ' Grab the first backdrop URL before updateContent reparents the nodes
+        initialBackdropUrl = ""
+        if not isValidAndNotEmpty(m.backdrop.uri)
+            for i = 0 to content.getChildCount() - 1
+                item = content.getChild(i)
+                if isValid(item) and isValidAndNotEmpty(item.backdropUrl)
+                    initialBackdropUrl = item.backdropUrl
+                    exit for
+                end if
+            end for
+        end if
+
+        m.extrasGrid.callFunc("updateContent", content)
+
+        ' Set initial backdrop
+        if isValidAndNotEmpty(initialBackdropUrl)
+            setBackdrop(initialBackdropUrl)
+        end if
+    end if
+end sub
+
+sub updateFilmographyLabel(count as integer)
+    if isValid(m.filmographyLabel)
+        if count > 0
+            m.filmographyLabel.text = tr("Filmography") + ` (${count})`
+        else
+            m.filmographyLabel.text = tr("Filmography")
+        end if
+    end if
+end sub
+
+' ===== Favorite =====
+
+sub toggleFavorite()
+    if not isValid(m.top.itemContent) then return
+    itemData = m.top.itemContent.json
+    if not isValid(itemData) or not isValid(itemData.id) then return
+
+    newStatus = not chainLookupReturn(itemData, "UserData.IsFavorite", false)
+
+    m.favoriteTask.itemId = itemData.id
+    m.favoriteTask.favTask = newStatus ? "favorite" : "unfavorite"
+    m.favoriteTask.control = "RUN"
+
+    if not isChainValid(itemData, "UserData")
+        itemData.UserData = { "IsFavorite": newStatus }
     else
-        fave_button.textColor = "0xddddddff"
-        fave_button.focusedTextColor = "#262626ff"
-        fave_button.text = tr("Set Favorite")
+        itemData.UserData.IsFavorite = newStatus
     end if
-end sub
 
-sub createFullDscrDlg()
-    if isAllValid([m.top.itemContent.json.Name, m.dscr.text])
-        m.global.sceneManager.callFunc("standardDialog", m.top.itemContent.json.Name, { data: ["<p>" + m.dscr.text + "</p>"] })
-    end if
-end sub
+    updateFavoriteFocusVisual()
 
-function shortDate(isoDate) as string
-    myDate = CreateObject("roDateTime")
-    myDate.FromISO8601String(isoDate)
-    return myDate.AsDateString("short-month-no-weekday")
-end function
+    m.playedIndicator.data = {
+        favorite: newStatus
+    }
+end sub

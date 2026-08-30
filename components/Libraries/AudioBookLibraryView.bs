@@ -7,10 +7,8 @@ import "pkg:/source/utils/misc.bs"
 
 sub init()
     m.top.imageDisplayMode = "scaleToZoom"
-    m.top.showItemTitles = m.global.session.user.settings["itemgrid.gridTitles"]
+    m.top.showItemTitles = "showalways"
 
-    overhang = m.top.getScene().findNode("overhang")
-    overhang.isVisible = false
 
     m.options = m.top.findNode("options")
 
@@ -27,7 +25,7 @@ sub init()
     m.loadedRows = 0
     m.loadedItems = 0
 
-    m.data = CreateObject("roSGNode", "ContentNode")
+    m.data = createSGNode("ContentNode")
 
     m.itemGrid.content = m.data
     m.itemGrid.setFocus(true)
@@ -55,19 +53,29 @@ sub init()
     m.loadItemsTask.observeField("content", "ItemDataLoaded")
     m.loadItemsTask.totalRecordCount = 0
 
-    m.top.gridTitles = m.global.session.user.settings["itemgrid.gridTitles"]
+    m.top.gridTitles = "showalways"
 end sub
 
 'Load initial set of Data
 sub loadInitialItems()
+    if not isValid(m.top.parentItem) then return
+
     m.loadItemsTask.control = "stop"
     startLoadingSpinner()
 
-    if m.top.parentItem.json.Type = "CollectionFolder" 'or m.top.parentItem.json.Type = "Folder"
+    ' Check both direct Type field and json.Type for compatibility
+    parentItemType = invalid
+    if isValid(m.top.parentItem.Type)
+        parentItemType = m.top.parentItem.Type
+    else if isValid(m.top.parentItem.json) and isValid(m.top.parentItem.json.Type)
+        parentItemType = m.top.parentItem.json.Type
+    end if
+
+    if isStringEqual(parentItemType, "CollectionFolder")
         m.top.HomeLibraryItem = m.top.parentItem.Id
     end if
 
-    if m.top.parentItem.backdropUrl <> invalid
+    if isValid(m.top.parentItem.backdropUrl)
         SetBackground(m.top.parentItem.backdropUrl)
     end if
 
@@ -115,11 +123,9 @@ sub setColumnSizes()
     numberOfColumns = chainLookupReturn(m.global.session, "user.settings.numberOfColumnsSquare", "6")
     imageWidthData = val(chainLookupReturn(m.global.session, "user.settings.numberOfColumnsSquareData", "270"))
 
+    ' Always use poster-only dimensions for itemSize to ensure focus rectangle
+    ' wraps only the poster, not the title text. Title can extend beyond itemSize.
     defaultSize = [imageWidthData, imageWidthData]
-
-    if not isStringEqual(m.top.showItemTitles, "hidealways")
-        defaultSize = [imageWidthData, imageWidthData + 65]
-    end if
 
     m.itemGrid.itemSize = defaultSize
     m.itemGrid.rowHeights = [defaultSize[1]]
@@ -140,13 +146,6 @@ sub setDefaultOptions(options)
 end sub
 
 ' Return parent collection type
-function getCollectionType() as string
-    if m.top.parentItem.collectionType = invalid
-        return m.top.parentItem.Type
-    else
-        return m.top.parentItem.CollectionType
-    end if
-end function
 
 ' Data to display when options button selected
 sub SetUpOptions()
@@ -191,8 +190,8 @@ end sub
 sub ItemDataLoaded(msg)
     itemData = msg.GetData()
 
-    if not isValidAndNotEmpty(itemData)
-        stopLoadingSpinner()
+    if not isValid(itemData)
+        stopLoadingOperation()
         return
     end if
 
@@ -214,19 +213,12 @@ sub ItemDataLoaded(msg)
         m.emptyText.visible = true
     end if
 
-    stopLoadingSpinner()
+    stopLoadingOperation()
 end sub
 
 'Set Background Image
 sub SetBackground(backgroundUri as string)
-
-    'If a new image is being loaded, or transitioned to, store URL to load next
-    if m.swapAnimation.state <> "stopped" or m.newBackdrop.loadStatus = "loading"
-        m.queuedBGUri = backgroundUri
-        return
-    end if
-
-    m.newBackdrop.uri = backgroundUri
+    setBackgroundWithQueue(backgroundUri, m.newBackdrop, m.swapAnimation)
 end sub
 
 'Handle new item being focused
@@ -243,11 +235,12 @@ sub onItemFocused()
         return
     end if
 
-    m.selectedFavoriteItem = m.itemGrid.content.getChild(m.itemGrid.itemFocused)
+    focusedItem = getItemGridFocusedItem(m.itemGrid)
+    m.selectedFavoriteItem = focusedItem
 
     ' Set Background to item backdrop
-    if isValid(m.itemGrid.content.getChild(m.itemGrid.itemFocused))
-        SetBackground(m.itemGrid.content.getChild(m.itemGrid.itemFocused).backdropUrl)
+    if isValid(focusedItem)
+        SetBackground(focusedItem.backdropUrl)
     end if
 
     ' Load more data if focus is within last 5 rows, and there are more items to load
@@ -340,7 +333,7 @@ sub optionsClosed()
     if reload
         m.loadedRows = 0
         m.loadedItems = 0
-        m.data = CreateObject("roSGNode", "ContentNode")
+        m.data = createSGNode("ContentNode")
         m.itemGrid.content = m.data
         loadInitialItems()
     end if
@@ -353,8 +346,8 @@ end sub
 
 'Returns Focused Item
 function getItemFocused()
-    if m.itemGrid.isinFocusChain() and isValid(m.itemGrid.itemFocused)
-        return m.itemGrid.content.getChild(m.itemGrid.itemFocused)
+    if m.itemGrid.isinFocusChain()
+        return getItemGridFocusedItem(m.itemGrid)
     end if
     return invalid
 end function
@@ -414,23 +407,17 @@ function onKeyEvent(key as string, press as boolean) as boolean
 end function
 
 sub updateTitle()
-    m.top.overhangTitle = m.top.parentItem.title
 
     if m.filter = "Favorites"
-        m.top.overhangTitle = m.top.parentItem.title + " " + tr("(Favorites)")
     end if
 
     if m.view = "music-artist"
-        m.top.overhangTitle = "%s (%s)".Format(m.top.parentItem.title, tr("Artists"))
     else if m.view = "music-album"
-        m.top.overhangTitle = "%s (%s)".Format(m.top.parentItem.title, tr("Albums"))
     end if
 
     if m.options.view = "Networks" or m.view = "Networks"
-        m.top.overhangTitle = "%s (%s)".Format(m.top.parentItem.title, tr("Networks"))
     end if
 
     if m.options.view = "Studios" or m.view = "Studios"
-        m.top.overhangTitle = "%s (%s)".Format(m.top.parentItem.title, tr("Studios"))
     end if
 end sub

@@ -1,0 +1,21 @@
+import "pkg:/source/api/MoonfinPlugin.bs"
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.top.functionName = "fetchStudioLogos"
+end sub
+
+sub fetchStudioLogos()
+    itemType = m.top.itemType
+    tmdbId = m.top.tmdbId
+
+    if not isValidAndNotEmpty(itemType) or not isValidAndNotEmpty(tmdbId)
+        m.top.companies = { success: false, data: [] }
+        return
+    end if
+
+    mediaType = moonfinPlugin.GetTmdbType(itemType)
+    companies = moonfinPlugin.GetProductionCompanies(tmdbId, mediaType)
+
+    m.top.companies = { success: true, data: companies }
+end sub

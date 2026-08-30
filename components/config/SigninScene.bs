@@ -1,60 +1,36 @@
-import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/enums/KeyCode.bs"
-import "pkg:/source/enums/PosterLoadStatus.bs"
 import "pkg:/source/enums/String.bs"
+import "pkg:/source/enums/TaskControl.bs"
+import "pkg:/source/utils/loginStyle.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/api/userauth.bs"
 
-const blankUserAvatarUri = "pkg:/images/baseline_person_white_48dp.png"
-
-sub onProfileImageUriChange()
-    if not isValid(m.top.profileImageUri)
-        m.top.profileImageUri = blankUserAvatarUri
-    end if
-
-    if isStringEqual(m.top.profileImageUri, string.EMPTY)
-        m.top.profileImageUri = blankUserAvatarUri
-    end if
-
-    m.profileImage.uri = m.top.profileImageUri
-end sub
-
-sub onPosterLoadStatusChanged()
-    if m.profileImage.loadStatus <> PosterLoadStatus.LOADING
-        m.profileImage.unobserveField("loadStatus")
-    end if
-
-    if isStringEqual(m.profileImage.loadStatus, PosterLoadStatus.FAILED)
-        m.top.profileImageUri = blankUserAvatarUri
-    end if
-end sub
+' How much air is left between the form and the keyboard, and how far up the
+' form is allowed to go before it would run off the top
+const SIGNIN_KEYBOARD_GAP = 24
+const SIGNIN_MIN_TOP = 20
 
 sub init()
     m.top.setFocus(true)
     m.top.optionsAvailable = false
 
-    m.profileImage = m.top.findNode("overlayCurrentUserProfileImage")
-    m.profileImage.observeField("loadStatus", "onPosterLoadStatusChanged")
+    m.connectingTo = m.top.findNode("connectingTo")
 
     m.submit = m.top.findNode("submit")
-    m.submit.background = ColorPalette.LIGHTBLUE
-    m.submit.color = ColorPalette.DARKGREY
-    m.submit.focusBackground = ColorPalette.HIGHLIGHT
-    m.submit.focusColor = ColorPalette.WHITE
-
     m.quickConnect = m.top.findNode("quickConnect")
-    m.quickConnect.background = ColorPalette.LIGHTBLUE
-    m.quickConnect.color = ColorPalette.DARKGREY
-    m.quickConnect.focusBackground = ColorPalette.HIGHLIGHT
-    m.quickConnect.focusColor = ColorPalette.WHITE
+    m.passwordTab = m.top.findNode("passwordTab")
+    m.passwordTab.observeField("buttonSelected", "hideQuickConnect")
+    m.back = m.top.findNode("back")
+    m.back.observeField("buttonSelected", "onBackPressed")
+
+    m.signInGroup = m.top.findNode("signInGroup")
+    m.signInHome = m.signInGroup.translation
 
     m.errorContainer = m.top.findNode("errorContainer")
     m.errorContainer.color = "#CC0000"
 
     m.config = m.top.findNode("configOptions")
-    m.config.focusBitmapBlendColor = ColorPalette.HIGHLIGHT
-    m.config.focusFootprintBlendColor = ColorPalette.TRANSPARENT
-    ' When the last form field is confirmed, jump focus straight to Submit
-    m.config.observeField("allFieldsSubmitted", "onAllFieldsSubmitted")
+    m.config.focusBitmapBlendColor = "0x00A4DCFF" ' Blue focus 
 
     username_field = CreateObject("roSGNode", "ConfigData")
     username_field.label = tr("Username")
@@ -69,23 +45,74 @@ sub init()
         password_field.value = registryPassword
     end if
 
-    saveCredentials = m.top.findNode("saveCredentials")
-    saveCredentials.focusedColor = ColorPalette.HIGHLIGHT
-    saveCredentials.font.size = 30
-    saveCredentials.focusedFont.size = 30
-
-    if not isStringEqual(get_setting("saveCredentials", "true"), "true")
-        saveCredentials.checkedState = "[false]"
-    end if
-
     items = [username_field, password_field]
     m.config.configItems = items
 
-    saveCredentials.checkedIconUri = "pkg:/images/icons/checkboxChecked.png"
-    saveCredentials.focusedCheckedIconUri = "pkg:/images/icons/checkboxChecked.png"
+    m.quickConnectGroup = m.top.findNode("quickConnectGroup")
+    m.quickConnectCode = m.top.findNode("quickConnectCode")
+    m.quickConnectStatus = m.top.findNode("quickConnectStatus")
+    m.quickConnectBack = m.top.findNode("quickConnectBack")
 
-    saveCredentials.uncheckedIconUri = "pkg:/images/icons/checkboxUnchecked.png"
-    saveCredentials.focusedUncheckedIconUri = "pkg:/images/icons/checkboxUnchecked.png"
+    m.quickConnectTimer = m.top.findNode("quickConnectTimer")
+    m.quickConnectTimer.observeField("fire", "quickConnectStatus")
+
+    m.quickConnectGroup.visible = false
+    m.quickConnectBack.observeField("buttonSelected", "onBackPressed")
+
+    for each button in [m.submit, m.back, m.quickConnect, m.passwordTab, m.quickConnectBack]
+        loginStyle.ApplyButton(button)
+    end for
+
+    initServerName()
+    checkQuickConnectEnabled()
+end sub
+
+sub initServerName()
+    serverName = m.global.session.server.name
+    if not isValidAndNotEmpty(serverName)
+        serverUrl = get_setting("server") ?? ""
+        if serverUrl = ""
+            m.connectingTo.text = tr("")
+            return
+        end if
+
+        serverName = serverUrl.replace("https://", "").replace("http://", "")
+        colonPos = serverName.instr(":")
+        slashPos = serverName.instr("/")
+        endPos = serverName.len()
+        if colonPos >= 0 and colonPos < endPos then endPos = colonPos
+        if slashPos >= 0 and slashPos < endPos then endPos = slashPos
+        serverName = serverName.left(endPos)
+    end if
+
+    m.connectingTo.text = tr("Connecting to ") + serverName
+end sub
+
+sub checkQuickConnectEnabled()
+    ' Runs in a task because roUrlTransfer can't be created on the render thread.
+    m.quickConnectInitTask = CreateObject("roSGNode", "QuickConnect")
+    m.quickConnectInitTask.mode = "initiate"
+    m.quickConnectInitTask.observeField("initResult", "onQuickConnectInitiated")
+    m.quickConnectInitTask.control = TaskControl.RUN
+end sub
+
+sub onQuickConnectInitiated(event as object)
+    data = event.getData()
+    clearQuickConnectInitTask()
+
+    if not isValid(data) then return
+    if data.enabled <> true then return
+
+    m.top.quickConnectJson = data.json
+    showQuickConnect()
+end sub
+
+sub clearQuickConnectInitTask()
+    if not isValid(m.quickConnectInitTask) then return
+
+    m.quickConnectInitTask.control = "stop"
+    m.quickConnectInitTask.unobserveField("initResult")
+    m.quickConnectInitTask = invalid
 end sub
 
 sub onAlertChange()
@@ -110,107 +137,214 @@ sub onUserChange()
     end if
 end sub
 
+sub showQuickConnect()
+    m.top.findNode("signInFormContainer").visible = false
+    m.quickConnectGroup.visible = true
+
+    m.config.setFocus(false)
+    m.config.jumpToItem = -1
+
+    loginStyle.SetTabSelected(m.quickConnect, true)
+    loginStyle.SetTabSelected(m.passwordTab, false)
+
+    json = m.top.quickConnectJson
+    if not isValid(json)
+        m.top.alert = tr("Quick Connect not available.")
+        hideQuickConnect()
+        return
+    end if
+
+    m.quickConnectCode.text = json.Code
+
+    m.quickConnectTimer.control = "start"
+
+    m.top.lastFocus = m.quickConnectBack
+    m.quickConnectBack.setFocus(true)
+end sub
+
+sub hideQuickConnect()
+    if isValid(m.quickConnectTimer)
+        m.quickConnectTimer.control = "stop"
+    end if
+    if isValid(m.checkTask)
+        m.checkTask.control = "stop"
+        m.checkTask.unobserveField("authenticated")
+        m.checkTask = invalid
+    end if
+    clearQuickConnectInitTask()
+
+    m.top.showQuickConnect = false
+    m.quickConnectGroup.visible = false
+    m.top.findNode("signInFormContainer").visible = true
+
+    loginStyle.SetTabSelected(m.passwordTab, true)
+    loginStyle.SetTabSelected(m.quickConnect, false)
+    
+    m.submit.setFocus(true)
+end sub
+
+sub onQuickConnectAuthenticated()
+    authenticated = m.checkTask.authenticated
+    if authenticated > 0
+        currentUser = AboutMe()
+        session.user.Login(currentUser, should_save_credentials())
+        session.user.LoadUserPreferences()
+        LoadUserAbilities()
+        
+        m.top.quickConnectAuthenticated = true
+    else if authenticated < 0
+        m.quickConnectTimer.control = "start"
+    end if
+end sub
+
+sub quickConnectStatus()
+    m.quickConnectTimer.control = "stop"
+    m.checkTask = CreateObject("roSGNode", "QuickConnect")
+    m.checkTask.secret = m.top.quickConnectJson.secret
+    m.checkTask.saveCredentials = should_save_credentials()
+    m.checkTask.observeField("authenticated", "onQuickConnectAuthenticated")
+    m.checkTask.control = "run"
+end sub
+
+sub onShowQuickConnect()
+    showQuickConnect()
+end sub
+
+sub onBackPressed()
+    m.top.backPressed = true
+end sub
+
 function onKeyEvent(key as string, press as boolean) as boolean
     ' Returns true if user navigates to a new focusable element
     if not press then return false
 
+    if m.quickConnectGroup.visible
+        if key = KeyCode.BACK
+            m.top.backPressed = true
+            return true
+        end if
+
+        if key = KeyCode.UP and m.quickConnectBack.hasFocus()
+            m.quickConnectBack.focus = false
+            m.quickConnect.setFocus(true)
+            m.quickConnect.focus = true
+            setLastFocus(m.quickConnect)
+            return true
+        end if
+
+        if key = KeyCode.DOWN and (m.quickConnect.hasFocus() or m.passwordTab.hasFocus())
+            if m.quickConnect.hasFocus() then m.quickConnect.focus = false
+            if m.passwordTab.hasFocus() then m.passwordTab.focus = false
+            m.quickConnectBack.setFocus(true)
+            m.quickConnectBack.focus = true
+            setLastFocus(m.quickConnectBack)
+            return true
+        end if
+    end if
+
     list = m.top.findNode("configOptions")
-    saveCredentials = m.top.findNode("saveCredentials")
 
     if key = KeyCode.BACK
         m.top.backPressed = true
-        return false
+        return true
     end if
 
     if key = KeyCode.DOWN and list.isInFocusChain()
         limit = list.content.getChildren(-1, 0).count() - 1
-
         if limit = list.itemFocused
-            saveCredentials.setFocus(true)
-            group = m.global.sceneManager.callFunc("getActiveScene")
-            group.lastFocus = saveCredentials
+            m.submit.setFocus(true)
+            m.submit.focus = true
+            setLastFocus(m.submit)
             return true
         end if
         return false
     end if
 
-    if key = KeyCode.DOWN and saveCredentials.isInFocusChain()
-        m.submit.setFocus(true)
-        m.submit.focus = true
-
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.submit
-        return true
-    end if
-
     if key = KeyCode.UP and m.submit.hasFocus()
         m.submit.focus = false
-
-        saveCredentials.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = saveCredentials
-        return true
-    end if
-
-    if key = KeyCode.UP and m.quickConnect.hasFocus()
-        m.quickConnect.focus = false
-
-        saveCredentials.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = saveCredentials
-        return true
-    end if
-
-    if key = KeyCode.UP and saveCredentials.isInFocusChain()
         list.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = list
+        setLastFocus(list)
         return true
     end if
 
-    if key = KeyCode.RIGHT and m.submit.hasFocus()
-        m.submit.focus = false
-
+    if key = KeyCode.UP and list.isInFocusChain()
         m.quickConnect.setFocus(true)
         m.quickConnect.focus = true
-
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.quickConnect
+        setLastFocus(m.quickConnect)
         return true
     end if
 
-    if key = KeyCode.LEFT and m.quickConnect.hasFocus()
+    if key = KeyCode.DOWN and m.quickConnect.hasFocus()
         m.quickConnect.focus = false
+        list.setFocus(true)
+        setLastFocus(list)
+        return true
+    end if
 
+    if key = KeyCode.DOWN and m.passwordTab.hasFocus()
+        m.passwordTab.focus = false
+        list.setFocus(true)
+        setLastFocus(list)
+        return true
+    end if
+
+    if key = KeyCode.RIGHT and m.quickConnect.hasFocus()
+        m.quickConnect.focus = false
+        m.passwordTab.setFocus(true)
+        m.passwordTab.focus = true
+        setLastFocus(m.passwordTab)
+        return true
+    end if
+
+    if key = KeyCode.LEFT and m.passwordTab.hasFocus()
+        m.passwordTab.focus = false
+        m.quickConnect.setFocus(true)
+        m.quickConnect.focus = true
+        setLastFocus(m.quickConnect)
+        return true
+    end if
+
+    if key = KeyCode.LEFT and m.submit.hasFocus()
+        m.submit.focus = false
+        m.back.setFocus(true)
+        m.back.focus = true
+        setLastFocus(m.back)
+        return true
+    end if
+
+    if key = KeyCode.RIGHT and m.back.hasFocus()
+        m.back.focus = false
         m.submit.setFocus(true)
         m.submit.focus = true
-
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.submit
+        setLastFocus(m.submit)
         return true
     end if
 
-    if key = KeyCode.OK
-        if m.quickConnect.hasFocus()
-            m.quickConnect.selected = not m.quickConnect.selected
-            return true
-        end if
-        if m.submit.hasFocus()
-            m.submit.selected = not m.submit.selected
-            return true
-        end if
-    end if
+    ' StandardButton's onKeyEvent handles OK press and sets buttonSelected
+    ' No need to handle OK here anymore
 
     return false
 end function
 
-' Fired when FormList confirms the last field (Password).
-' Jumps focus directly to Submit, skipping the "Save Credentials" checkbox
-' -- UX decision: the user can still toggle it manually before submitting.
-sub onAllFieldsSubmitted()
-    m.submit.setFocus(true)
-    m.submit.focus = true
+' The keyboard covers the foot of the screen, so the form lifts far enough to
+' keep the field being filled in sight and settles back once it closes
+sub OnScreenShown(_isReturning = false as boolean)
+    if isValid(m.keyboard) then return
 
-    group = m.global.sceneManager.callFunc("getActiveScene")
-    group.lastFocus = m.submit
+    m.keyboard = m.top.getScene().findNode("tvKeyboard")
+    if isValid(m.keyboard) then m.keyboard.observeField("visible", "onKeyboardVisibleChanged")
+end sub
+
+sub onKeyboardVisibleChanged()
+    if not m.keyboard.visible
+        m.signInGroup.translation = m.signInHome
+        return
+    end if
+
+    overlap = (m.signInHome[1] + m.signInGroup.height + SIGNIN_KEYBOARD_GAP) - m.keyboard.panelTop
+    if overlap <= 0 then return
+
+    lift = m.signInHome[1] - overlap
+    if lift < SIGNIN_MIN_TOP then lift = SIGNIN_MIN_TOP
+    m.signInGroup.translation = [m.signInHome[0], lift]
 end sub

@@ -1,3 +1,4 @@
+
 import "pkg:/source/api/baserequest.bs"
 import "pkg:/source/api/Image.bs"
 import "pkg:/source/enums/AnimationControl.bs"
@@ -15,14 +16,27 @@ import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/deviceCapabilities.bs"
 import "pkg:/source/utils/misc.bs"
 
+function getCollectionType() as string
+    if m.top.parentItem.collectionType = invalid
+        return LCase(m.top.parentItem.Type)
+    else
+        return LCase(m.top.parentItem.CollectionType)
+    end if
+end function
+
 sub setupNodes()
     m.toggleDropdownOptionsAnimation = m.top.findNode("toggleDropdownOptionsAnimation")
     m.dropdownOptionsMove = m.top.findNode("dropdownOptionsMove")
+    m.chipsRowMove = m.top.findNode("chipsRowMove")
+    m.chipsRow = m.top.findNode("chipsRow")
     m.itemGridMove = m.top.findNode("itemGridMove")
     m.genreListMove = m.top.findNode("genreListMove")
     m.dropdownOptionsFade = m.top.findNode("dropdownOptionsFade")
+    m.dropdownOptionsContainer = m.top.findNode("dropdownOptionsContainer")
     m.options = m.top.findNode("options")
     m.itemGrid = m.top.findNode("itemGrid")
+    m.backdrop = m.top.findNode("backdrop")
+    m.newBackdrop = m.top.findNode("backdropTransition")
     m.emptyText = m.top.findNode("emptyText")
     m.backdropImage = m.top.findNode("backdropImage")
     m.selectedArtistName = m.top.findNode("selectedArtistName")
@@ -30,79 +44,39 @@ sub setupNodes()
     m.selectedArtistAlbumCount = m.top.findNode("selectedArtistAlbumCount")
     m.selectedArtistGenres = m.top.findNode("selectedArtistGenres")
     m.artistLogo = m.top.findNode("artistLogo")
+    m.swapAnimation = m.top.findNode("backroundSwapAnimation")
     m.alpha = m.top.findNode("alpha")
     m.alphaMenu = m.alpha.findNode("alphaMenu")
-    m.overhang = m.top.getScene().findNode("overhang")
+    m.overhang = getActiveNav(m.top.getScene())
     m.genreList = m.top.findNode("genrelist")
     m.dropdownOptionGroup = m.top.findNode("dropdownOptionGroup")
     m.dropdownOptionGroup.observeFieldScoped("showOptions", "onShowOptionsChange")
     m.dropdownOptionGroup.observeFieldScoped("exit", "onExit")
     m.dropdownOptionGroup.observeFieldScoped("searchTerm", "onDropdownOptionGroupSearchTermChanged")
-end sub
 
-sub onShowOptionsChange()
-    m.options.visible = true
-    m.options.findNode("filterMenu").setFocus(true)
-    group = m.global.sceneManager.callFunc("getActiveScene")
-    group.lastFocus = m.options
-end sub
+    m.sortButton = m.top.findNode("sortButton")
+    m.sortButton.textColor = ColorPalette.WHITE
+    m.sortButton.focusTextColor = "#000000"
+    m.sortButton.background = ColorPalette.DARKGREY
+    m.sortButton.focusBackground = ColorPalette.WHITE
 
-sub onExit()
-    m.global.sceneManager.unobserveFieldScoped("returnData")
+    m.sortOrderButton = m.top.findNode("sortOrderButton")
+    m.sortOrderButton.textColor = ColorPalette.WHITE
+    m.sortOrderButton.focusTextColor = "#000000"
+    m.sortOrderButton.background = ColorPalette.DARKGREY
+    m.sortOrderButton.focusBackground = ColorPalette.WHITE
 
-    dropdownExitDirection = m.dropdownOptionGroup.exit
+    m.filterButton = m.top.findNode("filterButton")
+    m.filterButton.textColor = ColorPalette.WHITE
+    m.filterButton.focusTextColor = "#000000"
+    m.filterButton.background = ColorPalette.DARKGREY
+    m.filterButton.focusBackground = ColorPalette.WHITE
 
-    if dropdownExitDirection = ExitDirection.LEFT
-        alphaDisplayed = m.alpha.callFunc("getDisplay")
-
-        if alphaDisplayed
-            m.top.alphaActive = true
-            m.alphaMenu.setFocus(true)
-            group = m.global.sceneManager.callFunc("getActiveScene")
-            group.lastFocus = m.alphaMenu
-        else
-            m.librarySettings.setFocus(true)
-            m.librarySettings.highlighted = true
-            group = m.global.sceneManager.callFunc("getActiveScene")
-            group.lastFocus = m.librarySettings
-        end if
-
-        return
-    end if
-
-    if dropdownExitDirection = ExitDirection.DOWN
-        if m.loadedItems = 0 then return
-
-        m.itemGrid.setFocus(m.itemGrid.opacity = 1)
-        m.genreList.setFocus(m.genreList.opacity = 1)
-
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.itemGrid
-    end if
-end sub
-
-sub onReturnData()
-    m.global.sceneManager.unobserveFieldScoped("returnData")
-
-    selectedOptionData = m.global.sceneManager.returnData
-    if not isValidAndNotEmpty(selectedOptionData) then return
-
-    optionType = chainLookup(selectedOptionData, "id")
-
-    if isStringEqual(optionType, DropdownMenuID.SORTORDER)
-        onSortOrderChange(selectedOptionData)
-        return
-    end if
-
-    if isStringEqual(optionType, DropdownMenuID.SORTBY)
-        onSortChange(selectedOptionData)
-        return
-    end if
-
-    if isStringEqual(optionType, DropdownMenuID.VIEW)
-        onViewChange(selectedOptionData)
-        return
-    end if
+    m.viewButton = m.top.findNode("viewButton")
+    m.viewButton.textColor = ColorPalette.WHITE
+    m.viewButton.focusTextColor = "#000000"
+    m.viewButton.background = ColorPalette.DARKGREY
+    m.viewButton.focusBackground = ColorPalette.WHITE
 end sub
 
 sub init()
@@ -122,17 +96,23 @@ sub init()
     m.loadedRows = 0
     m.loadedItems = 0
 
-    m.data = CreateObject("roSGNode", "ContentNode")
+    m.data = createSGNode("ContentNode")
 
     m.itemGrid.content = m.data
 
-    m.genreData = CreateObject("roSGNode", "ContentNode")
+    m.genreData = createSGNode("ContentNode")
     m.genreList.observeField("itemSelected", "onGenreItemSelected")
     m.genreList.observeField("itemFocused", "onGenreItemFocused")
     m.genreList.content = m.genreData
 
     m.itemGrid.observeField("itemFocused", "onItemFocused")
     m.itemGrid.observeField("itemSelected", "onItemSelected")
+
+    'backdrop
+    m.newBackdrop.observeField("loadStatus", "newBGLoaded")
+
+    'Background Image Queued for loading
+    m.queuedBGUri = ""
 
     'Item sort - maybe load defaults from user prefs?
     m.sortField = "SortName"
@@ -149,7 +129,9 @@ sub init()
     m.loadItemsTask.totalRecordCount = 0
 end sub
 
-sub onSortChange(sortChoice)
+sub onSortChange()
+    m.global.sceneManager.unobserveFieldScoped("returnData")
+    sortChoice = m.global.sceneManager.returnData
     if not isChainValid(sortChoice, "name") then return
     if isStringEqual(sortChoice.LookupCI("name"), m.sortField) then return
 
@@ -167,7 +149,7 @@ sub onSortChange(sortChoice)
 
     m.loadedRows = 0
     m.loadedItems = 0
-    m.data = CreateObject("roSGNode", "ContentNode")
+    m.data = createSGNode("ContentNode")
     m.itemGrid.content = m.data
     loadInitialItems()
 end sub
@@ -188,8 +170,7 @@ sub onViewChange(viewChoice)
     ' Reset any filtering or search terms
     m.bypassSearchEvent = true
     m.top.searchTerm = string.EMPTY
-    m.top.alphaSelected = string.EMPTY
-    m.loadItemsTask.NameStartsWith = " "
+    m.loadItemsTask.nameStartsWith = " "
     m.loadItemsTask.searchTerm = string.EMPTY
     m.filter = "All"
     m.filterOptions = {}
@@ -202,11 +183,9 @@ sub onViewChange(viewChoice)
     set_user_setting("display." + m.settingID + ".filter", m.filter)
     set_user_setting("display." + m.settingID + ".filterOptions", FormatJson(m.filterOptions))
 
-    m.getFiltersTask.control = "RUN"
-
     m.loadedRows = 0
     m.loadedItems = 0
-    m.data = CreateObject("roSGNode", "ContentNode")
+    m.data = createSGNode("ContentNode")
     m.itemGrid.content = m.data
     loadInitialItems()
 end sub
@@ -227,7 +206,7 @@ sub onSortOrderChange(sortOrderChoice)
 
     m.loadedRows = 0
     m.loadedItems = 0
-    m.data = CreateObject("roSGNode", "ContentNode")
+    m.data = createSGNode("ContentNode")
     m.itemGrid.content = m.data
     loadInitialItems()
 end sub
@@ -240,15 +219,13 @@ sub OnScreenHidden()
     end if
 end sub
 
-sub OnScreenShown()
-    m.overhang.isVisible = false
+sub OnScreenShown(_isReturning = false as boolean)
 
     if isValid(m.top.lastFocus)
         m.top.lastFocus.setFocus(true)
     else
         m.top.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.top
+        setLastFocus(m.top)
     end if
 end sub
 
@@ -258,17 +235,21 @@ sub loadInitialItems()
     m.loadItemsTask.control = TaskControl.STOP
     startLoadingSpinner(false)
 
-    m.dropdownOptionGroup.parentItemID = m.top.parentItem.Id
-
-    if LCase(m.top.parentItem.json.Type) = "collectionfolder"
+    if isValid(m.top.parentItem) and isValid(m.top.parentItem.json) and LCase(m.top.parentItem.json.Type) = "collectionfolder"
         m.top.HomeLibraryItem = m.top.parentItem.Id
     end if
 
-    if m.dropdownOptionGroup.opacity < 1
+    if m.top.parentItem.backdropUrl <> invalid
+        SetBackground(m.top.parentItem.backdropUrl)
+    else
+        SetBackground("")
+    end if
+
+    if m.dropdownOptionsContainer.opacity < 1
         toggleDropdownOptions(true)
     end if
 
-    if isValid(m.top.parentItem.json.jumpToFilter)
+    if isChainValid(m.top.parentItem, "json.jumpToFilter")
         m.settingID = "jumpToFilter"
     else
         m.settingID = m.top.parentItem.Id
@@ -283,20 +264,20 @@ sub loadInitialItems()
     if not isValidAndNotEmpty(m.sortField) then m.sortField = "SortName"
     if not isValidAndNotEmpty(m.filter) then m.filter = "All"
     if not isValidAndNotEmpty(m.filterOptions) then m.filterOptions = "{}"
-    if not isValidAndNotEmpty(m.view) then m.view = "ArtistsPresentation"
+    if not isValidAndNotEmpty(m.view) then m.view = "AllMusic"
     if not isValid(m.sortAscending) then m.sortAscending = true
     if not isStringEqual(type(m.sortAscending), "roBoolean") then m.sortAscending = true
 
     m.dropdownOptionGroup@.setSortAscending(m.sortAscending)
 
     ' We're inside a genre
-    if isStringEqual(m.top.parentItem.json.type, "musicgenre")
+    if isValid(m.top.parentItem) and isValid(m.top.parentItem.json) and isStringEqual(m.top.parentItem.json.type, "musicgenre")
         if not isStringEqual(m.view, "albums") then m.view = "albums"
     end if
 
     m.filterOptions = ParseJson(m.filterOptions)
 
-    m.top.showItemTitles = m.global.session.user.settings["itemgrid.gridTitles"]
+    m.top.showItemTitles = "showalways"
 
     m.loadItemsTask.searchTerm = m.top.searchTerm
     m.emptyText.visible = false
@@ -308,64 +289,85 @@ sub loadInitialItems()
 
     ' Load Item Types
     if getCollectionType() = "music"
-        m.loadItemsTask.itemType = "MusicArtist"
+        ' Default to showing all music items
+        m.loadItemsTask.itemType = "MusicAlbum,MusicArtist,Audio"
         m.loadItemsTask.itemId = m.top.parentItem.Id
     end if
 
-    ' By default we load artist grid view
-    m.loadItemsTask.view = "Artists"
+    ' By default we load all music view
+    m.loadItemsTask.view = "AllMusic"
     m.loadItemsTask.genreIds = ""
-    m.itemGrid.translation = "[100, 210]"
+    m.itemGrid.translation = "[100, 290]"
     m.itemGrid.numRows = "4"
-    m.dropdownOptionGroup.translation = "[100, 60]"
-    if m.dropdownOptionGroup.opacity < 1
-        m.itemGrid.translation = "[100, 60]"
+    m.dropdownOptionsContainer.translation = "[260, 140]"
+    if m.dropdownOptionsContainer.opacity < 1
+        m.itemGrid.translation = "[100, 140]"
     else
-        m.itemGrid.translation = "[100, 210]"
+        m.itemGrid.translation = "[100, 290]"
     end if
 
-    m.dropdownOptionsMove.keyValue = "[[100, 60], [100, 0]]"
-    m.itemGridMove.keyValue = "[[100, 210], [100, 60]]"
+    m.dropdownOptionsMove.keyValue = "[[260, 140], [260, 80]]"
+    m.itemGridMove.keyValue = "[[100, 290], [100, 140]]"
     m.emptyText.translation = "[0, 540]"
 
     ' We're inside a genre
-    if isStringEqual(m.top.parentItem.json.type, "musicgenre")
+    if isValid(m.top.parentItem) and isValid(m.top.parentItem.json) and isStringEqual(m.top.parentItem.json.type, "musicgenre")
         m.loadItemsTask.itemType = "MusicAlbum"
         m.loadItemsTask.recursive = true
         m.loadItemsTask.genreIds = m.top.parentItem.id
         m.loadItemsTask.itemId = m.top.parentItem.parentFolder
     end if
 
-    if isStringEqual(m.view, "albums")
+    if isStringEqual(m.view, "AllMusic")
+        m.loadItemsTask.itemType = "MusicAlbum,MusicArtist,Audio"
+        m.loadItemsTask.recursive = true
+        m.top.imageDisplayMode = "scaleToFit"
+    else if isStringEqual(m.view, "albums")
         m.loadItemsTask.itemType = "MusicAlbum"
         m.top.imageDisplayMode = "scaleToFit"
+    else if isStringEqual(m.view, "artists")
+        m.loadItemsTask.itemType = "MusicArtist"
+    else if isStringEqual(m.view, "songs")
+        m.loadItemsTask.itemType = "Audio"
+        m.loadItemsTask.recursive = true
+    else if isStringEqual(m.view, "FavoriteAlbums")
+        m.loadItemsTask.itemType = "MusicAlbum"
+        m.filter = "Favorites"
+        m.top.imageDisplayMode = "scaleToFit"
+    else if isStringEqual(m.view, "FavoriteArtists")
+        m.loadItemsTask.itemType = "MusicArtist"
+        m.filter = "Favorites"
+    else if isStringEqual(m.view, "FavoriteSongs")
+        m.loadItemsTask.itemType = "Audio"
+        m.loadItemsTask.recursive = true
+        m.filter = "Favorites"
     else if isStringEqual(m.view, "albumartistsgrid")
         m.loadItemsTask.itemType = "AlbumArtists"
     else if isStringEqual(m.view, "albumartistspresentation")
         m.emptyText.translation = "[0, 750]"
         m.loadItemsTask.itemType = "AlbumArtists"
-        m.itemGrid.translation = "[100, 670]"
+        m.itemGrid.translation = "[100, 750]"
         m.itemGrid.numRows = "2"
-        m.dropdownOptionGroup.translation = "[100, 540]"
-        if m.dropdownOptionGroup.opacity < 1
-            m.itemGrid.translation = "[100, 520]"
+        m.dropdownOptionsContainer.translation = "[260, 620]"
+        if m.dropdownOptionsContainer.opacity < 1
+            m.itemGrid.translation = "[100, 600]"
         else
-            m.itemGrid.translation = "[100, 670]"
+            m.itemGrid.translation = "[100, 750]"
         end if
-        m.dropdownOptionsMove.keyValue = "[[100, 540], [100, 480]]"
-        m.itemGridMove.keyValue = "[[100, 670], [100, 520]]"
+        m.dropdownOptionsMove.keyValue = "[[260, 620], [260, 560]]"
+        m.itemGridMove.keyValue = "[[100, 750], [100, 600]]"
     else if isStringEqual(m.view, "ArtistsPresentation")
         m.emptyText.translation = "[0, 750]"
-        m.itemGrid.translation = "[100, 670]"
+        m.itemGrid.translation = "[100, 750]"
         m.itemGrid.numRows = "2"
-        m.dropdownOptionGroup.translation = "[100, 540]"
-        if m.dropdownOptionGroup.opacity < 1
-            m.itemGrid.translation = "[100, 520]"
+        m.dropdownOptionsContainer.translation = "[260, 620]"
+        if m.dropdownOptionsContainer.opacity < 1
+            m.itemGrid.translation = "[100, 600]"
         else
-            m.itemGrid.translation = "[100, 670]"
+            m.itemGrid.translation = "[100, 750]"
         end if
-        m.dropdownOptionsMove.keyValue = "[[100, 540], [100, 480]]"
-        m.itemGridMove.keyValue = "[[100, 670], [100, 520]]"
+        m.dropdownOptionsMove.keyValue = "[[260, 620], [260, 560]]"
+        m.itemGridMove.keyValue = "[[100, 750], [100, 600]]"
     else if isStringEqual(m.view, "genres")
         m.loadItemsTask.itemType = ""
         m.loadItemsTask.recursive = true
@@ -441,7 +443,7 @@ sub onOptionsVisibleChange()
     if reload
         m.loadedRows = 0
         m.loadedItems = 0
-        m.data = CreateObject("roSGNode", "ContentNode")
+        m.data = createSGNode("ContentNode")
         m.itemGrid.content = m.data
         loadInitialItems()
     end if
@@ -511,6 +513,23 @@ sub setSelectedOptions(options)
             o.Selected = true
             m.dropdownOptionGroup@.setText("filterButton", tr(o.LookupCI("title")))
             m.options.filter = o.Name
+
+            displayChip = false
+            if not isAllValid([o.options, m.filterOptions])
+                displayChip = true
+            else if o.options.Count() = 0 or m.filterOptions.Count() = 0
+                displayChip = true
+            end if
+
+            if isStringEqual(tr(o.LookupCI("title")), tr("All"))
+                displayChip = false
+            end if
+
+            if displayChip
+                m.chipsRow@.addChip("filter", string.EMPTY, tr(o.LookupCI("title")))
+            else
+                m.chipsRow@.removeChip("filter")
+            end if
         end if
 
         ' Select selected filter options
@@ -518,6 +537,7 @@ sub setSelectedOptions(options)
             if o.options.Count() > 0 and m.filterOptions.Count() > 0
                 if LCase(o.Name) = LCase(m.filterOptions.keys()[0])
                     selectedFilterOptions = m.filterOptions[m.filterOptions.keys()[0]].split(o.delimiter)
+                    m.chipsRow@.addChip("filter", tr(o.LookupCI("title")), selectedFilterOptions.join(", "))
                     checkedState = []
 
                     for each availableFilterOption in o.options
@@ -550,19 +570,23 @@ function setMusicOptions() as object
     }
 
     options.views = [
-        { "Title": tr("Artists (Presentation)"), "Name": "ArtistsPresentation", "Track": { "description": tr("Artists (Presentation)") } },
-        { "Title": tr("Artists (Grid)"), "Name": "ArtistsGrid", "Track": { "description": tr("Artists (Grid)") } },
-        { "Title": tr("Album Artists (Presentation)"), "Name": "AlbumArtistsPresentation", "Track": { "description": tr("Album Artists (Presentation)") } },
-        { "Title": tr("Album Artists (Grid)"), "Name": "AlbumArtistsGrid", "Track": { "description": tr("Album Artists (Grid)") } },
+        { "Title": tr("All Music"), "Name": "AllMusic", "Track": { "description": tr("All Music") } },
         { "Title": tr("Albums"), "Name": "Albums", "Track": { "description": tr("Albums") } },
+        { "Title": tr("Artists"), "Name": "Artists", "Track": { "description": tr("Artists") } },
+        { "Title": tr("Songs"), "Name": "Songs", "Track": { "description": tr("Songs") } },
+        { "Title": tr("Favorite Albums"), "Name": "FavoriteAlbums", "Track": { "description": tr("Favorite Albums") } },
+        { "Title": tr("Favorite Artists"), "Name": "FavoriteArtists", "Track": { "description": tr("Favorite Artists") } },
+        { "Title": tr("Favorite Songs"), "Name": "FavoriteSongs", "Track": { "description": tr("Favorite Songs") } },
         { "Title": tr("Genres"), "Name": "Genres", "Track": { "description": tr("Genres") } }
     ]
 
     options.sort = [
-        { "Title": tr("TITLE"), "Name": "SortName", "Track": { "description": tr("TITLE") } },
-        { "Title": tr("DATE_ADDED"), "Name": "DateCreated,SortName", "Track": { "description": tr("DATE_ADDED") } },
-        { "Title": tr("DATE_PLAYED"), "Name": "DatePlayed,SortName", "Track": { "description": tr("DATE_PLAYED") } },
-        { "Title": tr("RELEASE_DATE"), "Name": "PremiereDate,SortName", "Track": { "description": tr("RELEASE_DATE") } },
+        { "Title": tr("Name (A-Z)"), "Name": "SortName", "Track": { "description": tr("Name (A-Z)") } },
+        { "Title": tr("Album (A-Z)"), "Name": "Album,SortName", "Track": { "description": tr("Album (A-Z)") } },
+        { "Title": tr("Artist (A-Z)"), "Name": "AlbumArtist,SortName", "Track": { "description": tr("Artist (A-Z)") } },
+        { "Title": tr("Date Added (Newest)"), "Name": "DateCreated,SortName", "Track": { "description": tr("Date Added (Newest)") } },
+        { "Title": tr("Release Date (Newest)"), "Name": "ProductionYear,PremiereDate,SortName", "Track": { "description": tr("Release Date (Newest)") } },
+        { "Title": tr("Rating (Highest)"), "Name": "CommunityRating,SortName", "Track": { "description": tr("Rating (Highest)") } },
         { "Title": tr("Random"), "Name": "Random", "Track": { "description": tr("Random") } }
     ]
 
@@ -571,15 +595,15 @@ function setMusicOptions() as object
         { "Title": tr("Favorites"), "Name": "Favorites", "Track": { "description": tr("Favorites") } }
     ]
 
-    if inArray(["musicartist", "albumartists"], LCase(m.loadItemsTask.itemType))
+    if isStringEqual(m.view, "Artists") or isStringEqual(m.view, "FavoriteArtists")
         options.sort = [
-            { "Title": tr("TITLE"), "Name": "SortName", "Track": { "description": tr("TITLE") } },
-            { "Title": tr("DATE_ADDED"), "Name": "DateCreated,SortName", "Track": { "description": tr("DATE_ADDED") } },
-            { "Title": tr("Random"), "Name": "Random", "Track": { "description": tr("Random") } },
+            { "Title": tr("Name (A-Z)"), "Name": "SortName", "Track": { "description": tr("Name (A-Z)") } },
+            { "Title": tr("Date Added (Newest)"), "Name": "DateCreated,SortName", "Track": { "description": tr("Date Added (Newest)") } },
+            { "Title": tr("Random"), "Name": "Random", "Track": { "description": tr("Random") } }
         ]
     end if
 
-    if isStringEqual(m.top.parentItem.json.type, "musicgenre")
+    if isValid(m.top.parentItem) and isValid(m.top.parentItem.json) and isStringEqual(m.top.parentItem.json.type, "musicgenre")
         options.views = [
             { "Title": tr("Albums"), "Name": "Albums", "Track": { "description": tr("Albums") } },
         ]
@@ -595,13 +619,26 @@ function setMusicOptions() as object
         ]
     end if
 
-    if isStringEqual(m.view, "albums")
+    if isStringEqual(m.view, "Albums") or isStringEqual(m.view, "FavoriteAlbums")
         options.sort = [
-            { "Title": tr("TITLE"), "Name": "SortName", "Track": { "description": tr("TITLE") } },
-            { "Title": tr("Album Artist"), "Name": "AlbumArtist,SortName", "Track": { "description": tr("Album Artist") } },
-            { "Title": tr("DATE_ADDED"), "Name": "DateCreated,SortName", "Track": { "description": tr("DATE_ADDED") } },
-            { "Title": tr("RELEASE_DATE"), "Name": "ProductionYear,SortName", "Track": { "description": tr("RELEASE_DATE") } },
-            { "Title": tr("Random"), "Name": "Random", "Track": { "description": tr("Random") } },
+            { "Title": tr("Album (A-Z)"), "Name": "SortName", "Track": { "description": tr("Album (A-Z)") } },
+            { "Title": tr("Artist (A-Z)"), "Name": "AlbumArtist,SortName", "Track": { "description": tr("Artist (A-Z)") } },
+            { "Title": tr("Date Added (Newest)"), "Name": "DateCreated,SortName", "Track": { "description": tr("Date Added (Newest)") } },
+            { "Title": tr("Release Date (Newest)"), "Name": "ProductionYear,PremiereDate,SortName", "Track": { "description": tr("Release Date (Newest)") } },
+            { "Title": tr("Rating (Highest)"), "Name": "CommunityRating,SortName", "Track": { "description": tr("Rating (Highest)") } },
+            { "Title": tr("Random"), "Name": "Random", "Track": { "description": tr("Random") } }
+        ]
+    end if
+
+    if isStringEqual(m.view, "Songs") or isStringEqual(m.view, "FavoriteSongs")
+        options.sort = [
+            { "Title": tr("Name (A-Z)"), "Name": "SortName", "Track": { "description": tr("Name (A-Z)") } },
+            { "Title": tr("Album (A-Z)"), "Name": "Album,SortName", "Track": { "description": tr("Album (A-Z)") } },
+            { "Title": tr("Artist (A-Z)"), "Name": "AlbumArtist,SortName", "Track": { "description": tr("Artist (A-Z)") } },
+            { "Title": tr("Date Added (Newest)"), "Name": "DateCreated,SortName", "Track": { "description": tr("Date Added (Newest)") } },
+            { "Title": tr("Release Date (Newest)"), "Name": "ProductionYear,PremiereDate,SortName", "Track": { "description": tr("Release Date (Newest)") } },
+            { "Title": tr("Rating (Highest)"), "Name": "CommunityRating,SortName", "Track": { "description": tr("Rating (Highest)") } },
+            { "Title": tr("Random"), "Name": "Random", "Track": { "description": tr("Random") } }
         ]
     end if
 
@@ -609,13 +646,6 @@ function setMusicOptions() as object
 end function
 
 ' Return parent collection type
-function getCollectionType() as string
-    if m.top.parentItem.collectionType = invalid
-        return LCase(m.top.parentItem.Type)
-    else
-        return LCase(m.top.parentItem.CollectionType)
-    end if
-end function
 
 '
 ' Logo Image Loaded Event Handler
@@ -637,8 +667,14 @@ end sub
 sub ItemDataLoaded(msg)
     itemData = msg.GetData()
 
-    if not isValidAndNotEmpty(itemData)
-        stopLoadingSpinner()
+    if itemData = invalid
+        ' Check if this is initial load or pagination
+        if m.loadedItems = 0
+            ' Initial load failed - show error message
+            m.emptyText.text = tr("Error loading items. Please check your connection and try again.")
+            m.emptyText.visible = true
+        end if
+        stopLoadingOperation()
         return
     end if
 
@@ -661,20 +697,16 @@ sub ItemDataLoaded(msg)
         if m.loadedItems = 0
             m.emptyText.text = tr("NO_ITEMS").Replace("%1", m.top.parentItem.Type)
             m.emptyText.visible = true
-            m.global.sceneManager.observeFieldScoped("returnData", "onReturnData")
-            m.dropdownOptionGroup@.setFocus("voiceBox", true)
-            m.dropdownOptionGroup@.setSearchBackground(SearchButtonState.ACTIVE)
         end if
 
-        stopLoadingSpinner()
+        stopLoadingOperation()
         return
     end if
 
     ' keep focus on alpha menu if it's active
     if m.top.alphaActive
         m.alphaMenu.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.alphaMenu
+        setLastFocus(m.alphaMenu)
     else
         m.itemGrid.opacity = "1"
         m.genreList.opacity = "0"
@@ -682,8 +714,7 @@ sub ItemDataLoaded(msg)
         m.alphaMenu.setFocus(false)
         m.itemGrid.setFocus(true)
         m.genreList.setFocus(false)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.itemGrid
+        setLastFocus(m.itemGrid)
     end if
 
     m.data.appendChildren(itemData)
@@ -702,12 +733,9 @@ sub ItemDataLoaded(msg)
 
         m.emptyText.text = tr("NO_ITEMS").Replace("%1", m.top.parentItem.Type)
         m.emptyText.visible = true
-        m.global.sceneManager.observeFieldScoped("returnData", "onReturnData")
-        m.dropdownOptionGroup@.setFocus("voiceBox", true)
-        m.dropdownOptionGroup@.setSearchBackground(SearchButtonState.ACTIVE)
     end if
 
-    stopLoadingSpinner()
+    stopLoadingOperation()
 end sub
 
 '
@@ -719,6 +747,11 @@ end sub
 '
 'Set Selected Artist Song Count
 sub SetSongCount(totalCount)
+    if not isValid(totalCount) or totalCount = "" or totalCount = 0
+        m.selectedArtistSongCount.text = ""
+        return
+    end if
+
     appendText = " " + tr("Songs")
     if totalCount = 1
         appendText = " " + tr("Song")
@@ -729,6 +762,11 @@ end sub
 '
 'Set Selected Artist Album Count
 sub SetAlbumCount(totalCount)
+    if not isValid(totalCount) or totalCount = "" or totalCount = 0
+        m.selectedArtistAlbumCount.text = ""
+        return
+    end if
+
     appendText = " " + tr("Albums")
     if totalCount = 1
         appendText = " " + tr("Album")
@@ -744,17 +782,27 @@ sub SetGenres(artistGenres)
 end sub
 
 '
+'Set Background Image
+sub SetBackground(backgroundUri as string)
+    if backgroundUri = ""
+        m.backdrop.opacity = 0
+    end if
+
+    setBackgroundWithQueue(backgroundUri, m.newBackdrop, m.swapAnimation)
+end sub
+
+'
 'Handle new item being focused
 sub onItemFocused()
     focusedRow = m.itemGrid.currFocusRow
 
     if m.itemGrid.isinFocusChain() or m.dropdownOptionGroup.isinFocusChain()
         if focusedRow = 0
-            if m.dropdownOptionGroup.opacity < 1
+            if m.dropdownOptionsContainer.opacity < 1
                 toggleDropdownOptions(true)
             end if
         else if focusedRow > 0
-            if m.dropdownOptionGroup.opacity > 0
+            if m.dropdownOptionsContainer.opacity > 0
                 toggleDropdownOptions(false)
             end if
         end if
@@ -773,16 +821,17 @@ sub onItemFocused()
     m.selectedArtistSongCount.visible = false
     m.selectedArtistAlbumCount.visible = false
 
-    ' Load more data if focus is within last 5 rows, and there are more items to load
-    if focusedRow >= m.loadedRows - 5 and m.loadeditems < m.loadItemsTask.totalRecordCount
-        loadMoreData()
+    ' Load more data if focus is within last 3 rows, and there are more items to load
+    if m.loadItemsTask.totalRecordCount > m.loadedItems
+        if focusedRow >= m.loadedRows - 3
+            loadMoreData()
+        end if
     end if
 
     m.selectedFavoriteItem = getItemFocused()
 
-    if isStringEqual(m.view, "albums") or isStringEqual(m.top.parentItem.json.type, "musicgenre")
-        return
-    end if
+    if isStringEqual(m.view, "albums") then return
+    if isChainValid(m.top.parentItem, "json.type") and isStringEqual(m.top.parentItem.json.type, "musicgenre") then return
 
     if isStringEqual(m.view, "artistsgrid")
         return
@@ -847,26 +896,12 @@ sub onItemFocused()
     end if
 end sub
 
-sub setFieldText(field, value)
-    node = m.top.findNode(field)
-    if node = invalid or value = invalid then return
-
-    ' Handle non strings... Which _shouldn't_ happen, but hey
-    if type(value) = "roInt" or type(value) = "Integer"
-        value = str(value)
-    else if type(value) = "roFloat" or type(value) = "Float"
-        value = str(value)
-    else if type(value) <> "roString" and type(value) <> "String"
-        value = ""
-    end if
-
-    node.text = value
-end sub
-
 '
 'Load next set of items
 sub loadMoreData()
-    if isStringEqual(m.loadItemsTask.state, TaskControl.RUN) then return
+    if m.Loading = true then return
+    ' Stop if we've already loaded all items
+    if m.loadedItems >= m.loadItemsTask.totalRecordCount then return
 
     startLoadingSpinner(false)
     m.loadItemsTask.startIndex = m.loadedItems
@@ -876,14 +911,27 @@ end sub
 '
 'Item Selected
 sub onItemSelected()
-    m.top.selectedItem = m.itemGrid.content.getChild(m.itemGrid.itemSelected)
+    selectedItem = m.itemGrid.content.getChild(m.itemGrid.itemSelected)
+    print "[MusicLibraryView] onItemSelected - Item type: "; selectedItem.type
+    if isValid(selectedItem.json)
+        print "[MusicLibraryView] onItemSelected - JSON type: "; selectedItem.json.type
+    end if
+    print "[MusicLibraryView] onItemSelected - Item ID: "; selectedItem.id
+
+    ' Audio items should use quickPlayNode for direct playback
+    if selectedItem.type = "audio"
+        print "[MusicLibraryView] Setting quickPlayNode for audio item"
+        m.top.quickPlayNode = selectedItem
+    else
+        m.top.selectedItem = selectedItem
+    end if
 end sub
 
 '
 'Returns Focused Item
 function getItemFocused()
-    if m.itemGrid.isinFocusChain() and isValid(m.itemGrid.itemFocused)
-        return m.itemGrid.content.getChild(m.itemGrid.itemFocused)
+    if m.itemGrid.isinFocusChain()
+        return getItemGridFocusedItem(m.itemGrid)
     else if m.genreList.isinFocusChain() and isValid(m.genreList.itemFocused)
         return m.genreList.content.getChild(m.genreList.itemFocused)
     end if
@@ -903,11 +951,11 @@ sub onGenreItemFocused()
 
     if m.genreList.isinFocusChain()
         if focusedRow = 0
-            if m.dropdownOptionGroup.opacity < 1
+            if m.dropdownOptionsContainer.opacity < 1
                 toggleDropdownOptions(true)
             end if
         else if focusedRow > 0
-            if m.dropdownOptionGroup.opacity > 0
+            if m.dropdownOptionsContainer.opacity > 0
                 toggleDropdownOptions(false)
             end if
         end if
@@ -923,6 +971,7 @@ sub toggleDropdownOptions(runInReverse = false as boolean)
     m.dropdownOptionsFade.reverse = runInReverse
     m.dropdownOptionsMove.reverse = runInReverse
     m.itemGridMove.reverse = runInReverse
+    m.chipsRowMove.reverse = runInReverse
     m.genreListMove.reverse = runInReverse
 
     if not isStringEqual(m.toggleDropdownOptionsAnimation.state, AnimationState.RUNNING)
@@ -971,45 +1020,20 @@ sub resetDropdownsToDefaultState()
     m.getFiltersTask.control = "RUN"
 end sub
 
-sub onDropdownOptionGroupSearchTermChanged()
-    m.top.searchTerm = m.dropdownOptionGroup.searchTerm
-end sub
-
 sub onSearchTermChanged()
-    searchTerm = m.top.searchTerm.trim()
-
-    if not isValid(searchTerm) then return
-
-    ' If user searched for a letter, selected it from the alpha menu
-    if searchTerm.len() = 1
-        alphaMenu = m.top.findNode("alphaMenu")
-        intConversion = searchTerm.ToInt() ' non numeric input returns as 0
-
-        if searchTerm = "0" or (isValid(intConversion) and intConversion <> 0)
-            alphaMenu.jumpToItem = 0
-        else
-            ' loop through each option until we find a match
-            for i = 1 to alphaMenu.numRows - 1
-                alphaMenuOption = alphaMenu.content.getChild(i)
-                if isStringEqual(alphaMenuOption.TITLE, searchTerm)
-                    alphaMenu.jumpToItem = i
-                    exit for
-                end if
-            end for
-        end if
-
-        m.dropdownOptionGroup@.setSearchHintText(string.EMPTY)
-        m.top.alphaSelected = searchTerm
-        m.dropdownOptionGroup@.setSearchBackground(SearchButtonState.INACTIVE)
-        return
-    end if
-
     if isStringEqual(m.loadItemsTask.searchTerm, m.top.searchTerm) then return
 
-    m.dropdownOptionGroup@.setSearchBackground(SearchButtonState.INACTIVE)
+
 
     processDropdownState(m.top.searchTerm)
     m.dropdownOptionGroup@.setSearchHintText(m.top.searchTerm)
+
+    if isValidAndNotEmpty(m.top.searchTerm)
+        m.chipsRow@.removeChip("filter")
+        m.chipsRow@.addChip("search", tr("Search Term"), m.top.searchTerm)
+    else
+        m.chipsRow@.removeChip("search")
+    end if
 
     if m.bypassSearchEvent
         m.bypassSearchEvent = false
@@ -1019,10 +1043,10 @@ sub onSearchTermChanged()
     m.loadedRows = 0
     m.loadedItems = 0
 
-    m.data = CreateObject("roSGNode", "ContentNode")
+    m.data = createSGNode("ContentNode")
     m.itemGrid.content = m.data
 
-    m.genreData = CreateObject("roSGNode", "ContentNode")
+    m.genreData = createSGNode("ContentNode")
     m.genreList.content = m.genreData
 
     loadInitialItems()
@@ -1030,37 +1054,80 @@ end sub
 
 sub alphaSelectedChanged()
     ' Prevent voicebox change double firing
-    if isStringEqual(m.top.searchTerm, string.EMPTY)
-        ' Allow user to toggle by clicking letter twice
-        if isStringEqual(m.loadItemsTask.nameStartsWith, m.top.alphaSelected)
-            m.top.alphaSelected = string.EMPTY
-        end if
+    ' Allow user to toggle by clicking letter twice
+    if isStringEqual(m.loadItemsTask.nameStartsWith, m.top.alphaSelected)
+        m.top.alphaSelected = string.EMPTY
     end if
 
-    m.loadItemsTask.control = TaskControl.STOP
     m.loadedRows = 0
     m.loadedItems = 0
 
-    m.data = CreateObject("roSGNode", "ContentNode")
+    m.data = createSGNode("ContentNode")
     m.itemGrid.content = m.data
 
-    m.genreData = CreateObject("roSGNode", "ContentNode")
+    m.genreData = createSGNode("ContentNode")
     m.genreList.content = m.genreData
 
     m.loadItemsTask.nameStartsWith = m.top.alphaSelected
-    m.dropdownOptionGroup@.setText("voiceBox", string.EMPTY)
     m.top.searchTerm = string.EMPTY
     loadInitialItems()
 end sub
 
+sub unfocusAllButtons()
+
+    m.sortButton.focus = false
+    m.sortOrderButton.focus = false
+    m.filterButton.focus = false
+    m.viewButton.focus = false
+end sub
+
+' Using the user's cursor position, determine which dropdown is above them
+function getOverhangingButton()
+    gridNode = m.itemGrid.isinFocusChain() ? m.itemGrid : m.genreList
+
+    buttonList = [m.sortButton, m.sortOrderButton, m.filterButton, m.viewButton]
+
+    if gridNode.numColumns = 4
+        return buttonList[gridNode.currFocusColumn]
+    end if
+
+    columnDisplacement = (gridNode.numColumns / buttonList.count())
+
+    calculatedButtonIndex = CInt(((gridNode.currFocusColumn + 1) / columnDisplacement) - 1)
+    if calculatedButtonIndex < 0 then calculatedButtonIndex = 0
+    if calculatedButtonIndex >= buttonList.count() then calculatedButtonIndex = buttonList.count() - 1
+    return buttonList[calculatedButtonIndex]
+end function
+
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
+
+    if isStringEqual(key, KeyCode.LEFT)
+        if m.itemGrid.isinFocusChain() or m.genreList.isinFocusChain()
+            m.top.alphaActive = true
+            m.alphaMenu.setFocus(true)
+            group = m.global.sceneManager.callFunc("getActiveScene")
+            group.lastFocus = m.alphaMenu
+            return true
+        end if
+    end if
+
+    if isStringEqual(key, KeyCode.RIGHT)
+        if m.alphaMenu.isinFocusChain()
+            m.top.alphaActive = false
+            m.alphaMenu.setFocus(false)
+            m.itemGrid.setFocus(m.itemGrid.opacity = 1)
+            m.genreList.setFocus(m.genreList.opacity = 1)
+            setLastFocus(m.itemGrid.opacity = 1 ? m.itemGrid : m.genreList)
+            return true
+        end if
+    end if
 
     if isStringEqual(key, KeyCode.UP)
         if m.itemGrid.isinFocusChain() or m.genreList.isinFocusChain()
 
             ' In case user quickly moves out of grid without focused row getting updated
-            if m.dropdownOptionGroup.opacity < 1
+            if m.dropdownOptionsContainer.opacity < 1
                 toggleDropdownOptions(true)
             end if
 
@@ -1070,7 +1137,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
             m.global.sceneManager.observeFieldScoped("returnData", "onReturnData")
 
             if overhangButton.isSubType("VoiceTextEditBox")
-                m.dropdownOptionGroup@.setSearchBackground(SearchButtonState.ACTIVE)
+
             else
                 m.dropdownOptionGroup@.setFocus(overhangButton.id, true)
             end if
@@ -1079,6 +1146,152 @@ function onKeyEvent(key as string, press as boolean) as boolean
             group.lastFocus = overhangButton
             return true
         end if
+    end if
+
+    if isStringEqual(key, KeyCode.OK)
+        if m.sortButton.isinFocusChain()
+            if m.sortButton.disabled then return false
+
+            sortData = {
+                data: m.options.options.sort
+            }
+
+            m.global.sceneManager.callFunc("radioDialog", tr("Sort By"), sortData)
+            m.global.sceneManager.observeFieldScoped("returnData", "onSortChange")
+            return true
+        end if
+
+        if m.sortOrderButton.isinFocusChain()
+            if m.sortOrderButton.disabled then return false
+
+            sortOrderData = {
+                data: [
+                    { Title: tr("Ascending"), Name: "ascending", Track: { description: tr("Ascending") } },
+                    { Title: tr("Descending"), Name: "descending", Track: { description: tr("Descending") } },
+                ]
+            }
+
+            if m.sortAscending
+                sortOrderData.data[0].selected = true
+            else
+                sortOrderData.data[1].selected = true
+            end if
+
+            m.global.sceneManager.callFunc("radioDialog", tr("Sort Order"), sortOrderData)
+            m.global.sceneManager.observeFieldScoped("returnData", "onSortOrderChange")
+            return true
+        end if
+
+        if m.filterButton.isinFocusChain()
+            if m.filterButton.disabled then return false
+
+            m.options.visible = true
+            m.options.findNode("filterMenu").setFocus(true)
+            group = m.global.sceneManager.callFunc("getActiveScene")
+            group.lastFocus = m.options
+            return true
+        end if
+
+        if m.viewButton.isinFocusChain()
+            viewData = {
+                data: m.options.options.views
+            }
+
+            m.global.sceneManager.callFunc("radioDialog", tr("TAB_VIEW"), viewData)
+            m.global.sceneManager.observeFieldScoped("returnData", "onViewChange")
+            return true
+        end if
+
+        if m.dropdownOptions.isinFocusChain()
+            if isStringEqual(key, KeyCode.LEFT)
+
+                m.sortButton.focus = false
+                m.sortOrderButton.focus = false
+                m.viewButton.focus = false
+                m.filterButton.focus = false
+                return true
+            end if
+
+            if m.sortButton.isinFocusChain()
+
+                m.sortButton.focus = false
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                return true
+            end if
+
+            if m.sortOrderButton.isinFocusChain()
+                m.sortButton.focus = true
+                m.sortButton.setFocus(true)
+                m.sortOrderButton.focus = false
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                group.lastFocus = m.sortButton
+                return true
+            end if
+
+            if m.filterButton.isinFocusChain()
+                m.filterButton.focus = false
+                m.sortOrderButton.focus = true
+                m.sortOrderButton.setFocus(true)
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                group.lastFocus = m.sortOrderButton
+                return true
+            end if
+
+            if m.viewButton.isinFocusChain()
+                m.viewButton.focus = false
+                m.filterButton.focus = true
+                m.filterButton.setFocus(true)
+                group = m.global.sceneManager.callFunc("getActiveScene")
+                group.lastFocus = m.filterButton
+                return true
+            end if
+        end if
+    end if
+
+    if isStringEqual(key, KeyCode.Right)
+        if m.sortButton.isinFocusChain()
+            m.sortButton.focus = false
+            m.sortOrderButton.focus = true
+            m.sortOrderButton.setFocus(true)
+            group = m.global.sceneManager.callFunc("getActiveScene")
+            group.lastFocus = m.sortOrderButton
+            return true
+        end if
+
+        if m.sortOrderButton.isinFocusChain()
+            m.sortOrderButton.focus = false
+            m.filterButton.focus = true
+            m.filterButton.setFocus(true)
+            group = m.global.sceneManager.callFunc("getActiveScene")
+            group.lastFocus = m.filterButton
+            return true
+        end if
+
+        if m.filterButton.isinFocusChain()
+            m.filterButton.focus = false
+            m.viewButton.focus = true
+            m.viewButton.setFocus(true)
+            group = m.global.sceneManager.callFunc("getActiveScene")
+            group.lastFocus = m.viewButton
+            return true
+        end if
+    end if
+
+    if isStringEqual(key, KeyCode.DOWN)
+        if m.loadedItems = 0 then return false
+
+
+        m.sortButton.focus = false
+        m.sortOrderButton.focus = false
+        m.viewButton.focus = false
+        m.filterButton.focus = false
+
+        m.itemGrid.setFocus(m.itemGrid.opacity = 1)
+        m.genreList.setFocus(m.genreList.opacity = 1)
+
+        group = m.global.sceneManager.callFunc("getActiveScene")
+        group.lastFocus = m.itemGrid
+        return true
     end if
 
     if isStringEqual(key, KeyCode.OPTIONS)
@@ -1095,7 +1308,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
         if isStringEqual(focusedItem.LookupCI("type"), ItemType.MUSICALBUM)
             dialogData = [tr("Play Album"), tr("Shuffle Play Album"), tr("Instant Mix Album"), tr("Add To Playlist")]
-            m.global.sceneManager.callFunc("optionDialog", "libraryitem", popupTitle ?? tr("Options"), [], dialogData, { id: focusedItem.LookupCI("id") })
+            m.global.sceneManager.callFunc("optionDialog", "libraryitem", popupTitle, [], dialogData, { id: focusedItem.LookupCI("id") })
         end if
 
         return true
@@ -1121,41 +1334,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
 
-    if key = KeyCode.LEFT
-        if m.itemGrid.isinFocusChain()
-            m.top.alphaActive = true
-            m.itemGrid.setFocus(false)
-            m.alphaMenu.setFocus(true)
-            group = m.global.sceneManager.callFunc("getActiveScene")
-            group.lastFocus = m.alphaMenu
-            return true
-        else if m.genreList.isinFocusChain()
-            m.top.alphaActive = true
-            m.genreList.setFocus(false)
-            m.alphaMenu.setFocus(true)
-            group = m.global.sceneManager.callFunc("getActiveScene")
-            group.lastFocus = m.alphaMenu
-            return true
-        end if
-    else if key = KeyCode.RIGHT and m.alpha.isinFocusChain()
-        m.top.alphaActive = false
-        m.alphaMenu.setFocus(false)
-
-        if m.loadedItems = 0
-            m.global.sceneManager.observeFieldScoped("returnData", "onReturnData")
-            m.dropdownOptionGroup@.setFocus("voiceBox", true)
-            m.dropdownOptionGroup@.setSearchBackground(SearchButtonState.ACTIVE)
-        else
-            m.itemGrid.setFocus(m.itemGrid.opacity = 1)
-            m.genreList.setFocus(m.genreList.opacity = 1)
-            group = m.global.sceneManager.callFunc("getActiveScene")
-            group.lastFocus = m.itemGrid.opacity = 1 ? m.itemGrid : m.genreList
-        end if
-
-        return true
-    else if key = KeyCode.PLAY
-        if toggleAudioMiniPlayerPlayback() then return true
-
+    if key = KeyCode.PLAY
         itemToPlay = getItemFocused()
         if itemToPlay <> invalid
             m.top.quickPlayNode = itemToPlay
@@ -1170,11 +1349,9 @@ sub reclaimResources()
     m.loadItemsTask.control = TaskControl.STOP
     m.loadItemsTask.content = []
 
-    m.data = CreateObject("roSGNode", "ContentNode")
+    m.data = createSGNode("ContentNode")
     m.itemGrid.content = m.data
 
-    m.genreData = CreateObject("roSGNode", "ContentNode")
+    m.genreData = createSGNode("ContentNode")
     m.genreList.content = m.genreData
-
-    m.global.sceneManager.unobserveFieldScoped("returnData")
 end sub

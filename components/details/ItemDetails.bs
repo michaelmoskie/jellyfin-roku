@@ -1,0 +1,2320 @@
+import "pkg:/source/api/Image.bs"
+import "pkg:/source/api/MoonfinPlugin.bs"
+import "pkg:/source/utils/config.bs"
+import "pkg:/source/utils/buttonLayout.bs"
+import "pkg:/source/utils/detailButtons.bs"
+import "pkg:/source/utils/fontApply.bs"
+import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/remoteSubtitles.bs"
+import "pkg:/source/utils/SeerrUtils.bs"
+import "pkg:/source/utils/mediaBadges.bs"
+import "pkg:/source/utils/seerrButtons.bs"
+import "pkg:/source/utils/seerrDetailHost.bs"
+import "pkg:/source/utils/multiserver.bs"
+
+import "pkg:/source/enums/AnimationControl.bs"
+import "pkg:/source/enums/AnimationState.bs"
+import "pkg:/source/enums/ColorPalette.bs"
+import "pkg:/source/enums/ImageType.bs"
+import "pkg:/source/enums/KeyCode.bs"
+import "pkg:/source/enums/MediaStreamType.bs"
+import "pkg:/source/enums/PersonType.bs"
+import "pkg:/source/enums/PlaybackMethod.bs"
+import "pkg:/source/enums/String.bs"
+import "pkg:/source/enums/SubtitleSelection.bs"
+import "pkg:/source/enums/TaskControl.bs"
+import "pkg:/source/enums/VideoType.bs"
+import "pkg:/source/enums/ViewLoadStatus.bs"
+
+' The classic screen is laid out in the pixels the other clients lay it out in.
+' Small text runs a little larger, since the Roku system font draws smaller than
+' a browser does at the same size
+const CLASSIC_TITLE_SIZE = 46
+const CLASSIC_SERIES_NAME_SIZE = 26
+const CLASSIC_PILL_TEXT_SIZE = 19
+const CLASSIC_INFO_TEXT_SIZE = 24
+const CLASSIC_BADGE_TEXT_SIZE = 19
+const CLASSIC_METADATA_LABEL_SIZE = 18
+const CLASSIC_METADATA_VALUE_SIZE = 23
+
+const CLASSIC_LOGO_HEIGHT = 116
+const CLASSIC_CODEC_GAP = 8
+const CLASSIC_CONTENT_LEFT = 96
+const CLASSIC_CONTENT_WIDTH = 1728
+const CLASSIC_SEPARATOR_MARGIN = 7
+const CLASSIC_PILL_PAD_X = 14
+const CLASSIC_PILL_PAD_Y = 4
+const CLASSIC_PILL_GAP = 12
+const CLASSIC_INFO_ROW_HEIGHT = 34
+const CLASSIC_CONTAINER_TOP = 130
+' Each badge is an outline rather than a filled chip
+const CLASSIC_BADGE_PAD_H = 12
+const CLASSIC_BADGE_PAD_V = 4
+const CLASSIC_BADGE_BORDER = "0xFFFFFF4D"
+const CLASSIC_BADGE_INK = "0xFFFFFFCC"
+' Each extras row is as tall as the row list makes them
+const EXTRAS_ROW_HEIGHT = 425
+const CLASSIC_BADGE_PAD_X = 11
+const CLASSIC_BADGE_PAD_Y = 4
+const CLASSIC_CELL_PAD_X = 20
+const CLASSIC_CELL_PAD_Y = 14
+const CLASSIC_CELL_GAP = 4
+
+sub init()
+    m.global.queueManager.callFunc("setForceTranscode", PlaybackMethod.PLAYNORMALLY)
+    m.performRotationCheck = true
+
+    m.container = m.top.findNode("container")
+    m.scrollableContent = m.top.findNode("scrollableContent")
+    m.extrasGrid = m.top.findNode("extrasGrid")
+    m.scrollAnim = m.top.findNode("scrollAnimation")
+    m.scrollInterp = m.top.findNode("scrollInterpolator")
+    m.currentScrollY = 0
+
+    if m.extrasGrid <> invalid
+        m.extrasGrid.observeField("itemFocused", "onExtrasRowChanged")
+        m.extrasGrid.observeField("rowItemSize", "onExtrasRowsLoaded")
+    end if
+
+    m.seerrBlock = m.top.findNode("seerrBlock")
+    if isValid(m.seerrBlock)
+        m.seerrBlock.observeField("hasContent", "onSeerrBlockChanged")
+        m.seerrBlock.observeField("focusedOffset", "onSeerrFocusMoved")
+    end if
+
+    m.top.optionsAvailable = false
+
+    m.trackData = {}
+    m.currentCodec = ""
+    m.versionSelector = m.top.findNode("versionSelector")
+    m.audioSelector = m.top.findNode("audioSelector")
+    m.subtitleSelector = m.top.findNode("subtitleSelector")
+    m.subtitleDownloadDialog = m.top.findNode("subtitleDownloadDialog")
+
+    m.favoriteTask = m.top.findNode("favoriteTask")
+    m.playstateTask = m.top.findNode("playstateTask")
+
+    m.posterImage = m.top.findNode("posterImage")
+    m.playedIndicator = m.top.findNode("playedIndicator")
+    m.genresColumn = m.top.findNode("genresColumn")
+    m.directorColumn = m.top.findNode("directorColumn")
+    m.writersColumn = m.top.findNode("writersColumn")
+    m.studioColumn = m.top.findNode("studioColumn")
+    m.logoImage = m.top.findNode("logoImage")
+    m.logoGroup = m.top.findNode("logoGroup")
+    m.logoShadow = m.top.findNode("logoShadow")
+    m.titleNode = m.top.findNode("title")
+    m.overview = m.top.findNode("overview")
+    m.overview.maxWidth = 1350
+    ' Opening the overview changes how much room it takes, so what sits under it
+    ' moves down to make way
+    m.overview.observeField("boxHeight", "onOverviewHeightChanged")
+
+    m.buttonRow = m.top.findNode("buttonRow")
+    m.currentButtonIndex = 0
+    m.buttonGroups = []
+
+    m.loadStatus = ViewLoadStatus.INIT
+    m.global.queueManager.callFunc("setLastKnownItemID", string.empty)
+
+    ' Shuffle task for series
+    m.getShuffleEpisodesTask = createObject("roSGNode", "getShuffleEpisodesTask")
+
+    m.top.observeField("itemContent", "itemContentChanged")
+
+    m.audioSelector.observeField("audioStreamIndex", "onAudioStreamIndexChanged")
+    m.subtitleSelector.observeField("subtitleStream", "onSubtitleStreamChanged")
+    m.audioSelector.observeField("visible", "onAudioSelectorVisibleChanged")
+    m.subtitleSelector.observeField("visible", "onSubtitleSelectorVisibleChanged")
+    m.subtitleSelector.observeField("downloadRequested", "onSubtitleDownloadRequested")
+    m.subtitleDownloadDialog.observeField("visible", "onSubtitleDownloadDialogVisibleChanged")
+    m.versionSelector.observeField("videoStreamId", "onVersionSelected")
+    m.versionSelector.observeField("visible", "onVersionSelectorVisibleChanged")
+
+    m.themeMusicPlayer = m.top.findNode("themeMusicPlayer")
+
+    m.posterMask = m.top.findNode("posterMask")
+
+    ' Show title by default (logo replaces it when available)
+    m.titleNode.visible = true
+
+    sizeClassicFonts()
+end sub
+
+sub sizeClassicFonts()
+    infoSize = fontApply.ThemeTextSize(CLASSIC_INFO_TEXT_SIZE)
+    badgeSize = fontApply.ThemeTextSize(CLASSIC_BADGE_TEXT_SIZE)
+    cellLabelSize = fontApply.ThemeTextSize(CLASSIC_METADATA_LABEL_SIZE)
+    cellValueSize = fontApply.ThemeTextSize(CLASSIC_METADATA_VALUE_SIZE)
+
+    for each id in ["releaseYear", "officialRating", "seasonCount", "runtime", "endsAt", "communityRating", "criticRating", "metaGenres", "tagline"]
+        node = m.top.findNode(id)
+        if isValid(node) then node.font.size = infoSize
+    end for
+
+    for each id in ["dot1", "dot3", "dot4", "dot5", "dot6", "dot7", "dot8"]
+        dot = m.top.findNode(id)
+        if isValid(dot)
+            dot.font.size = infoSize
+            dot.text = "•"
+        end if
+    end for
+
+    badgeFont = m.top.findNode("codecBadgeFont")
+    if isValid(badgeFont) then badgeFont.font.size = badgeSize
+
+    ' Ratings read at the same size as the badges beside them
+    ratingsRow = m.top.findNode("ratingsRow")
+    if isValid(ratingsRow)
+        ratingsRow.valueSize = badgeSize
+        ratingsRow.nameSize = badgeSize
+    end if
+
+    for each id in ["genresHeader", "directorHeader", "writersHeader", "studioHeader"]
+        node = m.top.findNode(id)
+        if isValid(node) then node.font.size = cellLabelSize
+    end for
+
+    for each id in ["genres", "director", "writers", "studio"]
+        node = m.top.findNode(id)
+        if isValid(node) then node.font.size = cellValueSize
+    end for
+
+    m.top.findNode("seriesName").font.size = fontApply.ThemeTextSize(CLASSIC_SERIES_NAME_SIZE)
+    m.top.findNode("episodePillText").font.size = fontApply.ThemeTextSize(CLASSIC_PILL_TEXT_SIZE)
+    m.titleNode.font.size = CLASSIC_TITLE_SIZE
+end sub
+
+' ============================================
+' Screen lifecycle
+' ============================================
+
+sub onDisplayResumeButtonChange()
+    if isValid(m.top.itemContent) and isChainValid(m.top.itemContent, "json")
+        updateButtonVisibility(m.top.itemContent.json)
+    end if
+end sub
+
+sub onShuffleEpisodeDataLoaded()
+    m.getShuffleEpisodesTask.unobserveField("data")
+    m.global.queueManager.callFunc("set", m.getShuffleEpisodesTask.data.items)
+    m.global.queueManager.callFunc("playQueue")
+end sub
+
+sub OnScreenShown(_isReturning = false as boolean)
+    picker = openTrackPicker()
+    if isValid(picker)
+        picker.setFocus(true)
+    else if _isReturning and isValid(m.top.lastFocus)
+        m.top.lastFocus.setFocus(true)
+        setLastFocus(m.top.lastFocus)
+
+        if isValid(m.extrasGrid) and m.top.lastFocus.isSameNode(m.extrasGrid)
+            scrollContentTo(-500)
+        else
+            scrollContentTo(0)
+        end if
+    else
+        focusFirstVisibleButton()
+    end if
+
+    if m.loadStatus = ViewLoadStatus.RELOAD
+        if not isSeries()
+            if isChainValid(m.top.itemContent, "json.mediaStreams")
+                SetDefaultAudioTrack(m.top.itemContent.json)
+                SetUpAudioOptions(m.top.itemContent.json.mediaStreams)
+            end if
+            if isChainValid(m.top.itemContent, "json.mediaSources")
+                SetUpVideoOptions(m.top.itemContent.json.mediaSources)
+            end if
+        end if
+    end if
+
+    if m.loadStatus = ViewLoadStatus.INIT
+        m.loadStatus = ViewLoadStatus.FIRSTLOAD
+        return
+    end if
+
+    m.loadStatus = ViewLoadStatus.RELOAD
+
+    ' Trigger refresh via the appropriate field based on item type
+    if isEpisode()
+        m.top.refreshEpisodeDetailsData = not m.top.refreshEpisodeDetailsData
+    else if isSeries()
+        m.top.refreshSeriesDetailsData = not m.top.refreshSeriesDetailsData
+    else
+        m.top.refreshMovieDetailsData = not m.top.refreshMovieDetailsData
+    end if
+end sub
+
+sub onSelectedPartChanged()
+    if not isValid(m.top.selectedPart) then return
+    m.global.queueManager.callFunc("setLastKnownItemID", m.top.selectedPart.id)
+    m.loadStatus = ViewLoadStatus.FIRSTLOAD
+    m.global.queueManager.callFunc("setLastKnownItemExtraType", string.EMPTY)
+
+    if isEpisode()
+        m.top.refreshEpisodeDetailsData = not m.top.refreshEpisodeDetailsData
+    else
+        m.top.refreshMovieDetailsData = not m.top.refreshMovieDetailsData
+    end if
+end sub
+
+' ============================================
+' Content changed handler
+' ============================================
+
+sub itemContentChanged()
+    item = m.top.itemContent
+
+    if isValid(m.extrasGrid)
+        if isEpisode()
+            m.extrasGrid.seasonID = item.seasonID
+            m.extrasGrid.showID = item.showID
+            m.extrasGrid.episodeID = item.id
+        else if isSeries()
+            m.extrasGrid.showID = item.id
+        end if
+    end if
+
+    if not isChainValid(item, "json")
+        if m.buttonRow <> invalid then m.buttonRow.visible = true
+        stopLoadingSpinner()
+        return
+    end if
+
+    itemData = item.json
+    m.top.id = itemData.id
+
+    loadSeerrBlock(itemData)
+
+    if isValid(m.themeMusicPlayer) and not m.top.seerrOnly
+        m.themeMusicPlayer.itemId = itemData.id
+    end if
+
+    playTextNode = m.top.findNode("playText")
+    if isValid(playTextNode)
+        playTextNode.text = tr("Play")
+    end if
+
+    m.top.trailerAvailable = isValidAndNotEmpty(itemData.RemoteTrailers) or isValidAndNotEmpty(itemData.LocalTrailerCount)
+
+    updateButtonVisibility(itemData)
+
+    if m.loadStatus = ViewLoadStatus.RELOAD
+        return
+    end if
+
+    setBackdropImage(itemData)
+
+    if not isSeries() and m.top.selectedVideoStreamId = "" and isValidAndNotEmpty(itemData.MediaSources)
+        for i = 0 to itemData.mediaStreams.Count() - 1
+            if itemData.mediaStreams[i].Type = "Video"
+                m.currentCodec = itemData.MediaStreams[i].Codec
+                if isStringEqual(PlaybackMethod.FORCETRANSCODEDISABLEREMUX, m.global.session.user.settings["playback.media.forceTranscode"] ?? PlaybackMethod.PLAYNORMALLY)
+                    m.global.queueManager.callFunc("setForceTranscode", PlaybackMethod.FORCETRANSCODEDISABLEREMUX, m.currentCodec)
+                    exit for
+                end if
+            end if
+        end for
+        m.top.selectedVideoStreamId = itemData.MediaSources[0].id
+    end if
+
+    if not isSeries()
+        SetDefaultAudioTrack(itemData)
+    end if
+
+    setFieldText("releaseYear", "")
+    setFieldText("officialRating", "")
+    setFieldText("tagline", "")
+    setFieldText("runtime", "")
+    setFieldText("endsAt", "")
+    setFieldText("seasonCount", "")
+    setFieldText("criticRating", "")
+
+    setPosterImage(itemData)
+
+    if isEpisode()
+        populateEpisodeMetadata(itemData, item)
+    else if isSeries()
+        populateSeriesMetadata(itemData)
+    else
+        populateMovieMetadata(itemData)
+    end if
+
+    populateRatings(itemData)
+    fetchMDBListRatings(itemData)
+    populateGenres(itemData)
+    populateDirectors(itemData)
+    populateWriters(itemData)
+    populateStudio(itemData)
+    updateColumnDividers()
+    populateRuntime(itemData)
+
+    setFieldText("title", itemData.name)
+
+    hideMediaDesc = moonfinPlugin.ParseBoolSetting(chainLookupReturn(m.global.session, "user.settings.`ui.itemdetail.hideMediaDescription`", false), false) and (isEpisode() or LCase(m.top.itemType) = "movie")
+
+    taglineNode = m.top.findNode("tagline")
+    if isValid(taglineNode)
+        taglineNode.visible = not hideMediaDesc and isValidAndNotEmpty(taglineNode.text)
+    end if
+
+    overviewNode = m.top.findNode("overview")
+    overviewText = itemData.overview
+    if isValidAndNotEmpty(overviewText)
+        overviewText = stripHtmlTags(overviewText)
+    end if
+    setFieldText("overview", overviewText)
+    if isValid(overviewNode)
+        overviewNode.visible = not hideMediaDesc and isValidAndNotEmpty(overviewText)
+    end if
+
+    if not isSeries()
+        SetUpVideoOptions(itemData.mediaSources)
+        SetUpAudioOptions(itemData.mediaStreams)
+    end if
+
+    if m.buttonRow <> invalid then m.buttonRow.visible = true
+
+    ' Layout everything now that all content is populated
+    layoutMetadataRow()
+    layoutContainer()
+
+    stopLoadingSpinner()
+end sub
+
+' ============================================
+' Item type helper
+' ============================================
+
+function isEpisode() as boolean
+    return LCase(m.top.itemType) = "episode"
+end function
+
+function isSeries() as boolean
+    return LCase(m.top.itemType) = "series"
+end function
+
+' ============================================
+' Backdrop
+' ============================================
+
+sub setBackdropImage(itemData as object)
+    backdropPoster = m.top.findNode("backdrop")
+    if not isValid(backdropPoster) then return
+
+    ' A Seerr title has no library images, so it carries finished TMDB urls instead
+    if isValidAndNotEmpty(itemData._externalBackdropUrl)
+        backdropPoster.uri = itemData._externalBackdropUrl
+        return
+    end if
+
+    serverBaseUrl = invalid
+    if isChainValid(itemData, "_serverUrl")
+        serverBaseUrl = itemData._serverUrl
+        if serverBaseUrl.right(1) = "/"
+            serverBaseUrl = serverBaseUrl.left(serverBaseUrl.len() - 1)
+        end if
+    end if
+
+    imageVersion = ImageType.BACKDROP
+    imageTag = invalid
+    backdropItemId = itemData.id
+
+    if isValidAndNotEmpty(itemData.BackdropImageTags)
+        imageTag = itemData.BackdropImageTags[0]
+    else if isChainValid(itemData, "ImageTags.Primary")
+        imageVersion = ImageType.PRIMARY
+        imageTag = itemData.ImageTags.Primary
+    end if
+
+    if not isValid(imageTag) then return
+
+    params = {
+        "maxWidth": 1920,
+        "maxHeight": 1080,
+        "quality": 90,
+        "blur": getBackdropBlurAmount(),
+        "Tag": imageTag
+    }
+
+    backdropUrl = invalid
+    if isValid(serverBaseUrl)
+        backdropUrl = buildImageURLForServer(serverBaseUrl, backdropItemId, imageVersion, params)
+    else
+        backdropUrl = ImageURL(backdropItemId, imageVersion, params)
+    end if
+
+    if isValid(backdropUrl)
+        backdropPoster.uri = backdropUrl
+    end if
+end sub
+
+' ============================================
+' Logo image (set from ShowScenes.bs via interface field)
+' ============================================
+
+sub onLogoImageURIChanged()
+    if not isValid(m.logoImage) then return
+
+    if isValidAndNotEmpty(m.top.logoImageURI)
+        m.logoImage.uri = m.top.logoImageURI
+        if isValid(m.logoShadow) then m.logoShadow.uri = m.top.logoImageURI
+        if isValid(m.logoGroup) then m.logoGroup.visible = true
+        if isValid(m.titleNode) then m.titleNode.visible = false
+    else
+        m.logoImage.uri = ""
+        if isValid(m.logoShadow) then m.logoShadow.uri = ""
+        if isValid(m.logoGroup) then m.logoGroup.visible = false
+        if isValid(m.titleNode) then m.titleNode.visible = true
+    end if
+
+    ' Re-layout since logo/title visibility changed
+    layoutContainer()
+end sub
+
+' ============================================
+' Metadata population
+' ============================================
+
+' A pill drawn round a short run of text
+function layoutBadge(bg as object, textNode as object, padX as integer, padY as integer) as integer
+    textNode.translation = [padX, padY]
+    bounds = textNode.boundingRect()
+    bg.width = bounds.width + (padX * 2)
+    bg.height = bounds.height + (padY * 2)
+    return bg.width
+end function
+
+' The series name sits beside a pill carrying the season and episode, the way
+' the other clients head an episode
+sub layoutEpisodeHeader(itemData as object, item as object)
+    header = m.top.findNode("episodeHeader")
+    nameNode = m.top.findNode("seriesName")
+    pill = m.top.findNode("episodePill")
+    pillBg = m.top.findNode("episodePillBg")
+    pillText = m.top.findNode("episodePillText")
+
+    showName = ""
+    if isValid(item.showName) and item.showName <> ""
+        showName = item.showName
+    else if isValid(itemData.SeriesName)
+        showName = itemData.SeriesName
+    end if
+
+    nameNode.text = showName
+    nameNode.visible = showName <> ""
+    nameNode.translation = [0, 0]
+
+    pill.visible = isAllValid([itemData.ParentIndexNumber, itemData.IndexNumber])
+    if pill.visible
+        pillText.text = "S" + itemData.ParentIndexNumber.toStr() + " E" + itemData.IndexNumber.toStr()
+        layoutBadge(pillBg, pillText, CLASSIC_PILL_PAD_X, CLASSIC_PILL_PAD_Y)
+    end if
+
+    header.visible = nameNode.visible or pill.visible
+    if not header.visible then return
+
+    if pill.visible
+        if nameNode.visible
+            ' Centred against the taller series name beside it
+            nameBounds = nameNode.boundingRect()
+            pill.translation = [nameBounds.width + CLASSIC_PILL_GAP, (nameBounds.height - pillBg.height) / 2]
+        else
+            pill.translation = [0, 0]
+        end if
+    end if
+end sub
+
+sub populateEpisodeMetadata(itemData as object, item as object)
+    layoutEpisodeHeader(itemData, item)
+
+    if isValid(itemData.PremiereDate)
+        airDate = CreateObject("roDateTime")
+        airDate.FromISO8601String(itemData.PremiereDate)
+        airDate.ToLocalTime()
+        monthName = getMonthName(airDate.GetMonth())
+        dateText = `${monthName} ${airDate.GetDayOfMonth()}, ${airDate.GetYear()}`
+        setFieldText("releaseYear", dateText)
+    end if
+
+    if isValid(itemData.officialRating)
+        setFieldText("officialRating", itemData.officialRating)
+    end if
+
+    populateStreamInfo(itemData)
+end sub
+
+sub populateMovieMetadata(itemData as object)
+    episodeHeaderNode = m.top.findNode("episodeHeader")
+    if isValid(episodeHeaderNode)
+        episodeHeaderNode.visible = false
+    end if
+
+    if isValid(itemData.PremiereDate)
+        releaseDate = CreateObject("roDateTime")
+        releaseDate.FromISO8601String(itemData.PremiereDate)
+        setFieldText("releaseYear", stri(releaseDate.GetYear()).trim())
+    else if isValid(itemData.productionYear)
+        setFieldText("releaseYear", itemData.productionYear)
+    end if
+
+    if isValid(itemData.officialRating)
+        setFieldText("officialRating", itemData.officialRating)
+    end if
+
+    if isValid(itemData.Taglines) and isValidAndNotEmpty(itemData.Taglines)
+        setFieldText("tagline", itemData.Taglines[0])
+    end if
+
+    populateStreamInfo(itemData)
+end sub
+
+sub populateSeriesMetadata(itemData as object)
+    episodeHeaderNode = m.top.findNode("episodeHeader")
+    if isValid(episodeHeaderNode)
+        episodeHeaderNode.visible = false
+    end if
+
+    if isValid(itemData.productionYear)
+        setFieldText("releaseYear", itemData.productionYear)
+    end if
+
+    if isValid(itemData.officialRating)
+        setFieldText("officialRating", itemData.officialRating)
+    end if
+
+    if isChainValid(itemData, "ChildCount") and itemData.ChildCount > 0
+        seasonText = stri(itemData.ChildCount).trim()
+        if itemData.ChildCount = 1
+            seasonText += " Season"
+        else
+            seasonText += " Seasons"
+        end if
+        setFieldText("seasonCount", seasonText)
+    end if
+
+    if isValid(itemData.Taglines) and isValidAndNotEmpty(itemData.Taglines)
+        setFieldText("tagline", itemData.Taglines[0])
+    end if
+end sub
+
+sub populateRatings(itemData as object)
+    communityRatingGroup = m.top.findNode("communityRatingGroup")
+    criticRatingGroup = m.top.findNode("criticRatingGroup")
+
+    if m.global.session.user.settings["ui.itemdetail.showRatings"]
+        if isValid(itemData.communityRating) and moonfinPlugin.IsRatingSourceEnabled("stars")
+            m.top.findNode("star").visible = true
+            setFieldText("communityRating", int(itemData.communityRating * 10) / 10)
+            if isValid(communityRatingGroup) then communityRatingGroup.visible = true
+        else
+            m.top.findNode("star").visible = false
+            setFieldText("communityRating", "")
+            if isValid(communityRatingGroup) then communityRatingGroup.visible = false
+        end if
+
+        ' Show the native critic rating up front. It's hidden again only once
+        ' plugin display ratings actually arrive (see onFetchRatingsComplete)
+        tomatoIcon = m.top.findNode("tomatoIcon")
+        if isValid(itemData.CriticRating) and itemData.CriticRating > 0
+            criticScore = itemData.CriticRating
+            setFieldText("criticRating", criticScore.toStr() + "%")
+            if isValid(tomatoIcon)
+                tomatoIcon.uri = criticScore >= 60 ? "pkg:/images/fresh.png" : "pkg:/images/rotten.png"
+                tomatoIcon.visible = true
+            end if
+            if isValid(criticRatingGroup) then criticRatingGroup.visible = true
+        else
+            setFieldText("criticRating", "")
+            if isValid(tomatoIcon) then tomatoIcon.visible = false
+            if isValid(criticRatingGroup) then criticRatingGroup.visible = false
+        end if
+    else
+        setFieldText("communityRating", "")
+        m.top.findNode("star").visible = false
+        if isValid(communityRatingGroup) then communityRatingGroup.visible = false
+
+        setFieldText("criticRating", "")
+        tomatoIcon = m.top.findNode("tomatoIcon")
+        if isValid(tomatoIcon) then tomatoIcon.visible = false
+        if isValid(criticRatingGroup) then criticRatingGroup.visible = false
+    end if
+end sub
+
+sub fetchMDBListRatings(itemData as object)
+    ratingsRow = m.top.findNode("ratingsRow")
+    if not isValid(ratingsRow) then return
+
+    ratingsRow.visible = false
+    ratingsRow.showNames = get_user_setting_bool("plugin.mdblist.showRatingNames", false)
+    ' Badges only choose the chrome around each rating, so off means plain rather than hidden
+    ratingsRow.showBadges = get_user_setting_bool("plugin.mdblist.showRatingBadges", true)
+
+    if not moonfinPlugin.IsRatingsEnabled() and not moonfinPlugin.IsEpisodeRatingsEnabled() then return
+
+    if isValid(m.fetchRatingsTask)
+        m.fetchRatingsTask.unobserveField("ratings")
+    end if
+
+    m.fetchRatingsTask = createObject("roSGNode", "FetchRatingsTask")
+    m.fetchRatingsTask.itemData = itemData
+    m.fetchRatingsTask.observeField("ratings", "onFetchRatingsComplete")
+    m.fetchRatingsTask.control = TaskControl.RUN
+end sub
+
+sub onFetchRatingsComplete()
+    ratingsRow = m.top.findNode("ratingsRow")
+    if not isValid(ratingsRow) or not isValid(m.fetchRatingsTask) then return
+
+    result = m.fetchRatingsTask.ratings
+    if not isValid(result) then return
+
+    ' Plugin ratings arrived, now hide the native critic rating
+    if isValidAndNotEmpty(result.data)
+        setFieldText("criticRating", "")
+        tomatoIcon = m.top.findNode("tomatoIcon")
+        if isValid(tomatoIcon) then tomatoIcon.visible = false
+        criticRatingGroup = m.top.findNode("criticRatingGroup")
+        if isValid(criticRatingGroup) then criticRatingGroup.visible = false
+    end if
+
+    ratingsRow.ratingsData = result
+    ' Dropping the native critic rating leaves a hole in the row, so the row is
+    ' closed up again before anything is measured against it
+    layoutMetadataRow()
+    layoutContainer()
+end sub
+
+sub populateGenres(itemData as object)
+    if isValidAndNotEmpty(itemData.genres)
+        ' Only the first few, the way the other clients cut the list
+        shownGenres = []
+        for each genre in itemData.genres
+            if shownGenres.count() >= 3 then exit for
+            shownGenres.push(genre)
+        end for
+        setFieldText("genres", shownGenres.join(", "))
+        setFieldText("metaGenres", shownGenres.join(" • "))
+        if isValid(m.genresColumn) then m.genresColumn.visible = true
+    else
+        setFieldText("metaGenres", "")
+        if isValid(m.genresColumn) then m.genresColumn.visible = false
+    end if
+end sub
+
+sub populateStreamInfo(itemData as object)
+    row = m.top.findNode("codecRow")
+    if not isValid(row) then return
+
+    row.removeChildrenIndex(row.getChildCount() - 1, 1)
+
+    if not mediaBadges.Enabled()
+        row.visible = false
+        return
+    end if
+
+    labels = mediaBadges.Build(itemData)
+    row.visible = labels.count() > 0
+    if not row.visible then return
+
+    measure = m.top.findNode("codecBadgeFont")
+    xPos = 0
+    for each label in labels
+        measure.text = label
+        bounds = measure.boundingRect()
+        width = bounds.width + (CLASSIC_BADGE_PAD_H * 2)
+        height = bounds.height + (CLASSIC_BADGE_PAD_V * 2)
+
+        badge = row.createChild("Group")
+        badge.translation = [xPos, 0]
+
+        outline = badge.createChild("Poster")
+        outline.uri = "pkg:/images/details/outline6.9.png"
+        outline.width = width
+        outline.height = height
+        outline.blendColor = CLASSIC_BADGE_BORDER
+
+        text = badge.createChild("Text")
+        text.text = label
+        text.font = measure.font
+        text.color = CLASSIC_BADGE_INK
+        text.width = width
+        text.height = height
+        text.horizAlign = "center"
+        text.vertAlign = "center"
+
+        xPos += width + CLASSIC_CODEC_GAP
+    end for
+end sub
+
+sub populateDirectors(itemData as object)
+    directors = []
+    if isValid(itemData.people)
+        for each person in itemData.people
+            if LCase(person.type) = PersonType.DIRECTOR
+                directors.push(person.name)
+            end if
+        end for
+    end if
+
+    if isValidAndNotEmpty(directors)
+        directorHeaderNode = m.top.findNode("directorHeader")
+        if isValid(directorHeaderNode)
+            directorHeaderNode.text = directors.Count() > 1 ? "DIRECTORS" : "DIRECTOR"
+        end if
+        setFieldText("director", directors.join(", "))
+        if isValid(m.directorColumn) then m.directorColumn.visible = true
+    else
+        if isValid(m.directorColumn) then m.directorColumn.visible = false
+    end if
+end sub
+
+sub populateWriters(itemData as object)
+    writers = []
+    if isValid(itemData.people)
+        for each person in itemData.people
+            if LCase(person.type) = "writer"
+                writers.push(person.name)
+            end if
+        end for
+    end if
+
+    if isValidAndNotEmpty(writers)
+        setFieldText("writers", writers.join(", "))
+        if isValid(m.writersColumn) then m.writersColumn.visible = true
+    else
+        if isValid(m.writersColumn) then m.writersColumn.visible = false
+    end if
+end sub
+
+sub populateStudio(itemData as object)
+    if isValidAndNotEmpty(itemData.Studios)
+        studioNames = []
+        for each studioObj in itemData.Studios
+            if isValid(studioObj.Name)
+                studioNames.push(studioObj.Name)
+            end if
+        end for
+
+        if isValidAndNotEmpty(studioNames)
+            setFieldText("studio", studioNames.join(", "))
+            if isValid(m.studioColumn) then m.studioColumn.visible = true
+        else
+            if isValid(m.studioColumn) then m.studioColumn.visible = false
+        end if
+    else
+        if isValid(m.studioColumn) then m.studioColumn.visible = false
+    end if
+end sub
+
+sub updateColumnDividers()
+    ' Manually position visible columns side-by-side (no LayoutGroup - it doesn't
+    ' reliably collapse hidden children on Roku).
+    columns = [m.genresColumn, m.directorColumn, m.writersColumn, m.studioColumn]
+    dividers = [m.top.findNode("divider1"), m.top.findNode("divider2"), m.top.findNode("divider3")]
+    metadataColumnsBg = m.top.findNode("metadataColumnsBg")
+    metadataColumnsBorder = m.top.findNode("metadataColumnsBorder")
+
+    ' Hide all dividers first
+    for each div in dividers
+        if isValid(div) then div.visible = false
+    end for
+
+    ' Collect visible columns in order
+    visibleColumns = []
+    for each col in columns
+        if isValid(col) and col.visible
+            visibleColumns.push(col)
+        end if
+    end for
+
+    for each layer in [metadataColumnsBg, metadataColumnsBorder]
+        if isValid(layer) then layer.visible = visibleColumns.count() > 0
+    end for
+
+    if visibleColumns.count() = 0 then return
+
+    ' Cells share the content width evenly, so the card always runs the full
+    ' width however many of them there are
+    visibleCount = visibleColumns.count()
+    divWidth = 1
+    numDividers = visibleCount - 1
+    colWidth = Int((CLASSIC_CONTENT_WIDTH - (numDividers * divWidth)) / visibleCount)
+
+    xPos = 0
+    cardHeight = 0
+    placedDividers = []
+    for i = 0 to visibleCount - 1
+        visibleColumns[i].translation = [xPos, 0]
+        cellHeight = layoutMetadataCell(visibleColumns[i], colWidth)
+        if cellHeight > cardHeight then cardHeight = cellHeight
+        xPos += colWidth
+
+        if i < visibleCount - 1
+            divider = getDividerBetween(visibleColumns[i], visibleColumns[i + 1], columns, dividers)
+            if isValid(divider)
+                divider.visible = true
+                divider.translation = [xPos, 0]
+                placedDividers.push(divider)
+                xPos += divWidth
+            end if
+        end if
+    end for
+
+    for each layer in [metadataColumnsBg, metadataColumnsBorder]
+        if isValid(layer)
+            layer.width = CLASSIC_CONTENT_WIDTH
+            layer.height = cardHeight
+            layer.translation = [0, 0]
+        end if
+    end for
+
+    for each divider in placedDividers
+        divider.height = cardHeight
+    end for
+end sub
+
+' A label over its value, both pinned to the left of the cell the way the other
+' clients set them out. Returns how tall the cell came out, so the card can be
+' sized around the tallest of them
+function layoutMetadataCell(column as object, cellWidth as integer) as integer
+    inner = cellWidth - (CLASSIC_CELL_PAD_X * 2)
+    labelNode = column.getChild(0)
+    valueNode = column.getChild(1)
+
+    labelNode.width = inner
+    labelNode.translation = [CLASSIC_CELL_PAD_X, CLASSIC_CELL_PAD_Y]
+
+    valueTop = CLASSIC_CELL_PAD_Y + labelNode.boundingRect().height + CLASSIC_CELL_GAP
+    valueNode.width = inner
+    valueNode.translation = [CLASSIC_CELL_PAD_X, valueTop]
+
+    return valueTop + valueNode.boundingRect().height + CLASSIC_CELL_PAD_Y
+end function
+
+function getDividerBetween(colA as object, colB as object, allColumns as object, allDividers as object) as object
+    ' Find the indices of colA and colB in the full column list
+    idxA = -1
+    idxB = -1
+    for i = 0 to allColumns.count() - 1
+        if isValid(allColumns[i])
+            if allColumns[i].isSameNode(colA) then idxA = i
+            if allColumns[i].isSameNode(colB) then idxB = i
+        end if
+    end for
+
+    ' Dividers sit between columns: divider[0] between col[0]-col[1], etc.
+    ' Use the divider closest to the first column in the pair
+    if idxA >= 0 and idxB >= 0 and idxA < allDividers.count()
+        return allDividers[idxA]
+    end if
+    return invalid
+end function
+
+sub populateRuntime(itemData as object)
+    ' Series don't have runtime or "ends at" - season count is shown instead
+    if isSeries()
+        setFieldText("runtime", "")
+        setFieldText("endsAt", "")
+        return
+    end if
+
+    if type(itemData.RunTimeTicks) = "LongInteger"
+        setFieldText("runtime", getFormattedRuntime(itemData.RunTimeTicks))
+        endsAtText = tr("Ends at %1").Replace("%1", getEndTimeFromTicks(itemData.RunTimeTicks))
+        setFieldText("endsAt", endsAtText)
+    else
+        setFieldText("runtime", "")
+        setFieldText("endsAt", "")
+    end if
+end sub
+
+' ============================================
+' Video / Audio / Quality helpers
+' ============================================
+
+function getMonthName(month as integer) as string
+    months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    if month >= 1 and month <= 12
+        return months[month - 1]
+    end if
+    return ""
+end function
+
+' ============================================
+' Layout: metadata row (horizontal positioning)
+' ============================================
+
+sub layoutMetadataRow()
+    ' Hide empty text nodes
+    metadataIds = ["releaseYear", "officialRating", "seasonCount", "runtime", "endsAt", "metaGenres"]
+    for each id in metadataIds
+        node = m.top.findNode(id)
+        if isValid(node)
+            node.visible = (node.text <> "")
+        end if
+    end for
+
+    ratingGroup = m.top.findNode("officialRatingGroup")
+    if isValid(ratingGroup) then ratingGroup.visible = m.top.findNode("officialRating").text <> ""
+
+    ' Hide all dots initially
+    allDots = ["dot1", "dot3", "dot4", "dot5", "dot6", "dot7", "dot8"]
+    for each dotId in allDots
+        dot = m.top.findNode(dotId)
+        if isValid(dot) then dot.visible = false
+    end for
+
+    ' Define content items and their associated trailing dot
+    ' Order: year/date, rating, season count, duration, ends at, community rating, rotten tomatoes, genres
+    contentItems = [
+        { nodeId: "releaseYear", dotId: "dot1" },
+        { nodeId: "officialRatingGroup", dotId: "dot3" },
+        { nodeId: "seasonCount", dotId: "dot6" },
+        { nodeId: "runtime", dotId: "dot4" },
+        { nodeId: "endsAt", dotId: "dot5" },
+        { nodeId: "communityRatingGroup", dotId: "dot7" },
+        { nodeId: "criticRatingGroup", dotId: "dot8" },
+        { nodeId: "metaGenres", dotId: invalid }
+    ]
+
+    spacing = CLASSIC_SEPARATOR_MARGIN
+
+    ' Collect visible content nodes in order, then lay them out
+    ' with dots between each pair.
+    visibleContent = []
+    for each item in contentItems
+        contentNode = m.top.findNode(item.nodeId)
+        if not isValid(contentNode) or not contentNode.visible then continue for
+        visibleContent.push(contentNode)
+    end for
+
+    xPos = 0
+    for i = 0 to visibleContent.count() - 1
+        node = visibleContent[i]
+
+        ' Insert dot before this item (if not first)
+        if i > 0
+            ' Find the right dot - use a simple shared dot approach
+            ' Show the dot that corresponds to this content's position
+            dotNode = findDotBefore(node, contentItems)
+            if isValid(dotNode)
+                dotNode.translation = [xPos, 0]
+                dotNode.visible = true
+                dotBounds = dotNode.boundingRect()
+                xPos += dotBounds.width + spacing
+            end if
+        end if
+
+        if node.id = "officialRatingGroup"
+            badgeWidth = layoutBadge(m.top.findNode("officialRatingBg"), m.top.findNode("officialRating"), CLASSIC_BADGE_PAD_X, CLASSIC_BADGE_PAD_Y)
+            ' Lifted by its own padding so the text inside sits on the same line
+            ' as the plain text either side of it
+            node.translation = [xPos, -CLASSIC_BADGE_PAD_Y]
+            xPos += badgeWidth + spacing
+        else if node.id = "communityRatingGroup"
+            layoutCommunityRating(node)
+            node.translation = [xPos, 0]
+            xPos += getCommunityRatingWidth() + spacing
+        else if node.id = "criticRatingGroup"
+            layoutCriticRating(node)
+            node.translation = [xPos, 0]
+            xPos += getCriticRatingWidth() + spacing
+        else
+            node.translation = [xPos, 0]
+            bounds = node.boundingRect()
+            xPos += bounds.width + spacing
+        end if
+    end for
+end sub
+
+function findDotBefore(contentNode as object, contentItems as object) as object
+    ' Walk the content items to find the dot associated with the item BEFORE this one
+    prevDotId = invalid
+    for each item in contentItems
+        node = m.top.findNode(item.nodeId)
+        if isValid(node) and node.isSameNode(contentNode)
+            ' The dot before this item is the previous item's trailing dot
+            if isValid(prevDotId)
+                return m.top.findNode(prevDotId)
+            end if
+            return invalid
+        end if
+        if isValid(node) and node.visible
+            prevDotId = item.dotId
+        end if
+    end for
+    return invalid
+end function
+
+sub layoutCommunityRating(_ratingGroup as object)
+    starNode = m.top.findNode("star")
+    ratingText = m.top.findNode("communityRating")
+    if isValid(starNode) and starNode.visible
+        starNode.translation = [0, 0]
+        if isValid(ratingText)
+            ratingText.translation = [25, 0] ' 20px star + 5px gap
+        end if
+    else if isValid(ratingText)
+        ratingText.translation = [0, 0]
+    end if
+end sub
+
+function getCommunityRatingWidth() as integer
+    starNode = m.top.findNode("star")
+    ratingText = m.top.findNode("communityRating")
+    totalWidth = 0
+    if isValid(starNode) and starNode.visible
+        totalWidth += 25 ' 20px star + 5px gap
+    end if
+    if isValid(ratingText) and ratingText.text <> ""
+        bounds = ratingText.boundingRect()
+        totalWidth += bounds.width
+    end if
+    return totalWidth
+end function
+
+sub layoutCriticRating(_ratingGroup as object)
+    tomatoNode = m.top.findNode("tomatoIcon")
+    ratingText = m.top.findNode("criticRating")
+    if isValid(tomatoNode) and tomatoNode.visible
+        tomatoNode.translation = [0, 0]
+        if isValid(ratingText)
+            ratingText.translation = [25, 0] ' 20px icon + 5px gap
+        end if
+    else if isValid(ratingText)
+        ratingText.translation = [0, 0]
+    end if
+end sub
+
+function getCriticRatingWidth() as integer
+    tomatoNode = m.top.findNode("tomatoIcon")
+    ratingText = m.top.findNode("criticRating")
+    totalWidth = 0
+    if isValid(tomatoNode) and tomatoNode.visible
+        totalWidth += 25 ' 20px icon + 5px gap
+    end if
+    if isValid(ratingText) and ratingText.text <> ""
+        bounds = ratingText.boundingRect()
+        totalWidth += bounds.width
+    end if
+    return totalWidth
+end function
+
+' ============================================
+' Layout: vertical container positioning
+' ============================================
+
+' Laying out sets the overview's width, which can settle it at a new height and
+' ask for the layout again, so the second pass is left to the first one
+sub onOverviewHeightChanged()
+    if m.layingOut = true then return
+
+    layoutContainer()
+end sub
+
+sub layoutContainer()
+    m.layingOut = true
+    ' Children of the container Group are placed by hand, in the margins the
+    ' other clients use, skipping anything hidden so there are no gaps
+    yPos = 0
+
+    episodeHeader = m.top.findNode("episodeHeader")
+    if isValid(episodeHeader) and episodeHeader.visible
+        episodeHeader.translation = [0, yPos]
+        yPos += episodeHeader.boundingRect().height + 6
+    end if
+
+    logoGroup = m.top.findNode("logoGroup")
+    titleNode = m.top.findNode("title")
+    if isValid(logoGroup) and logoGroup.visible
+        logoGroup.translation = [0, yPos]
+        yPos += CLASSIC_LOGO_HEIGHT + 17 + 12
+    else if isValid(titleNode) and titleNode.visible
+        titleNode.translation = [0, yPos]
+        yPos += titleNode.boundingRect().height + 12
+    end if
+
+    metadataRow = m.top.findNode("metadataRow")
+    if isValid(metadataRow)
+        metadataRow.translation = [0, yPos]
+        yPos += CLASSIC_INFO_ROW_HEIGHT + 12
+    end if
+
+    codecRow = m.top.findNode("codecRow")
+    if isValid(codecRow) and codecRow.visible
+        yPos += 9
+        codecRow.translation = [0, yPos]
+        yPos += CLASSIC_INFO_ROW_HEIGHT
+    end if
+
+    ratingsRow = m.top.findNode("ratingsRow")
+    if isValid(ratingsRow) and ratingsRow.visible
+        ratingsRow.translation = [0, yPos]
+        yPos += ratingsRow.boundingRect().height
+    end if
+
+    taglineNode = m.top.findNode("tagline")
+    if isValid(taglineNode) and taglineNode.visible
+        yPos += 9
+        taglineNode.translation = [0, yPos]
+        yPos += taglineNode.boundingRect().height
+    end if
+
+    overviewNode = m.top.findNode("overview")
+    if isValid(overviewNode) and overviewNode.visible
+        yPos += 12
+        overviewNode.translation = [0, yPos]
+        yPos += overviewNode.boxHeight
+    end if
+
+    placePoster(yPos)
+    yPos += 23
+
+    buttonRowContainer = m.top.findNode("buttonRowContainer")
+    if isValid(buttonRowContainer)
+        yPos += 12
+        buttonRowContainer.translation = [0, yPos]
+        ' Buttons with a label that wraps make the row taller, so it is measured
+        ' rather than assumed
+        rowHeight = 0
+        if isValid(m.buttonRow) then rowHeight = m.buttonRow.boundingRect().height
+        yPos += 9 + rowHeight + 9 + 36
+    end if
+
+    metadataColumnsContainer = m.top.findNode("metadataColumnsContainer")
+    metadataColumnsBg = m.top.findNode("metadataColumnsBg")
+    if isValid(metadataColumnsContainer)
+        metadataColumnsContainer.translation = [0, yPos]
+        if isValid(metadataColumnsBg) and metadataColumnsBg.visible
+            yPos += metadataColumnsBg.height + 40
+        end if
+    end if
+
+    extrasGrid = m.top.findNode("extrasGrid")
+    if isValid(extrasGrid)
+        yPos += 8
+        extrasGrid.translation = [0, yPos]
+        yPos += extrasRowCount() * EXTRAS_ROW_HEIGHT
+    end if
+
+    if isValid(m.seerrBlock) and m.seerrBlock.visible
+        m.seerrBlock.translation = [m.seerrBlock.translation[0], yPos + 40]
+    end if
+
+    m.layingOut = false
+end sub
+
+' Seerr is asked about a title only once the library has told us what it is
+' A Seerr title arrives as a tmdb id, and the screen asks Seerr for the rest itself
+function extrasRowCount() as integer
+    if not isValid(m.extrasGrid) or not isValid(m.extrasGrid.content) then return 0
+    return m.extrasGrid.content.getChildCount()
+end function
+
+' Each extras row lands separately, so the block is placed again as the rows stack up
+sub onExtrasRowsLoaded()
+    layoutContainer()
+end sub
+
+sub onSeerrBlockChanged()
+    m.seerrBlock.visible = m.seerrBlock.hasContent
+    layoutContainer()
+end sub
+
+' Brings the focused section up near the top of the screen, the way entering the
+' extras rows brings those up
+sub scrollToSeerrBlock()
+    if not isValid(m.seerrBlock) then return
+    top = CLASSIC_CONTAINER_TOP + m.seerrBlock.translation[1] + m.seerrBlock.focusedOffset
+    scrollContentTo(-(top - 200))
+end sub
+
+sub onSeerrFocusMoved()
+    if not m.seerrBlock.isInFocusChain() then return
+    scrollToSeerrBlock()
+end sub
+
+' The poster ends level with the text beside it, but stays put rather than riding
+' off the top when there is little text to sit against. It hangs off the scrolling
+' group rather than the text container, so the foot of the text is carried across
+sub placePoster(headerBottom as integer)
+    if not isValid(m.posterMask) or not m.posterMask.visible then return
+
+    posterHeight = m.posterMask.boundingRect().height
+    yPos = CLASSIC_CONTAINER_TOP + headerBottom - posterHeight
+    if yPos < CLASSIC_CONTAINER_TOP then yPos = CLASSIC_CONTAINER_TOP
+
+    m.posterMask.translation = [m.posterMask.translation[0], yPos]
+    updatePlayedIndicator()
+end sub
+
+sub setPosterImage(itemData as object)
+    if not isValid(m.posterImage) or not isValid(m.posterMask) then return
+
+    ' A Seerr title has no library images, so it carries a finished TMDB url instead
+    if isValidAndNotEmpty(itemData._externalPosterUrl)
+        m.posterImage.uri = itemData._externalPosterUrl
+        m.posterMask.visible = true
+        return
+    end if
+
+    posterItemId = itemData.id
+    imageTag = invalid
+    posterImageType = ImageType.PRIMARY
+
+    ' Episodes: prefer Thumb (landscape screenshot), fall back to Primary
+    if isEpisode()
+        seriesSource = invalid
+        if moonfinPlugin.ParseBoolSetting(chainLookupReturn(m.global.session, "user.settings.`ui.itemdetail.useSeriesThumbnails`", false), false)
+            seriesSource = getSeriesThumbnailSource(itemData)
+        end if
+
+        if isValid(seriesSource)
+            posterItemId = seriesSource.id
+            imageTag = seriesSource.tag
+            posterImageType = seriesSource.imageType
+        else if isChainValid(itemData, "ImageTags.Thumb")
+            imageTag = itemData.ImageTags.Thumb
+            posterImageType = ImageType.THUMB
+        else if isChainValid(itemData, "ImageTags.Primary")
+            imageTag = itemData.ImageTags.Primary
+            posterImageType = ImageType.PRIMARY
+        end if
+
+        m.posterMask.maskUri = "pkg:/images/details/thumb_mask.png"
+        m.posterImage.width = 406
+        m.posterImage.height = 229
+    else
+        if isChainValid(itemData, "ImageTags.Primary")
+            imageTag = itemData.ImageTags.Primary
+        end if
+
+        m.posterMask.maskUri = "pkg:/images/details/poster_mask.png"
+        m.posterImage.width = 239
+        m.posterImage.height = 360
+    end if
+
+    ' Ends flush with the right of the content, whichever shape it is
+    posterX = CLASSIC_CONTENT_LEFT + CLASSIC_CONTENT_WIDTH - m.posterImage.width
+    m.posterMask.translation = [posterX, m.posterMask.translation[1]]
+
+    if not isValid(imageTag)
+        m.posterMask.visible = false
+        return
+    end if
+
+    params = {}
+    if isEpisode()
+        params = {
+            "maxWidth": 520,
+            "maxHeight": 293,
+            "quality": 90,
+            "Tag": imageTag
+        }
+    else
+        params = {
+            "maxWidth": 400,
+            "maxHeight": 600,
+            "quality": 90,
+            "Tag": imageTag
+        }
+    end if
+
+    serverBaseUrl = invalid
+    if isChainValid(itemData, "_serverUrl")
+        serverBaseUrl = itemData._serverUrl
+        if serverBaseUrl.right(1) = "/"
+            serverBaseUrl = serverBaseUrl.left(serverBaseUrl.len() - 1)
+        end if
+    end if
+
+    posterUrl = invalid
+    if isValid(serverBaseUrl)
+        posterUrl = buildImageURLForServer(serverBaseUrl, posterItemId, posterImageType, params)
+    else
+        posterUrl = ImageURL(posterItemId, posterImageType, params)
+    end if
+
+    if isValid(posterUrl)
+        m.posterImage.uri = posterUrl
+        m.posterMask.visible = true
+        updatePlayedIndicator()
+    else
+        m.posterMask.visible = false
+        m.playedIndicator.visible = false
+    end if
+end sub
+
+sub updatePlayedIndicator()
+    if not isValid(m.playedIndicator) then return
+
+    itemContent = m.top.itemContent
+    if not isChainValid(itemContent, "json") then return
+
+    itemData = itemContent.json
+    posterX = m.posterMask.translation[0]
+    posterY = m.posterMask.translation[1]
+    posterW = m.posterImage.width
+
+    m.playedIndicator.translation = [posterX + posterW - 42, posterY]
+    m.playedIndicator.favoriteOffset = [- (posterW - 42) + 4, 0]
+    m.playedIndicator.visible = true
+    m.playedIndicator.data = {
+        played: chainLookupReturn(itemData, "UserData.Played", false),
+        favorite: chainLookupReturn(itemData, "UserData.IsFavorite", false)
+    }
+end sub
+
+' ============================================
+' Video/Audio options setup
+' ============================================
+
+sub SetUpVideoOptions(streams)
+    videos = []
+
+    for i = 0 to streams.Count() - 1
+        if LCase(streams[i].VideoType) = VideoType.VIDEOFILE
+            videoCodecForDisplay = ""
+            codec = ""
+            if isValidAndNotEmpty(streams[i].mediaStreams)
+                for index = 0 to streams[i].mediaStreams.Count() - 1
+                    if LCase(streams[i].mediaStreams[index].Type) = MediaStreamType.VIDEO
+                        if m.performRotationCheck
+                            rotation = chainLookupReturn(streams[i].mediaStreams[index], "rotation", 0)
+                            if rotation <> 0
+                                m.global.queueManager.callFunc("setForceTranscode", PlaybackMethod.FORCETRANSCODEALLOWREMUX)
+                            end if
+                        end if
+                        exit for
+                    end if
+                end for
+                videoCodecForDisplay = streams[i].mediaStreams[0].displayTitle
+                codec = streams[i].mediaStreams[0].Codec
+            end if
+
+            videos.push({
+                "Title": streams[i].Name,
+                "Description": tr("Video"),
+                "Selected": m.top.selectedVideoStreamId = streams[i].id,
+                "StreamID": streams[i].id,
+                "video_codec": videoCodecForDisplay,
+                "codec": codec
+            })
+        end if
+    end for
+
+    m.trackData.videos = videos
+end sub
+
+sub SetUpAudioOptions(streams)
+    preferredSubtitle = m.global.queueManager.callFunc("getPreferredSubtitleTrack")
+    selectedSubtitle = isChainValid(preferredSubtitle, "StreamIndex") ? preferredSubtitle.StreamIndex : SubtitleSelection.NONE
+
+    audioTracks = []
+    subtitleTracks = [{
+        "StreamIndex": SubtitleSelection.NONE,
+        "json": {},
+        "Title": "None",
+        "Description": "None",
+        "Selected": selectedSubtitle = SubtitleSelection.NONE
+    }]
+
+    audioStreamCount = 1
+    for i = 0 to streams.Count() - 1
+        if streams[i].Type = "Audio"
+            rokuTrackName = `#uniq:${streams[i].LookupCI("Title") ?? string.EMPTY}(${audioStreamCount})`
+            audioTracks.push({ "Title": streams[i].displayTitle, "Description": streams[i].Title, "Selected": m.top.selectedAudioStreamIndex = i, "StreamIndex": i, "RokuTrackName": rokuTrackName, "Language": streams[i].Language, "Codec": streams[i].Codec, "Channels": streams[i].Channels })
+            audioStreamCount++
+        end if
+        if streams[i].Type = "Subtitle"
+            subtitleTracks.push({ "Title": streams[i].displayTitle, "json": streams[i], "Description": streams[i].Title, "Selected": selectedSubtitle = streams[i].index, "StreamIndex": i })
+        end if
+    end for
+
+    m.trackData.audios = audioTracks
+    m.trackData.subtitles = subtitleTracks
+end sub
+
+sub SetDefaultAudioTrack(itemData)
+    preferredAudioTrackIndex = m.global.queueManager.callFunc("getPreferredAudioTrackIndex")
+    preferredAudioTrackName = m.global.queueManager.callFunc("getPreferredAudioTrackName")
+    preferredLanguage = getPreferredLanguage("playback.audioPreferredLanguage")
+    firstAudioTrack = -1
+
+    defaultAudioTrackIndex = getDefaultAudioTrackIndex(itemData.mediaStreams)
+    defaultAudioTrackName = string.EMPTY
+
+    if preferredAudioTrackIndex < 0 and chainLookupReturn(m.global.session, "user.settings.`playback.playDefaultAudioTrack`", false)
+        preferredAudioTrackIndex = defaultAudioTrackIndex
+    end if
+
+    audioStreamCount = 1
+    for i = 0 to itemData.mediaStreams.Count() - 1
+        if itemData.mediaStreams[i].Type = "Audio"
+            rokuTrackName = `#uniq:${itemData.mediaStreams[i].LookupCI("Title") ?? string.EMPTY}(${audioStreamCount})`
+
+            if firstAudioTrack < 0 then firstAudioTrack = i
+            if i = defaultAudioTrackIndex then defaultAudioTrackName = rokuTrackName
+
+            if i = preferredAudioTrackIndex
+                m.global.queueManager.callFunc("setPreferredAudioTrackName", rokuTrackName)
+                preferredAudioTrackName = rokuTrackName
+            end if
+
+            if preferredAudioTrackIndex < 0 and isValid(preferredLanguage)
+                if isStringEqual(chainLookupReturn(itemData.mediaStreams[i], "Language", invalid), preferredLanguage)
+                    m.top.selectedAudioStreamIndex = i
+                    m.global.queueManager.callFunc("setPreferredAudioTrackName", rokuTrackName)
+                    return
+                end if
+            end if
+
+            if isStringEqual(rokuTrackName, preferredAudioTrackName)
+                m.top.selectedAudioStreamIndex = i
+                return
+            end if
+
+            audioStreamCount++
+        end if
+    end for
+
+    if defaultAudioTrackIndex > -1
+        m.top.selectedAudioStreamIndex = defaultAudioTrackIndex
+        m.global.queueManager.callFunc("setPreferredAudioTrackName", defaultAudioTrackName)
+        return
+    end if
+
+    if firstAudioTrack > -1
+        m.top.selectedAudioStreamIndex = firstAudioTrack
+    end if
+end sub
+
+' ============================================
+' Button management
+' ============================================
+
+sub updateButtonVisibility(itemData as object)
+    m.buttonRow.removeChildrenIndex(m.buttonRow.getChildCount(), 0)
+    m.buttonGroups = []
+
+    addButtons(itemData)
+    centerButtonRow()
+
+    if m.buttonGroups.count() > 0
+        m.currentButtonIndex = 0
+        timer = CreateObject("roSGNode", "Timer")
+        timer.duration = 0.05
+        timer.repeat = false
+        timer.observeField("fire", "focusFirstButton")
+        timer.control = "start"
+        m.focusTimer = timer
+    end if
+end sub
+
+sub centerButtonRow()
+    centerButtonRowInContainer(m.buttonRow, m.buttonGroups.count(), 160, 50, 96)
+end sub
+
+sub focusFirstButton()
+    if m.buttonGroups.count() > 0
+        m.buttonGroups[0].setFocus(true)
+        highlightButton(0)
+    end if
+end sub
+
+sub focusFirstVisibleButton()
+    firstVisibleIndex = 0
+    for i = 0 to m.buttonGroups.count() - 1
+        if m.buttonGroups[i].visible
+            firstVisibleIndex = i
+            exit for
+        end if
+    end for
+
+    if firstVisibleIndex < m.buttonGroups.count()
+        m.currentButtonIndex = firstVisibleIndex
+        m.buttonGroups[firstVisibleIndex].setFocus(true)
+        highlightButton(firstVisibleIndex)
+        setLastFocus(m.buttonGroups[firstVisibleIndex])
+    end if
+end sub
+
+sub addButtons(itemData as object)
+    if isSeries()
+        addSeriesButtons()
+        return
+    end if
+
+    positionTicks = 0&
+    if isValid(itemData.UserData) and itemData.UserData.PlaybackPositionTicks > 0
+        positionTicks = itemData.UserData.PlaybackPositionTicks
+    end if
+    hasProgress = positionTicks > 0
+
+    if hasProgress
+        addButton({
+            icon: "pkg:/images/icons/play.png",
+            label: tr("Resume"),
+            detail: getFormattedRuntime(positionTicks),
+            action: "resume",
+            id: "resumeButton"
+        })
+    end if
+
+    ' With a resume point on offer the second button starts over instead, which
+    ' is how the other clients pair the two
+    addButton({
+        icon: hasProgress ? "pkg:/images/icons/restart.png" : "pkg:/images/icons/play.png",
+        label: hasProgress ? tr("Restart") : tr("Play"),
+        action: hasProgress ? "restart" : "play",
+        id: hasProgress ? "restartButton" : "playButton"
+    })
+
+    ' Pushed in the catalogue's order, since that is what decides where a button
+    ' the user never placed ends up
+    candidates = []
+
+    if isValid(itemData.MediaSources) and itemData.MediaSources.Count() > 1
+        candidates.push({ id: "version", config: {
+            icon: "pkg:/images/details/version.png",
+            label: tr("Versions"),
+            action: "versionTrack",
+            id: "versionButton"
+        } })
+    end if
+
+    if isValid(itemData.MediaStreams)
+        audioCount = 0
+        for each stream in itemData.MediaStreams
+            if stream.Type = "Audio" then audioCount++
+        end for
+        if audioCount > 1
+            candidates.push({ id: "audio", config: {
+                icon: "pkg:/images/icons/audio_track.png",
+                label: tr("Audio"),
+                action: "audioTrack",
+                id: "audioTrackButton"
+            } })
+        end if
+    end if
+
+    candidates.push({ id: "subtitles", config: {
+        icon: "pkg:/images/details/subtitle.png",
+        label: tr("Subtitle"),
+        action: "subtitleTrack",
+        id: "subtitleButton"
+    } })
+
+    if not isEpisode() and m.top.trailerAvailable
+        candidates.push({ id: "trailer", config: {
+            icon: "pkg:/images/icons/trailer.png",
+            label: tr("Trailer"),
+            action: "trailer",
+            id: "trailerButton"
+        } })
+    end if
+
+    isWatched = chainLookupReturn(itemData, "UserData.Played", false)
+    candidates.push({ id: "watched", config: {
+        icon: "pkg:/images/icons/watched.png",
+        label: isWatched ? tr("Watched") : tr("Unwatched"),
+        activeInk: isWatched ? CLASSIC_WATCHED_INK : "",
+        action: "watched",
+        id: "watchedButton"
+    } })
+
+    isFavorited = chainLookupReturn(itemData, "UserData.IsFavorite", false)
+    candidates.push({ id: "favorite", config: {
+        icon: "pkg:/images/icons/favorite.png",
+        label: isFavorited ? tr("Favorited") : tr("Favorite"),
+        activeInk: isFavorited ? CLASSIC_FAVORITE_INK : "",
+        action: "favorite",
+        id: "favoriteButton"
+    } })
+
+    if isEpisode()
+        candidates.push({ id: "goToSeries", config: {
+            icon: "pkg:/images/icons/go_to_series.png",
+            label: tr("Go to Series"),
+            action: "goToSeries",
+            id: "goToSeriesButton"
+        } })
+    end if
+
+    addArrangedButtons(candidates)
+end sub
+
+sub addArrangedButtons(candidates as object)
+    order = m.global.session.user.settings[DETAIL_ORDER_SETTING]
+    hidden = m.global.session.user.settings[DETAIL_HIDDEN_SETTING]
+
+    for each candidate in seerrButtons.Candidates(m.seerrDetails, seerrMediaType())
+        candidates.push(candidate)
+    end for
+
+    for each candidate in buttonLayout.Arrange(candidates, order, hidden)
+        addButton(candidate.config)
+    end for
+end sub
+
+' Asking Seerr for the title is its own flow, with dialogs of its own, so it is handed off
+' Seerr has taken the request, so the buttons are rebuilt off a fresh payload
+sub addSeriesButtons()
+    hasResume = m.top.displayResumeButton
+    if hasResume
+        addButton({
+            icon: "pkg:/images/icons/play.png",
+            label: tr("Resume"),
+            action: "seriesResume",
+            id: "resumeButton"
+        })
+    end if
+
+    addButton({
+        icon: hasResume ? "pkg:/images/icons/restart.png" : "pkg:/images/icons/play.png",
+        label: hasResume ? tr("Restart") : tr("Play"),
+        action: "seriesPlay",
+        id: "playButton"
+    })
+
+    isWatched = chainLookupReturn(m.top.itemContent, "json.UserData.Played", false)
+    isFavorited = chainLookupReturn(m.top.itemContent, "json.UserData.IsFavorite", false)
+
+    candidates = []
+    candidates.push({ id: "shuffle", config: {
+        icon: "pkg:/images/icons/shuffle.png",
+        label: tr("Shuffle"),
+        action: "seriesShuffle",
+        id: "shuffleButton"
+    } })
+
+    if m.top.trailerAvailable
+        candidates.push({ id: "trailer", config: {
+            icon: "pkg:/images/icons/trailer.png",
+            label: tr("Trailer"),
+            action: "trailer",
+            id: "trailerButton"
+        } })
+    end if
+
+    candidates.push({ id: "watched", config: {
+        icon: "pkg:/images/icons/watched.png",
+        label: isWatched ? tr("Watched") : tr("Unwatched"),
+        activeInk: isWatched ? CLASSIC_WATCHED_INK : "",
+        action: "watched",
+        id: "watchedButton"
+    } })
+
+    candidates.push({ id: "favorite", config: {
+        icon: "pkg:/images/icons/favorite.png",
+        label: isFavorited ? tr("Favorited") : tr("Favorite"),
+        activeInk: isFavorited ? CLASSIC_FAVORITE_INK : "",
+        action: "favorite",
+        id: "favoriteButton"
+    } })
+
+    addArrangedButtons(candidates)
+end sub
+
+sub addButton(config as object)
+    ' A Seerr title has nothing in the library behind it, so only the actions that reach
+    ' Seerr itself are worth offering
+    if m.top.seerrOnly and Left(config.id, 5) <> "seerr" then return
+    buttonGroup = detailButtons.createButton(config, m.buttonGroups.count())
+    buttonGroup.observeField("focusedChild", "onButtonFocusChanged")
+    m.buttonRow.appendChild(buttonGroup)
+    m.buttonGroups.push(buttonGroup)
+end sub
+
+sub onButtonFocusChanged(event as object)
+    button = event.getRoSGNode()
+    if button <> invalid and button.buttonIndex <> invalid
+        if button.hasFocus() or button.isInFocusChain()
+            m.currentButtonIndex = button.buttonIndex
+            highlightButton(m.currentButtonIndex)
+        end if
+    end if
+end sub
+
+sub highlightButton(index as integer)
+    detailButtons.highlight(index, m.buttonGroups)
+end sub
+
+sub unhighlightAllButtons()
+    detailButtons.unhighlightAll(m.buttonGroups)
+end sub
+
+' ============================================
+' Button actions
+' ============================================
+
+sub handleButtonSelect()
+    if m.currentButtonIndex < 0 or m.currentButtonIndex >= m.buttonGroups.count() then return
+
+    buttonGroup = m.buttonGroups[m.currentButtonIndex]
+    if buttonGroup = invalid then return
+
+    buttonAction = buttonGroup.buttonAction
+    if buttonAction = invalid then return
+
+    if Left(buttonAction, 5) = "seerr"
+        startSeerrRequest(buttonAction)
+        return
+    end if
+
+    m.loadStatus = ViewLoadStatus.RELOAD
+
+    if buttonAction = "resume"
+        startLoadingSpinner()
+        itemContent = m.top.itemContent
+        if itemContent <> invalid and isValid(itemContent.json)
+            playbackPositionTicks = chainLookup(itemContent, "json.UserData.PlaybackPositionTicks") ?? 0
+            itemContent.startingPoint = playbackPositionTicks
+            itemContent.id = m.top.selectedVideoStreamId
+            itemContent.selectedAudioStreamIndex = m.top.selectedAudioStreamIndex
+            m.global.queueManager.callFunc("clear")
+            m.global.queueManager.callFunc("push", itemContent)
+            m.global.queueManager.callFunc("playQueue")
+        end if
+    else if buttonAction = "play"
+        m.top.buttonSelected = "play-button"
+    else if buttonAction = "restart"
+        m.top.buttonSelected = "playFromBeginning-button"
+    else if buttonAction = "trailer"
+        m.top.buttonSelected = "trailer-button"
+    else if buttonAction = "audioTrack"
+        if isValid(m.trackData.audios)
+            m.audioSelector.audioTracks = m.trackData.audios
+            m.audioSelector.visible = true
+            m.audioSelector.setFocus(true)
+            setLastFocus(m.audioSelector)
+        end if
+    else if buttonAction = "subtitleTrack"
+        subtitleTracks = invalid
+        if isValid(m.trackData)
+            subtitleTracks = m.trackData.subtitles
+        end if
+
+        if not isValid(subtitleTracks)
+            preferredSubtitle = m.global.queueManager.callFunc("getPreferredSubtitleTrack")
+            selectedSubtitle = isChainValid(preferredSubtitle, "StreamIndex") ? preferredSubtitle.StreamIndex : SubtitleSelection.NONE
+            subtitleTracks = [{
+                "StreamIndex": SubtitleSelection.NONE,
+                "json": {},
+                "Title": "None",
+                "Description": "None",
+                "Selected": selectedSubtitle = SubtitleSelection.NONE
+            }]
+        end if
+
+        m.subtitleSelector.subtitleTracks = subtitleTracks
+        m.subtitleSelector.visible = true
+        m.subtitleSelector.setFocus(true)
+        setLastFocus(m.subtitleSelector)
+    else if buttonAction = "watched"
+        toggleWatched()
+    else if buttonAction = "goToSeries"
+        m.top.buttonSelected = "goToSeries-button"
+    else if buttonAction = "favorite"
+        toggleFavorite()
+    else if buttonAction = "versionTrack"
+        if isValid(m.trackData.videos)
+            m.versionSelector.videoTracks = m.trackData.videos
+            m.versionSelector.visible = true
+            m.versionSelector.setFocus(true)
+            setLastFocus(m.versionSelector)
+        end if
+    else if buttonAction = "seriesResume"
+        itemContent = m.top.itemContent
+        if isValid(itemContent)
+            itemContent.quickplayFromResume = true
+            m.top.quickPlayNode = itemContent
+        end if
+    else if buttonAction = "seriesPlay"
+        m.top.playSeriesFromStart = not m.top.playSeriesFromStart
+    else if buttonAction = "seriesShuffle"
+        if isValid(m.top.itemContent) and isValid(m.top.itemContent.id)
+            m.getShuffleEpisodesTask.showID = m.top.itemContent.id
+            m.getShuffleEpisodesTask.observeField("data", "onShuffleEpisodeDataLoaded")
+            m.getShuffleEpisodesTask.control = "RUN"
+        end if
+    end if
+end sub
+
+sub toggleWatched()
+    itemContent = m.top.itemContent
+    if itemContent = invalid or not isValid(itemContent.json) then return
+
+    itemData = itemContent.json
+    currentWatched = false
+    if hasValidProperties(itemData, "UserData", "Played")
+        currentWatched = itemData.UserData.Played
+    end if
+
+    newWatchedState = not currentWatched
+
+    itemServerInfo = getServerInfoFromItem(itemContent)
+    taskParams = {}
+
+    if newWatchedState
+        date = CreateObject("roDateTime")
+        dateStr = date.ToISOString()
+        taskParams["DatePlayed"] = dateStr
+        taskParams["PlaybackPositionTicks"] = 0
+        if isValid(itemServerInfo) and isValidAndNotEmpty(itemServerInfo.serverUrl)
+            taskParams["serverData"] = {
+                serverUrl: itemServerInfo.serverUrl,
+                userId: itemServerInfo.userId,
+                authToken: itemServerInfo.authToken
+            }
+        end if
+        m.playstateTask.status = "markPlayed"
+        m.playstateTask.itemId = itemData.id
+        m.playstateTask.params = taskParams
+        m.playstateTask.control = TaskControl.RUN
+        itemData.UserData.PlaybackPositionTicks = 0
+    else
+        if isValid(itemServerInfo) and isValidAndNotEmpty(itemServerInfo.serverUrl)
+            taskParams["serverData"] = {
+                serverUrl: itemServerInfo.serverUrl,
+                userId: itemServerInfo.userId,
+                authToken: itemServerInfo.authToken
+            }
+        end if
+        m.playstateTask.status = "unmarkPlayed"
+        m.playstateTask.itemId = itemData.id
+        m.playstateTask.params = taskParams
+        m.playstateTask.control = TaskControl.RUN
+    end if
+
+    itemData.UserData.Played = newWatchedState
+    itemContent.watched = newWatchedState
+
+    updatePlayedIndicator()
+
+    watchedText = m.top.findNode("watchedButtonText")
+    if isValid(watchedText)
+        watchedText.text = tr("Unwatched")
+        if newWatchedState
+            watchedText.text = tr("Watched")
+        end if
+    end if
+
+    if m.buttonGroups.count() > 0 and m.currentButtonIndex >= 0 and m.currentButtonIndex < m.buttonGroups.count()
+        highlightButton(m.currentButtonIndex)
+    end if
+end sub
+
+sub toggleFavorite()
+    itemContent = m.top.itemContent
+    if itemContent = invalid or not isValid(itemContent.json) then return
+
+    itemData = itemContent.json
+    currentFavorite = false
+    if hasValidProperties(itemData, "UserData", "IsFavorite")
+        currentFavorite = itemData.UserData.IsFavorite
+    end if
+
+    newFavoriteState = not currentFavorite
+
+    itemServerInfo = getServerInfoFromItem(itemContent)
+    if isValid(itemServerInfo) and isValidAndNotEmpty(itemServerInfo.serverUrl)
+        m.favoriteTask.serverData = {
+            serverUrl: itemServerInfo.serverUrl,
+            userId: itemServerInfo.userId,
+            authToken: itemServerInfo.authToken
+        }
+    else
+        m.favoriteTask.serverData = invalid
+    end if
+
+    if newFavoriteState
+        m.favoriteTask.favTask = "favorite"
+    else
+        m.favoriteTask.favTask = "unfavorite"
+    end if
+    m.favoriteTask.itemId = itemData.id
+    m.favoriteTask.control = TaskControl.RUN
+
+    if not isValid(itemData.UserData)
+        itemData.UserData = {}
+    end if
+    itemData.UserData.IsFavorite = newFavoriteState
+    itemContent.favorite = newFavoriteState
+
+    updatePlayedIndicator()
+
+    favoriteText = m.top.findNode("favoriteButtonText")
+    if isValid(favoriteText)
+        favoriteText.text = tr("Favorite")
+        if newFavoriteState
+            favoriteText.text = tr("Favorited")
+        end if
+    end if
+
+    if m.buttonGroups.count() > 0 and m.currentButtonIndex >= 0 and m.currentButtonIndex < m.buttonGroups.count()
+        highlightButton(m.currentButtonIndex)
+    end if
+end sub
+
+' ============================================
+' Audio/Subtitle/Video option handlers
+' ============================================
+
+sub onAudioStreamIndexChanged()
+    if m.audioSelector.audioStreamIndex <> m.top.selectedAudioStreamIndex
+        m.top.selectedAudioStreamIndex = m.audioSelector.audioStreamIndex
+        m.global.queueManager.callFunc("setPreferredAudioTrackIndex", m.audioSelector.audioStreamIndex)
+        m.global.queueManager.callFunc("setPreferredAudioTrackName", m.audioSelector.audioStreamName)
+
+        if isValid(m.top.itemContent)
+            m.top.itemContent.selectedAudioStreamIndex = m.top.selectedAudioStreamIndex
+        end if
+
+        if isValid(m.trackData.audios)
+            for each track in m.trackData.audios
+                track.Selected = (track.StreamIndex = m.top.selectedAudioStreamIndex)
+            end for
+        end if
+    end if
+end sub
+
+sub onSubtitleStreamChanged()
+    if isValid(m.subtitleSelector.subtitleStream)
+        m.global.queueManager.callFunc("setPreferredSubtitleTrack", m.subtitleSelector.subtitleStream)
+        updateSubtitleTrackSelection(m.subtitleSelector.subtitleStream)
+    end if
+end sub
+
+sub onSubtitleDownloadRequested()
+    if not m.subtitleSelector.downloadRequested then return
+
+    m.subtitleSelector.downloadRequested = false
+    itemId = chainLookup(m.top, "itemContent.id")
+    if not isValidAndNotEmpty(itemId) then return
+
+    preferredSubtitle = m.global.queueManager.callFunc("getPreferredSubtitleTrack")
+    subtitleIndex = isChainValid(preferredSubtitle, "StreamIndex") ? preferredSubtitle.StreamIndex : SubtitleSelection.NONE
+
+    m.subtitleDownloadDialog.itemId = itemId
+    m.subtitleDownloadDialog.language = remoteSubtitles.LanguageFor(chainLookupReturn(m.top, "itemContent.json.mediaStreams", []), subtitleIndex, m.top.selectedAudioStreamIndex)
+    m.subtitleDownloadDialog.visible = true
+    m.subtitleDownloadDialog.setFocus(true)
+    m.subtitleDownloadDialog.callFunc("startSearch")
+end sub
+
+sub onAudioSelectorVisibleChanged()
+    if not m.audioSelector.visible
+        restoreFocusToButtons()
+    end if
+end sub
+
+sub onSubtitleDownloadDialogVisibleChanged()
+    if not m.subtitleDownloadDialog.visible
+        restoreFocusToButtons()
+    end if
+end sub
+
+sub onSubtitleSelectorVisibleChanged()
+    if not m.subtitleSelector.visible
+        restoreFocusToButtons()
+    end if
+end sub
+
+sub onVersionSelectorVisibleChanged()
+    if not m.versionSelector.visible
+        restoreFocusToButtons()
+    end if
+end sub
+
+sub onVersionSelected()
+    newStreamId = m.versionSelector.videoStreamId
+    if newStreamId <> m.top.selectedVideoStreamId
+        m.top.selectedVideoStreamId = newStreamId
+        m.currentCodec = m.versionSelector.codec
+        m.top.unobservefield("itemContent")
+        itemData = m.top.itemContent.json
+        for each mediaSource in itemData.mediaSources
+            if mediaSource.id = newStreamId
+                itemData.mediaStreams = []
+                for i = 0 to mediaSource.mediaStreams.Count() - 1
+                    itemData.mediaStreams.push(mediaSource.mediaStreams[i])
+                end for
+                if isValid(mediaSource.RunTimeTicks)
+                    itemData.RunTimeTicks = mediaSource.RunTimeTicks
+                end if
+                SetDefaultAudioTrack(itemData)
+                SetUpAudioOptions(itemData.mediaStreams)
+                exit for
+            end if
+        end for
+        m.top.itemContent.json = itemData
+        m.top.observeField("itemContent", "itemContentChanged")
+
+        populateRuntime(itemData)
+        populateStreamInfo(itemData)
+        layoutMetadataRow()
+        layoutContainer()
+
+        updateVideoTrackSelection(newStreamId)
+
+        if isStringEqual(PlaybackMethod.FORCETRANSCODEDISABLEREMUX, m.global.session.user.settings["playback.media.forceTranscode"] ?? PlaybackMethod.PLAYNORMALLY)
+            m.global.queueManager.callFunc("setForceTranscode", PlaybackMethod.FORCETRANSCODEDISABLEREMUX, m.currentCodec)
+        end if
+    end if
+end sub
+
+sub updateSubtitleTrackSelection(selectedSubtitle as object)
+    if not isValid(m.trackData.subtitles) then return
+
+    selectedIndex = chainLookupReturn(selectedSubtitle, "StreamIndex", SubtitleSelection.NONE)
+    for each track in m.trackData.subtitles
+        track.Selected = track.StreamIndex = selectedIndex
+    end for
+end sub
+
+sub updateVideoTrackSelection(selectedStreamId as string)
+    if not isValid(m.trackData.videos) then return
+
+    for each track in m.trackData.videos
+        track.Selected = track.StreamID = selectedStreamId
+    end for
+end sub
+
+sub restoreFocusToButtons()
+    ' The picker hands straight over to the downloader, so the screen only takes
+    ' focus back once nothing is left open over it
+    if isValid(openTrackPicker()) then return
+
+    if m.buttonGroups.count() > 0 and m.currentButtonIndex >= 0 and m.currentButtonIndex < m.buttonGroups.count()
+        m.buttonGroups[m.currentButtonIndex].setFocus(true)
+        m.top.lastFocus = m.buttonGroups[m.currentButtonIndex]
+        setLastFocus(m.buttonGroups[m.currentButtonIndex])
+    end if
+end sub
+
+' ============================================
+' Overview scrollability check
+' ============================================
+
+function overviewCanScroll() as boolean
+    return isValid(m.overview) and m.overview.visible and m.overview.canToggle
+end function
+
+' ============================================
+' Smooth page scrolling
+' ============================================
+
+sub scrollContentTo(targetY as integer)
+    if m.scrollAnim = invalid or m.scrollInterp = invalid or m.scrollableContent = invalid then return
+    m.scrollAnim.control = "stop"
+    m.scrollInterp.keyValue = [[0, m.currentScrollY], [0, targetY]]
+    m.currentScrollY = targetY
+    m.scrollAnim.control = "start"
+end sub
+
+sub onExtrasRowChanged()
+    ' Only scroll the page when first entering the extras area.
+    ' The RowList's built-in floatingFocus handles row-level scrolling.
+    if m.extrasGrid = invalid or not m.extrasGrid.isInFocusChain() then return
+    if m.currentScrollY <> -500
+        scrollContentTo(-500)
+    end if
+end sub
+
+' ============================================
+' Key event handling
+' ============================================
+
+' Whichever track picker is still on screen, if either is
+function openTrackPicker() as dynamic
+    if isValid(m.subtitleSelector) and m.subtitleSelector.visible then return m.subtitleSelector
+    if isValid(m.audioSelector) and m.audioSelector.visible then return m.audioSelector
+    if isValid(m.subtitleDownloadDialog) and m.subtitleDownloadDialog.visible then return m.subtitleDownloadDialog
+
+    return invalid
+end function
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+
+    ' A picker left open across a screensaver can come back without focus, which
+    ' would leave this screen answering the remote from behind it
+    picker = openTrackPicker()
+    if isValid(picker)
+        picker.setFocus(true)
+        return true
+    end if
+
+    if key = KeyCode.UP and isValid(m.overview) and m.overview.isInFocusChain()
+        m.top.lastFocus = m.overview
+        setLastFocus(m.overview)
+        return FocusNav(m.top)
+    end if
+
+    if key = KeyCode.DOWN and isValid(m.overview) and m.overview.isInFocusChain()
+        if m.buttonGroups.count() > 0
+            m.buttonGroups[m.currentButtonIndex].setFocus(true)
+            m.top.lastFocus = m.buttonGroups[m.currentButtonIndex]
+            highlightButton(m.currentButtonIndex)
+            setLastFocus(m.buttonGroups[m.currentButtonIndex])
+        end if
+        return true
+    end if
+
+    if key = KeyCode.UP and m.buttonGroups.count() > 0
+        for each btn in m.buttonGroups
+            if btn.hasFocus() or btn.isInFocusChain()
+                unhighlightAllButtons()
+                if overviewCanScroll()
+                    m.overview.setFocus(true)
+                    m.top.lastFocus = m.overview
+                    setLastFocus(m.overview)
+                else
+                    m.top.lastFocus = m.buttonGroups[m.currentButtonIndex]
+                    return FocusOverhang(m.top)
+                end if
+                return true
+            end if
+        end for
+    end if
+
+    ' The Seerr block sits below the extras rows, so the two hand focus back and forth
+    if isValid(m.seerrBlock) and m.seerrBlock.visible
+        if key = KeyCode.DOWN and isValid(m.extrasGrid) and m.extrasGrid.isInFocusChain()
+            lastRow = 0
+            if isValid(m.extrasGrid.content) then lastRow = m.extrasGrid.content.getChildCount() - 1
+            if m.extrasGrid.itemFocused >= lastRow and m.seerrBlock.callFunc("focusFirst")
+                setLastFocus(m.seerrBlock)
+                m.top.lastFocus = m.seerrBlock
+                scrollToSeerrBlock()
+                return true
+            end if
+        end if
+
+        if key = KeyCode.UP and m.seerrBlock.isInFocusChain()
+            if isValid(m.extrasGrid) and isValid(m.extrasGrid.content)
+                m.extrasGrid.setFocus(true)
+                setLastFocus(m.extrasGrid)
+                m.top.lastFocus = m.extrasGrid
+                scrollContentTo(-500)
+            else if m.buttonGroups.count() > 0
+                m.buttonGroups[m.currentButtonIndex].setFocus(true)
+                m.top.lastFocus = m.buttonGroups[m.currentButtonIndex]
+                highlightButton(m.currentButtonIndex)
+                setLastFocus(m.buttonGroups[m.currentButtonIndex])
+                scrollContentTo(0)
+            end if
+            return true
+        end if
+    end if
+
+    if key = KeyCode.UP and m.extrasGrid <> invalid and m.extrasGrid.isInFocusChain()
+        if m.extrasGrid.itemFocused = 0
+            if m.buttonGroups.count() > 0
+                m.buttonGroups[m.currentButtonIndex].setFocus(true)
+                m.top.lastFocus = m.buttonGroups[m.currentButtonIndex]
+                highlightButton(m.currentButtonIndex)
+                setLastFocus(m.buttonGroups[m.currentButtonIndex])
+                scrollContentTo(0)
+                return true
+            end if
+        end if
+        return false
+    end if
+
+    isButtonFocused = false
+    if m.buttonGroups.count() > 0
+        for each btn in m.buttonGroups
+            if btn.hasFocus() or btn.isInFocusChain()
+                isButtonFocused = true
+                exit for
+            end if
+        end for
+    end if
+
+    if isButtonFocused
+        if key = KeyCode.LEFT
+            if m.currentButtonIndex > 0
+                newIndex = m.currentButtonIndex - 1
+                m.buttonGroups[newIndex].setFocus(true)
+                m.top.lastFocus = m.buttonGroups[newIndex]
+                m.currentButtonIndex = newIndex
+                highlightButton(newIndex)
+                setLastFocus(m.buttonGroups[newIndex])
+            else
+                return FocusSidebar(m.top)
+            end if
+            return true
+        else if key = KeyCode.RIGHT
+            if m.currentButtonIndex < m.buttonGroups.count() - 1
+                newIndex = m.currentButtonIndex + 1
+                m.buttonGroups[newIndex].setFocus(true)
+                m.top.lastFocus = m.buttonGroups[newIndex]
+                m.currentButtonIndex = newIndex
+                highlightButton(newIndex)
+                setLastFocus(m.buttonGroups[newIndex])
+            end if
+            return true
+        else if key = KeyCode.OK
+            handleButtonSelect()
+            return true
+        else if key = KeyCode.DOWN
+            if m.extrasGrid <> invalid and m.extrasGrid.content <> invalid
+                m.extrasGrid.setFocus(true)
+                m.top.lastFocus = m.extrasGrid
+                setLastFocus(m.extrasGrid)
+                unhighlightAllButtons()
+                scrollContentTo(-500)
+            else if isValid(m.seerrBlock) and m.seerrBlock.visible and m.seerrBlock.callFunc("focusFirst")
+                m.top.lastFocus = m.seerrBlock
+                setLastFocus(m.seerrBlock)
+                unhighlightAllButtons()
+                scrollToSeerrBlock()
+            end if
+            return true
+        end if
+    end if
+
+    if key = KeyCode.BACK
+        if m.extrasGrid <> invalid and m.extrasGrid.isInFocusChain()
+            if m.buttonGroups.count() > 0
+                m.buttonGroups[m.currentButtonIndex].setFocus(true)
+                m.top.lastFocus = m.buttonGroups[m.currentButtonIndex]
+                highlightButton(m.currentButtonIndex)
+                setLastFocus(m.buttonGroups[m.currentButtonIndex])
+            end if
+            scrollContentTo(0)
+            return true
+        end if
+
+        if isValid(m.overview) and m.overview.isInFocusChain()
+            if m.buttonGroups.count() > 0
+                m.buttonGroups[m.currentButtonIndex].setFocus(true)
+                m.top.lastFocus = m.buttonGroups[m.currentButtonIndex]
+                highlightButton(m.currentButtonIndex)
+                setLastFocus(m.buttonGroups[m.currentButtonIndex])
+            end if
+            return true
+        end if
+
+        if isValid(m.themeMusicPlayer)
+            m.themeMusicPlayer.callFunc("stopMusic")
+        end if
+
+        return false
+    end if
+
+    if key = KeyCode.PLAY and m.extrasGrid <> invalid and m.extrasGrid.hasFocus()
+        if isValid(m.extrasGrid.focusedItem)
+            m.top.quickPlayNode = m.extrasGrid.focusedItem
+            return true
+        end if
+        return false
+    end if
+
+    return false
+end function

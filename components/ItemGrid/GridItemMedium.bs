@@ -4,13 +4,16 @@ import "pkg:/source/enums/PosterLoadStatus.bs"
 import "pkg:/source/enums/String.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/themeApply.bs"
+
+const PLACEHOLDER_MAX_SIZE = 30
+const PLACEHOLDER_MIN_SIZE = 16
 
 sub init()
     m.itemPoster = m.top.findNode("itemPoster")
     m.itemIcon = m.top.findNode("itemIcon")
     m.posterText = m.top.findNode("posterText")
     m.posterText.font.size = 30
-    m.backdrop = m.top.findNode("backdrop")
     m.playedIndicator = m.top.findNode("playedIndicator")
 
     m.title = m.top.findNode("title")
@@ -40,6 +43,8 @@ sub init()
     if m.topParent.imageDisplayMode <> invalid
         m.itemPoster.loadDisplayMode = m.topParent.imageDisplayMode
     end if
+
+    themeApply.ApplyToItem(m.top)
 end sub
 
 sub onHeightChanged()
@@ -55,7 +60,6 @@ sub onHeightChanged()
         calculatedHeight -= 12
     end if
 
-    m.backdrop.height = calculatedHeight
     m.itemPoster.height = calculatedHeight
     m.posterText.height = calculatedHeight
     m.title.translation = [0, calculatedHeight + 30]
@@ -65,18 +69,22 @@ sub onHeightChanged()
 end sub
 
 sub onWidthChanged()
-    m.backdrop.width = m.top.width
     m.itemPoster.width = m.top.width
     m.posterText.width = m.top.width
     m.title.maxWidth = m.top.width
     m.itemTextExtra.maxWidth = m.top.width
-    m.playedIndicator.translation = [m.top.width - m.playedIndicator.width, 22]
-    m.itemIconBackground.translation = [m.top.width - m.itemIconBackground.width, m.itemIconBackground.translation[1]]
+
+    ' Only update translations if child nodes are fully initialized
+    if isValid(m.playedIndicator) and isValid(m.playedIndicator.width)
+        m.playedIndicator.translation = [m.top.width - m.playedIndicator.width, 22]
+    end if
+
+    if isValid(m.itemIconBackground) and isValid(m.itemIconBackground.width) and isValid(m.itemIconBackground.translation)
+        m.itemIconBackground.translation = [m.top.width - m.itemIconBackground.width, m.itemIconBackground.translation[1]]
+    end if
 end sub
 
 sub itemContentChanged()
-    m.backdrop.blendColor = ColorPalette.ELEMENTBACKGROUND
-
     m.title.visible = false
     m.itemTextExtra.visible = false
 
@@ -138,29 +146,70 @@ sub itemContentChanged()
         end if
     end if
 
-    m.itemIconBackground.visible = m.itemIcon.uri <> string.EMPTY
+    showLegacyTypeIcon = m.itemIcon.uri <> string.EMPTY
+    if isStringEqual(itemData.LookupCI("type"), ItemType.FOLDER)
+        showLegacyTypeIcon = false
+    end if
+
+    m.itemIconBackground.visible = showLegacyTypeIcon
 
     if isChainValid(itemData, "imageDimensions")
         imageDimensions = itemData.imageDimensions
         m.itemPoster.width = imageDimensions[0]
-        m.backdrop.width = imageDimensions[0]
         m.posterText.width = imageDimensions[0]
 
         m.title.maxWidth = imageDimensions[0] - 16
         m.itemTextExtra.maxWidth = imageDimensions[0] - 16
 
         m.itemPoster.height = imageDimensions[1]
-        m.backdrop.height = imageDimensions[1]
         m.posterText.height = imageDimensions[1] + 40
+
+        ' A card with no artwork falls back to its title, which has to come down
+        ' in size along with the card or it runs past the edges
+        placeholderSize = Int(imageDimensions[0] / 8)
+        if placeholderSize > PLACEHOLDER_MAX_SIZE then placeholderSize = PLACEHOLDER_MAX_SIZE
+        if placeholderSize < PLACEHOLDER_MIN_SIZE then placeholderSize = PLACEHOLDER_MIN_SIZE
+        m.posterText.font.size = placeholderSize
 
         m.playedIndicator.translation = [imageDimensions[0] - 60, m.playedIndicator.translation[1]]
         m.title.translation = [m.title.translation[0], imageDimensions[1] + 30]
         m.itemTextExtra.translation = [m.itemTextExtra.translation[0], imageDimensions[1] + 65]
     end if
 
-    m.itemPoster.uri = itemData.PosterUrl
+    isSeerrResult = (itemData.isSeerrResult <> invalid and itemData.isSeerrResult = true)
+
+    if isSeerrResult
+        m.itemPoster.loadDisplayMode = "scaleToFit"
+    else if m.topParent.imageDisplayMode <> invalid
+        m.itemPoster.loadDisplayMode = m.topParent.imageDisplayMode
+    end if
+
+    titleText = isValidAndNotEmpty(itemData.json.SeriesName) ? itemData.json.SeriesName : itemData.title
+
+    posterURL = itemData.PosterUrl
+    if not isSeerrResult
+        if isValidAndNotEmpty(itemData.landscapePosterURL)
+            posterURL = itemData.landscapePosterURL
+        else if isValidAndNotEmpty(itemData.backdropURL)
+            posterURL = itemData.backdropURL
+        end if
+    end if
+
+    if not isValidAndNotEmpty(posterURL)
+        m.itemPoster.uri = string.EMPTY
+        m.posterText.text = itemData.title
+        m.title.text = titleText
+        return
+    end if
+
+    posterURL = posterURL.replace("maxHeight=720", `maxHeight=${m.itemPoster.height}`)
+    posterURL = posterURL.replace("maxHeight=331", `maxHeight=${m.itemPoster.height}`)
+    posterURL = posterURL.replace("maxWidth=1280", `maxWidth=${m.itemPoster.width}`)
+    posterURL = posterURL.replace("maxWidth=464", `maxWidth=${m.itemPoster.width}`)
+
+    m.itemPoster.uri = posterURL
     m.posterText.text = itemData.title
-    m.title.text = isValidAndNotEmpty(itemData.json.SeriesName) ? itemData.json.SeriesName : itemData.title
+    m.title.text = titleText
 
     ' Don't show the same text for both the title and subtitle
     if isStringEqual(m.itemTextExtra.text, m.title.text)
@@ -169,7 +218,6 @@ sub itemContentChanged()
 
     'If Poster not loaded, ensure backdrop is shown until loaded
     if m.itemPoster.loadStatus <> PosterLoadStatus.READY
-        m.backdrop.visible = true
         m.posterText.visible = true
     end if
 
@@ -198,7 +246,6 @@ end sub
 'Hide backdrop and text when poster loaded
 sub onPosterLoadStatusChanged()
     if m.itemPoster.loadStatus = PosterLoadStatus.READY
-        m.backdrop.visible = false
         m.posterText.visible = false
     end if
 end sub

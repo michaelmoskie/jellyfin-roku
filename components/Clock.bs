@@ -1,39 +1,31 @@
 import "pkg:/source/enums/String.bs"
 import "pkg:/source/enums/TimerControl.bs"
+import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/misc.bs"
 
 ' @fileoverview Clock component to display current time formatted based on user's chosen 12 or 24 hour setting
 
 ' Possible clock formats
 enum ClockFormat
-    h12 = "12h"
     h24 = "24h"
 end enum
 
 sub init()
     m.dateTimeObject = CreateObject("roDateTime")
 
-
-    ' If hideclick setting is enabled, exit without setting any variables
-    if m.global.session.user.settings["ui.design.hideclock"]
-        return
-    end if
-
     m.clockTime = m.top.findNode("clockTime")
 
     m.currentTimeTimer = m.top.findNode("currentTimeTimer")
     m.currentTimeTimer.observeField("fire", "onCurrentTimeTimerFire")
     m.currentTimeTimer.control = TimerControl.START
-
-    ' Default to 12 hour clock
-    m.format = ClockFormat.h12
-
-    ' If user has selected a 24 hour clock, update date display format
-    if LCase(m.global.device.clockFormat) = ClockFormat.h24
-        m.format = ClockFormat.h24
-    end if
 end sub
 
+' Read per render so switching the setting takes effect without a restart
+function use24HourClock() as boolean
+    if get_user_setting_bool("playback.use24hourclock", false) then return true
+
+    return LCase(m.global.device.clockFormat) = ClockFormat.h24
+end function
 
 ' onCurrentTimeTimerFire: Code that runs every time the currentTimeTimer fires
 '
@@ -54,7 +46,7 @@ end sub
 function getCurrentTime()
     try
         timeInSeconds = m.dateTimeObject.AsSecondsLong()
-    catch e
+    catch _e
         timeInSeconds = m.dateTimeObject.AsSeconds() * 1&
     end try
 
@@ -84,8 +76,8 @@ end function
 ' @param {object} dateTimeObject - the date and time object to format
 ' @param {boolean} includeSeconds - whether to include seconds in the formatted time
 ' @return {string} current time formatted for either a 12 hour or 24 hour clock
-function formatTimeAsString(dateTimeObject as object, includeSeconds as boolean) as string
-    return m.format = ClockFormat.h12 ? format12HourTime(dateTimeObject, includeSeconds) : format24HourTime(dateTimeObject, includeSeconds)
+function formatTimeAsString(dateTimeObject as object, includeSeconds = false as boolean) as string
+    return use24HourClock() ? format24HourTime(dateTimeObject, includeSeconds) : format12HourTime(dateTimeObject, includeSeconds)
 end function
 
 ' format12HourTime: Returns a string with the current time formatted for a 12 hour clock
@@ -101,8 +93,7 @@ function format12HourTime(dateTimeObject as object, includeSeconds = false as bo
     displayedHour = StrI(currentHour).trim()
     displayedMinute = StrI(currentMinute).trim()
     displayedSecond = StrI(currentSecond).trim()
-
-    meridian = currentHour < 12 ? "am" : "pm"
+    meridian = currentHour < 12 ? "AM" : "PM"
 
     if currentHour = 0
         displayedHour = "12"

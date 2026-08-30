@@ -2,12 +2,21 @@ import "pkg:/source/api/baserequest.bs"
 import "pkg:/source/api/Image.bs"
 import "pkg:/source/api/Items.bs"
 import "pkg:/source/api/sdk.bs"
-import "pkg:/source/constants/HomeRowItemSizes.bs"
+import "pkg:/source/enums/ImageType.bs"
 import "pkg:/source/enums/ItemType.bs"
 import "pkg:/source/enums/String.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/deviceCapabilities.bs"
+import "pkg:/source/utils/homeRowLayout.bs"
+import "pkg:/source/utils/HomeRecommendations.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/seerrBrowseRows.bs"
+import "pkg:/source/utils/SeerrUtils.bs"
+
+' Items a "Recently Added" row holds, both per library and after libraries are merged
+const LATEST_MEDIA_LIMIT = 25
+
+const FIELDS = "DateCreated,Type,UserData,Overview,Genres,CommunityRating,CriticRating,OfficialRating,RunTimeTicks,ProductionYear,SeriesName,ParentIndexNumber,IndexNumber,Status,ImageTags,BackdropImageTags,ParentBackdropItemId,ParentBackdropImageTags,ParentThumbItemId,ParentThumbImageTag,SeriesId,SeriesPrimaryImageTag,ParentLogoItemId,ParentLogoImageTag,PrimaryImageTag,PrimaryImageAspectRatio"
 
 sub init()
     m.top.itemsToLoad = "libraries"
@@ -33,7 +42,7 @@ function loadLibraries() as object
     end if
 
     for each item in data.LookupCI("items")
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
         tmp.json = {
             id: item.LookupCI("Id"),
             name: item.LookupCI("name"),
@@ -55,24 +64,59 @@ end function
 
 function loadLatestMedia() as object
     results = []
+    data = []
 
-    params = {
-        userId: m.global.session.user.id,
-        limit: 25,
-        parentId: m.top.itemId,
-        enableImageTypes: `${ImageType.PRIMARY}, ${ImageType.BACKDROP}, ${ImageType.THUMB}`,
-        imageTypeLimit: 1,
-        enableTotalRecordCount: false,
-        fields: "Genres"
-    }
+    targetParentIds = []
+    if isValidAndNotEmpty(m.top.itemIds)
+        targetParentIds = m.top.itemIds
+    else if isValidAndNotEmpty(m.top.itemId)
+        targetParentIds = [m.top.itemId]
+    end if
 
-    data = api.items.GetLatest(params)
+    if targetParentIds.Count() > 0
+        seenIds = {}
+        for each pId in targetParentIds
+            params = {
+                userId: m.global.session.user.id,
+                limit: LATEST_MEDIA_LIMIT,
+                parentId: pId,
+                enableImageTypes: `${ImageType.PRIMARY}, ${ImageType.BACKDROP}, ${ImageType.THUMB}`,
+                imageTypeLimit: 1,
+                enableTotalRecordCount: false,
+                fields: "Genres,DateCreated"
+            }
+            libData = api.items.GetLatest(params)
+            if isValidAndNotEmpty(libData)
+                for each rawItem in libData
+                    itemIdStr = LCase(toNormalizedString(rawItem.LookupCI("Id")))
+                    if isValidAndNotEmpty(itemIdStr) and not seenIds.DoesExist(itemIdStr)
+                        seenIds[itemIdStr] = true
+                        data.push(rawItem)
+                    end if
+                end for
+            end if
+        end for
+
+        ' Each library returns its own newest-first page, so a merged row arrives grouped by
+        ' library. Without this an old item from the first library outranks a new one from the
+        ' second, and the row ends up holding a page per library instead of a single page.
+        if targetParentIds.Count() > 1
+            data = sortByDateCreatedDescending(data)
+            if data.Count() > LATEST_MEDIA_LIMIT
+                trimmed = []
+                for i = 0 to LATEST_MEDIA_LIMIT - 1
+                    trimmed.push(data[i])
+                end for
+                data = trimmed
+            end if
+        end if
+    end if
 
     if not isValidAndNotEmpty(data) then return results
 
     for each item in data
         if not isStringEqual(item.Type, ItemType.BOOK)
-            tmp = CreateObject("roSGNode", "HomeData")
+            tmp = createSGNode("HomeData")
 
             tmp.json = {
                 id: item.LookupCI("Id"),
@@ -113,6 +157,808 @@ function loadLatestMedia() as object
     return results
 end function
 
+function loadRecentlyReleased() as object
+    results = []
+
+    includeItemTypes = `${ItemType.MOVIE}, ${ItemType.SERIES}, ${ItemType.BOOK}, ${ItemType.AUDIOBOOK}, ${ItemType.MUSICALBUM}`
+
+    if isStringEqual(m.top.metadata.contentType, "tvshows")
+        recentlyReleasedSeriesType = m.global.session.user.settings["ui.home.recentlyReleasedSeriesType"] ?? "series"
+        if isStringEqual(recentlyReleasedSeriesType, "season")
+            includeItemTypes = `${ItemType.SEASON}`
+        else if isStringEqual(recentlyReleasedSeriesType, "episode")
+            includeItemTypes = `${ItemType.EPISODE}`
+        else
+            includeItemTypes = `${ItemType.SERIES}`
+        end if
+    end if
+
+    params = {
+        userId: m.global.session.user.id,
+        limit: 50,
+        parentId: m.top.itemId,
+        recursive: true,
+        fields: FIELDS,
+        enableImageTypes: `${ImageType.PRIMARY}, ${ImageType.BACKDROP}, ${ImageType.THUMB}`,
+        imageTypeLimit: 1,
+        includeItemTypes: includeItemTypes,
+        sortBy: "PremiereDate,ProductionYear,SortName",
+        sortOrder: "Descending",
+        enableTotalRecordCount: false
+    }
+
+    data = api.items.Get(params)
+
+    if not isValidAndNotEmpty(data) or not isValidAndNotEmpty(data.items) then return results
+
+    for each item in data.items
+        tmp = createSGNode("HomeData")
+
+        albumArtistID = invalid
+
+        if isValidAndNotEmpty(item.AlbumArtists)
+            albumArtistID = item.AlbumArtists[0].LookupCI("id")
+        end if
+
+        tmp.json = {
+            id: item.LookupCI("Id"),
+            name: item.LookupCI("name"),
+            Type: item.LookupCI("Type"),
+            CollectionType: item.LookupCI("CollectionType"),
+            ChannelName: item.LookupCI("ChannelName"),
+            ChannelId: item.LookupCI("ChannelId"),
+            EpisodeTitle: item.LookupCI("EpisodeTitle"),
+            ChildCount: item.LookupCI("ChildCount"),
+            EndDate: item.LookupCI("EndDate"),
+            OfficialRating: item.LookupCI("OfficialRating"),
+            ProductionYear: item.LookupCI("ProductionYear"),
+            PremiereDate: item.LookupCI("PremiereDate"),
+            Album: item.LookupCI("Album"),
+            SeriesName: item.LookupCI("SeriesName"),
+            SeriesId: item.LookupCI("SeriesId"),
+            SeasonId: item.LookupCI("SeasonId"),
+            ParentIndexNumber: item.LookupCI("ParentIndexNumber"),
+            IndexNumber: item.LookupCI("IndexNumber"),
+            IndexNumberEnd: item.LookupCI("IndexNumberEnd"),
+            AlbumArtist: item.LookupCI("AlbumArtist"),
+            AlbumArtistId: albumArtistID,
+            Status: item.LookupCI("Status"),
+            ImageTags: item.LookupCI("ImageTags"),
+            UserData: item.LookupCI("UserData"),
+            ParentThumbImageTag: item.LookupCI("ParentThumbImageTag"),
+            ParentBackdropImageTags: item.LookupCI("ParentBackdropImageTags"),
+            ParentBackdropItemId: item.LookupCI("ParentBackdropItemId"),
+            SeriesPrimaryImageTag: item.LookupCI("SeriesPrimaryImageTag"),
+            BackdropImageTags: item.LookupCI("BackdropImageTags")
+        }
+        results.push(tmp)
+    end for
+
+    return results
+end function
+
+' Wraps a Jellyfin item in a HomeData node using the standard home row fields.
+function makeHomeItem(item as object) as object
+    tmp = createSGNode("HomeData")
+    tmp.json = {
+        Id: item.LookupCI("Id"),
+        name: item.LookupCI("name"),
+        Type: item.LookupCI("Type"),
+        CollectionType: item.LookupCI("CollectionType"),
+        OfficialRating: item.LookupCI("OfficialRating"),
+        ProductionYear: item.LookupCI("ProductionYear"),
+        PremiereDate: item.LookupCI("PremiereDate"),
+        SeriesName: item.LookupCI("SeriesName"),
+        SeriesId: item.LookupCI("SeriesId"),
+        SeasonId: item.LookupCI("SeasonId"),
+        ParentIndexNumber: item.LookupCI("ParentIndexNumber"),
+        IndexNumber: item.LookupCI("IndexNumber"),
+        IndexNumberEnd: item.LookupCI("IndexNumberEnd"),
+        ImageTags: item.LookupCI("ImageTags"),
+        UserData: item.LookupCI("UserData"),
+        ParentThumbItemId: item.LookupCI("ParentThumbItemId"),
+        ParentThumbImageTag: item.LookupCI("ParentThumbImageTag"),
+        ParentBackdropImageTags: item.LookupCI("ParentBackdropImageTags"),
+        ParentBackdropItemId: item.LookupCI("ParentBackdropItemId"),
+        SeriesPrimaryImageTag: item.LookupCI("SeriesPrimaryImageTag"),
+        BackdropImageTags: item.LookupCI("BackdropImageTags")
+    }
+    return tmp
+end function
+
+function getBoolSetting(settings as object, key as string, defaultValue as boolean) as boolean
+    if not isValid(settings) then return defaultValue
+    value = settings[key]
+    if not isValid(value) then return defaultValue
+    if type(value) = "String" or type(value) = "roString" then return LCase(value) = "true"
+    return value = true
+end function
+
+function getStringSetting(settings as object, key as string, defaultValue as string) as string
+    if not isValid(settings) then return defaultValue
+    value = settings[key]
+    if isValidAndNotEmpty(value) then return value.toStr()
+    return defaultValue
+end function
+
+function joinArray(items as object, separator as string) as string
+    result = ""
+    first = true
+    for each value in items
+        if not isValid(value) then continue for
+        if first
+            result = value.toStr()
+            first = false
+        else
+            result = result + separator + value.toStr()
+        end if
+    end for
+    return result
+end function
+
+function isItemPlayed(item as object) as boolean
+    userData = item.LookupCI("UserData")
+    if isValid(userData) then return userData.Played = true
+    return false
+end function
+
+function seedItemTypes(sourceItem as string, sourceType as string) as string
+    contentType = LCase(sourceType)
+    if LCase(sourceItem) = "recentlywatched"
+        if contentType = "movies" then return "Movie"
+        if contentType = "shows" then return "Episode"
+        return "Movie,Episode"
+    end if
+    if contentType = "movies" then return "Movie"
+    if contentType = "shows" then return "Series"
+    return "Movie,Series"
+end function
+
+function candidateTypesFor(sourceType as string) as string
+    contentType = LCase(sourceType)
+    if contentType = "movies" then return "Movie"
+    if contentType = "shows" then return "Series"
+    return "Movie,Series"
+end function
+
+' Fetches parent series for any watched episodes so a seed represents a show.
+function fetchSeriesForEpisodes(rawItems as object) as object
+    seriesById = {}
+    seriesIds = []
+    seen = {}
+
+    for each item in rawItems
+        if item.LookupCI("Type") = "Episode"
+            sId = item.LookupCI("SeriesId")
+            if isValidAndNotEmpty(sId) and not seen.DoesExist(sId)
+                seen[sId] = true
+                seriesIds.Push(sId)
+            end if
+        end if
+    end for
+    if seriesIds.Count() = 0 then return seriesById
+
+    data = api.items.Get({
+        UserId: m.global.session.user.id,
+        Ids: joinArray(seriesIds, ","),
+        fields: "Genres,Tags,People,Studios,ProductionYear,ProviderIds,PremiereDate,ImageTags,OfficialRating,CommunityRating,UserData"
+    })
+    if not isChainValid(data, "Items") then return seriesById
+
+    for each series in data.Items
+        sId = series.LookupCI("Id")
+        if isValidAndNotEmpty(sId) then seriesById[sId] = series
+    end for
+    return seriesById
+end function
+
+function loadSinceYouWatchedSeeds(sourceItem as string, sourceType as string) as object
+    params = {
+        UserId: m.global.session.user.id,
+        recursive: true,
+        includeItemTypes: seedItemTypes(sourceItem, sourceType),
+        limit: 30,
+        fields: "Genres,Tags,People,Studios,ProductionYear,SeriesId,UserData,ProviderIds,PremiereDate,ImageTags,OfficialRating,CommunityRating",
+        EnableTotalRecordCount: false
+    }
+
+    if LCase(sourceItem) = "favorites"
+        params.filters = "IsPlayed,IsFavorite"
+    else if LCase(sourceItem) = "random"
+        params.filters = "IsPlayed"
+        params.sortBy = "Random"
+    else
+        params.filters = "IsPlayed"
+        params.sortBy = "DatePlayed"
+        params.sortOrder = "Descending"
+    end if
+
+    data = api.items.Get(params)
+    if not isChainValid(data, "Items") then return []
+
+    if LCase(sourceItem) = "recentlywatched"
+        seriesById = fetchSeriesForEpisodes(data.Items)
+        return HomeRecommendations.resolveSeedEpisodes(data.Items, seriesById)
+    end if
+
+    return data.Items
+end function
+
+sub addRecommendationCandidates(candidates as object, data as object)
+    if not isChainValid(data, "Items") then return
+    for each item in data.Items
+        id = item.LookupCI("Id")
+        if isValidAndNotEmpty(id) then candidates[id] = item
+    end for
+end sub
+
+function scoredEntryComesAfter(a as object, b as object) as boolean
+    if a.score <> b.score then return a.score < b.score
+    return getPremiereDate(a.item) < getPremiereDate(b.item)
+end function
+
+function getPremiereDate(item as object) as string
+    value = item.LookupCI("PremiereDate")
+    if isValidAndNotEmpty(value) then return value.toStr()
+    return ""
+end function
+
+sub sortScoredCandidates(scored as object)
+    total = scored.Count()
+    for i = 1 to total - 1
+        current = scored[i]
+        j = i - 1
+        while j >= 0 and scoredEntryComesAfter(scored[j], current)
+            scored[j + 1] = scored[j]
+            j = j - 1
+        end while
+        scored[j + 1] = current
+    end for
+end sub
+
+' Local recommender. Pulls candidates sharing the seeds genres, tags, or people,
+' scores them, and returns the best matches.
+function loadSinceYouWatchedLocal(seed as object, sourceType as string, includeWatched as boolean) as object
+    ctx = HomeRecommendations.buildContext(seed)
+    candidateTypes = candidateTypesFor(sourceType)
+    baseId = seed.LookupCI("Id")
+    if not isValid(baseId) then baseId = ""
+
+    candidateFields = "Genres,Tags,People,UserData,OfficialRating,ProductionYear,CommunityRating,Studios,PremiereDate,ImageTags,SeriesPrimaryImageTag,BackdropImageTags"
+    candidates = {}
+
+    if ctx.genres.Count() > 0
+        addRecommendationCandidates(candidates, api.items.Get({
+            UserId: m.global.session.user.id,
+            includeItemTypes: candidateTypes,
+            genres: joinArray(ctx.genres, "|"),
+            recursive: true,
+            limit: 40,
+            fields: candidateFields,
+            EnableTotalRecordCount: false
+        }))
+    end if
+
+    if ctx.tags.Count() > 0
+        addRecommendationCandidates(candidates, api.items.Get({
+            UserId: m.global.session.user.id,
+            includeItemTypes: candidateTypes,
+            tags: joinArray(ctx.tags, "|"),
+            recursive: true,
+            limit: 40,
+            fields: candidateFields,
+            EnableTotalRecordCount: false
+        }))
+    end if
+
+    personIds = []
+    for each pid in ctx.directorIds : personIds.Push(pid) : end for
+    for each pid in ctx.writerIds : personIds.Push(pid) : end for
+    actorCount = 0
+    for each pid in ctx.actorIds
+        if actorCount >= 10 then exit for
+        personIds.Push(pid)
+        actorCount = actorCount + 1
+    end for
+    if personIds.Count() > 0
+        addRecommendationCandidates(candidates, api.items.Get({
+            UserId: m.global.session.user.id,
+            includeItemTypes: candidateTypes,
+            personIds: joinArray(personIds, ","),
+            recursive: true,
+            limit: 40,
+            fields: candidateFields,
+            EnableTotalRecordCount: false
+        }))
+    end if
+
+    scored = []
+    for each id in candidates
+        candidate = candidates[id]
+        if id = baseId then continue for
+        if not includeWatched and isItemPlayed(candidate) then continue for
+        scored.Push({ item: candidate, score: HomeRecommendations.scoreCandidate(candidate, ctx) })
+    end for
+
+    ' Not enough matches, so pull recent titles in the same genres as filler.
+    if scored.Count() < 15
+        fillerParams = {
+            UserId: m.global.session.user.id,
+            includeItemTypes: candidateTypes,
+            recursive: true,
+            limit: 30,
+            sortBy: "ProductionYear,SortName",
+            sortOrder: "Descending",
+            fields: candidateFields,
+            EnableTotalRecordCount: false
+        }
+        if ctx.genres.Count() > 0 then fillerParams.genres = joinArray(ctx.genres, "|")
+        fillerData = api.items.Get(fillerParams)
+        if isChainValid(fillerData, "Items")
+            for each fillerItem in fillerData.Items
+                fillerId = fillerItem.LookupCI("Id")
+                if not isValidAndNotEmpty(fillerId) or candidates.DoesExist(fillerId) or fillerId = baseId then continue for
+                if not includeWatched and isItemPlayed(fillerItem) then continue for
+                candidates[fillerId] = fillerItem
+                scored.Push({ item: fillerItem, score: HomeRecommendations.scoreCandidate(fillerItem, ctx) })
+                if scored.Count() >= 30 then exit for
+            end for
+        end if
+    end if
+
+    sortScoredCandidates(scored)
+
+    results = []
+    count = 0
+    for each entry in scored
+        if count >= 15 then exit for
+        results.Push(makeHomeItem(entry.item))
+        count = count + 1
+    end for
+    return results
+end function
+
+function getSeedTmdbId(seed as object) as string
+    providerIds = seed.LookupCI("ProviderIds")
+    if isValid(providerIds)
+        raw = providerIds.LookupCI("Tmdb")
+        if isValid(raw) then return raw.toStr()
+    end if
+
+    seedId = seed.LookupCI("Id")
+    if not isValidAndNotEmpty(seedId) then return ""
+
+    detail = api.items.GetByID(seedId, { UserId: m.global.session.user.id, fields: "ProviderIds" })
+    if isValid(detail)
+        providerIds = detail.LookupCI("ProviderIds")
+        if isValid(providerIds)
+            raw = providerIds.LookupCI("Tmdb")
+            if isValid(raw) then return raw.toStr()
+        end if
+    end if
+    return ""
+end function
+
+' Builds a HomeData node for a recommendation result. The raw item is kept on the
+' node so selecting it can open the Seerr detail screen. Results may use TMDB
+' snake_case or Seerr camelCase, so both are handled.
+function makeSeerrHomeItem(res as object, defaultMediaType as string) as object
+    if not isValid(res) then return invalid
+    tmdbId = res.LookupCI("id")
+    if not isValid(tmdbId) then return invalid
+
+    mediaType = res.LookupCI("mediaType")
+    if not isValidAndNotEmpty(mediaType) then mediaType = res.LookupCI("media_type")
+    if not isValidAndNotEmpty(mediaType) then mediaType = defaultMediaType
+
+    title = res.LookupCI("title")
+    if not isValidAndNotEmpty(title) then title = res.LookupCI("name")
+    if not isValidAndNotEmpty(title) then title = "Unknown"
+
+    posterPath = res.LookupCI("posterPath")
+    if not isValidAndNotEmpty(posterPath) then posterPath = res.LookupCI("poster_path")
+
+    posterUrl = ""
+    if isValidAndNotEmpty(posterPath)
+        tmdbUrls = GetTmdbImageBaseUrls()
+        posterUrl = tmdbUrls.posterW342 + posterPath
+    end if
+
+    ' Keep the raw item for the detail screen and make sure it carries a media type.
+    res.mediaType = mediaType
+
+    tmp = createSGNode("HomeData")
+    tmp.json = {
+        Id: tmdbId.toStr(),
+        name: title,
+        Type: (mediaType = "tv") ? "Series" : "Movie",
+        SeerrTmdbId: tmdbId.toStr(),
+        SeerrMediaType: mediaType,
+        SeerrPosterURL: posterUrl,
+        SeerrItem: res
+    }
+    return tmp
+end function
+
+' Recommendations from TMDB, using the key the plugin syncs to the client.
+function fetchTmdbRecommendations(tmdbId as string, mediaType as string) as object
+    apiKey = getStringSetting(m.global.session.user.settings, "plugin.tmdb.apiKey", "")
+    if apiKey = "" then return []
+
+    url = "https://api.themoviedb.org/3/" + mediaType + "/" + tmdbId + "/recommendations?language=en-US&page=1"
+    transfer = CreateObject("roUrlTransfer")
+    transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    transfer.InitClientCertificates()
+    transfer.AddHeader("Accept", "application/json")
+    transfer.AddHeader("User-Agent", "Moonfin/1.0")
+
+    ' v4 tokens go in the Authorization header, v3 keys go in the query string.
+    if Left(apiKey, 3) = "eyJ"
+        transfer.AddHeader("Authorization", "Bearer " + apiKey)
+    else
+        url = url + "&api_key=" + apiKey
+    end if
+
+    transfer.SetUrl(url)
+    body = transfer.GetToString()
+    if not isValidAndNotEmpty(body) then return []
+    data = ParseJson(body)
+    if not isChainValid(data, "results") then return []
+    return data.results
+end function
+
+' Recommendations from the Seerr proxy, used when TMDB has no key or no result.
+function fetchSeerrRecommendations(tmdbId as string, mediaType as string) as object
+    req = APIRequest("/Moonfin/Seerr/Api/" + mediaType + "/" + tmdbId + "/recommendations", {})
+    if not isValid(req) then return []
+    data = getJson(req)
+    if not isChainValid(data, "results") then return []
+    return data.results
+end function
+
+' Online recommendations are gated on Seerr being available because tapping a
+' card opens the Seerr detail screen. The row itself is sourced from TMDB first,
+' falling back to Seerr recommendations.
+function loadSinceYouWatchedOnline(seed as object) as object
+    config = GetSeerrConfig()
+    if not isValid(config) or config.enabled <> true then return []
+
+    tmdbId = getSeedTmdbId(seed)
+    if tmdbId = "" then return []
+
+    mediaType = "movie"
+    if seed.LookupCI("Type") = "Series" then mediaType = "tv"
+
+    recommendations = fetchTmdbRecommendations(tmdbId, mediaType)
+    if not isValidAndNotEmpty(recommendations) then recommendations = fetchSeerrRecommendations(tmdbId, mediaType)
+    if not isValidAndNotEmpty(recommendations) then return []
+
+    results = []
+    count = 0
+    for each res in recommendations
+        if count >= 15 then exit for
+        node = makeSeerrHomeItem(res, mediaType)
+        if isValid(node)
+            results.Push(node)
+            count = count + 1
+        end if
+    end for
+    return results
+end function
+
+' Builds one Since You Watched row seeded from the Nth recently watched item.
+function loadSinceYouWatched() as object
+    settings = m.global.session.user.settings
+
+    rowIndex = 1
+    if isValid(m.top.metadata) and isValid(m.top.metadata.rowIndex) then rowIndex = m.top.metadata.rowIndex
+
+    recSource = getStringSetting(settings, "ui.home.recommendationSource", "")
+    sourceMode = recSource <> "" ? recSource : getStringSetting(settings, "ui.home.sinceYouWatchedSource", "local")
+    sourceItem = getStringSetting(settings, "ui.home.sinceYouWatchedSourceItem", "recentlyWatched")
+    sourceType = getStringSetting(settings, "ui.home.sinceYouWatchedSourceType", "movies")
+    includeWatched = getBoolSetting(settings, "ui.home.sinceYouWatchedIncludeWatched", false)
+
+    seeds = loadSinceYouWatchedSeeds(sourceItem, sourceType)
+    if seeds.Count() < rowIndex then return []
+    seed = seeds[rowIndex - 1]
+    if not isValid(seed) then return []
+
+    ' Expose the seed name so the row can be titled after it.
+    meta = m.top.metadata
+    if not isValid(meta) then meta = {}
+    meta.seedName = seed.LookupCI("Name")
+    m.top.metadata = meta
+
+    if LCase(sourceMode) = "online"
+        onlineItems = loadSinceYouWatchedOnline(seed)
+        if isValidAndNotEmpty(onlineItems) then return onlineItems
+    end if
+
+    return loadSinceYouWatchedLocal(seed, sourceType, includeWatched)
+end function
+
+function isFullyWatchedSeries(series as object, userId as string) as boolean
+    userData = series.LookupCI("UserData")
+    played = false
+    unplayed = 0
+    if isValid(userData)
+        if userData.Played = true then played = true
+        unplayedCount = userData.LookupCI("UnplayedItemCount")
+        if isValid(unplayedCount) then unplayed = unplayedCount
+    end if
+    topUnplayed = series.LookupCI("UnplayedItemCount")
+    if isValid(topUnplayed) then unplayed = topUnplayed
+    if not played or unplayed > 0 then return false
+
+    seriesId = series.LookupCI("Id")
+    if not isValidAndNotEmpty(seriesId) then return true
+
+    check = api.items.Get({
+        UserId: userId,
+        ParentId: seriesId,
+        includeItemTypes: "Episode",
+        recursive: true,
+        filters: "IsUnplayed",
+        limit: 1
+    })
+    if not isValid(check) then return true
+    total = check.LookupCI("TotalRecordCount")
+    if isValid(total) then return total = 0
+    if isChainValid(check, "Items") then return check.Items.Count() = 0
+    return true
+end function
+
+sub addRewatchShows(watchedItems as object, seriesLastPlayed as object, userId as string, seriesFields as string)
+    epData = api.items.Get({
+        UserId: userId,
+        includeItemTypes: "Episode",
+        filters: "IsPlayed",
+        sortBy: "DatePlayed",
+        sortOrder: "Descending",
+        recursive: true,
+        limit: 100,
+        fields: "SeriesId,UserData",
+        EnableTotalRecordCount: false
+    })
+    if not isChainValid(epData, "Items") then return
+
+    seriesIds = []
+    seen = {}
+    for each ep in epData.Items
+        sId = ep.LookupCI("SeriesId")
+        if not isValidAndNotEmpty(sId) then continue for
+        userData = ep.LookupCI("UserData")
+        if isValid(userData)
+            lastPlayed = userData.LookupCI("LastPlayedDate")
+            if isValidAndNotEmpty(lastPlayed)
+                existing = seriesLastPlayed[sId]
+                if not isValid(existing) or lastPlayed > existing then seriesLastPlayed[sId] = lastPlayed
+            end if
+        end if
+        if not seen.DoesExist(sId)
+            seen[sId] = true
+            seriesIds.Push(sId)
+        end if
+    end for
+    if seriesIds.Count() = 0 then return
+
+    seriesData = api.items.Get({
+        UserId: userId,
+        Ids: joinArray(seriesIds, ","),
+        fields: seriesFields
+    })
+    if not isChainValid(seriesData, "Items") then return
+
+    for each series in seriesData.Items
+        if isFullyWatchedSeries(series, userId) then watchedItems.Push(series)
+    end for
+end sub
+
+sub addRewatchCollections(watchedItems as object, collectionLastPlayed as object, userId as string)
+    boxData = api.items.Get({
+        UserId: userId,
+        includeItemTypes: "BoxSet",
+        recursive: true,
+        limit: 50,
+        fields: "ImageTags,UserData,ProductionYear",
+        EnableTotalRecordCount: false
+    })
+    if not isChainValid(boxData, "Items") then return
+
+    for each col in boxData.Items
+        colId = col.LookupCI("Id")
+        if not isValidAndNotEmpty(colId) then continue for
+
+        childData = api.items.Get({
+            UserId: userId,
+            ParentId: colId,
+            recursive: true,
+            fields: "UserData"
+        })
+        if not isChainValid(childData, "Items") then continue for
+        if childData.Items.Count() = 0 then continue for
+
+        allPlayed = true
+        maxLastPlayed = ""
+        for each child in childData.Items
+            childUserData = child.LookupCI("UserData")
+            if not isValid(childUserData) or childUserData.Played <> true
+                allPlayed = false
+                exit for
+            end if
+            lastPlayed = childUserData.LookupCI("LastPlayedDate")
+            if isValidAndNotEmpty(lastPlayed) and lastPlayed > maxLastPlayed then maxLastPlayed = lastPlayed
+        end for
+
+        if allPlayed
+            watchedItems.Push(col)
+            collectionLastPlayed[colId] = maxLastPlayed
+        end if
+    end for
+end sub
+
+function rewatchLastPlayed(item as object, seriesLastPlayed as object, collectionLastPlayed as object) as string
+    itemId = item.LookupCI("Id")
+    itemType = item.LookupCI("Type")
+    if itemType = "BoxSet" and isValid(collectionLastPlayed[itemId]) then return collectionLastPlayed[itemId]
+    if itemType = "Series" and isValid(seriesLastPlayed[itemId]) then return seriesLastPlayed[itemId]
+    userData = item.LookupCI("UserData")
+    if isValid(userData)
+        lastPlayed = userData.LookupCI("LastPlayedDate")
+        if isValidAndNotEmpty(lastPlayed) then return lastPlayed
+    end if
+    return ""
+end function
+
+sub shuffleRewatchItems(items as object)
+    total = items.Count()
+    for i = total - 1 to 1 step -1
+        j = Rnd(i + 1) - 1
+        temp = items[i]
+        items[i] = items[j]
+        items[j] = temp
+    end for
+end sub
+
+sub sortRewatchItems(items as object, sortBy as string, seriesLastPlayed as object, collectionLastPlayed as object)
+    if LCase(sortBy) = "random"
+        shuffleRewatchItems(items)
+        return
+    end if
+
+    total = items.Count()
+    for i = 1 to total - 1
+        current = items[i]
+        currentLastPlayed = rewatchLastPlayed(current, seriesLastPlayed, collectionLastPlayed)
+        j = i - 1
+        while j >= 0 and rewatchLastPlayed(items[j], seriesLastPlayed, collectionLastPlayed) < currentLastPlayed
+            items[j + 1] = items[j]
+            j = j - 1
+        end while
+        items[j + 1] = current
+    end for
+end sub
+
+' A series card should open its first episode when selected.
+function resolveRewatchItem(item as object, userId as string) as object
+    if item.LookupCI("Type") = "Series"
+        seriesId = item.LookupCI("Id")
+        if isValidAndNotEmpty(seriesId)
+            epData = api.items.Get({
+                UserId: userId,
+                ParentId: seriesId,
+                includeItemTypes: "Episode",
+                recursive: true,
+                sortBy: "SortName,ProductionYear",
+                sortOrder: "Ascending",
+                limit: 1,
+                fields: "ImageTags,UserData,SeriesId,SeriesName,ParentIndexNumber,IndexNumber,SeriesPrimaryImageTag,ParentThumbItemId,ParentThumbImageTag,ParentBackdropImageTags,ParentBackdropItemId,BackdropImageTags"
+            })
+            if isChainValid(epData, "Items") and epData.Items.Count() > 0 then return epData.Items[0]
+        end if
+    end if
+    return item
+end function
+
+' Gathers movies, series, and collections the user has fully watched.
+function loadRewatch() as object
+    settings = m.global.session.user.settings
+    includeMovies = getBoolSetting(settings, "ui.home.rewatchIncludeMovies", true)
+    includeShows = getBoolSetting(settings, "ui.home.rewatchIncludeShows", true)
+    includeCollections = getBoolSetting(settings, "ui.home.rewatchIncludeCollections", true)
+    sortBy = getStringSetting(settings, "ui.home.rewatchSortBy", "recentlyWatched")
+
+    userId = m.global.session.user.id
+    itemFields = "Genres,ProductionYear,PremiereDate,ImageTags,UserData,BackdropImageTags,SeriesPrimaryImageTag"
+
+    watchedItems = []
+    seriesLastPlayed = {}
+    collectionLastPlayed = {}
+
+    if includeMovies
+        movieData = api.items.Get({
+            UserId: userId,
+            includeItemTypes: "Movie",
+            filters: "IsPlayed",
+            sortBy: "DatePlayed",
+            sortOrder: "Descending",
+            recursive: true,
+            limit: 50,
+            fields: itemFields,
+            EnableTotalRecordCount: false
+        })
+        if isChainValid(movieData, "Items")
+            for each movie in movieData.Items : watchedItems.Push(movie) : end for
+        end if
+    end if
+
+    if includeShows then addRewatchShows(watchedItems, seriesLastPlayed, userId, itemFields)
+    if includeCollections then addRewatchCollections(watchedItems, collectionLastPlayed, userId)
+
+    if watchedItems.Count() = 0 then return []
+
+    sortRewatchItems(watchedItems, sortBy, seriesLastPlayed, collectionLastPlayed)
+
+    results = []
+    count = 0
+    for each item in watchedItems
+        if count >= 15 then exit for
+        resolved = resolveRewatchItem(item, userId)
+        if isValid(resolved)
+            results.Push(makeHomeItem(resolved))
+            count = count + 1
+        end if
+    end for
+    return results
+end function
+
+' Reads a synced hidden-items map from settings. Keys are item or series ids,
+' values are the ISO time each was hidden.
+function getHiddenItemsMap(settingKey as string) as object
+    raw = m.global.session.user.settings[settingKey]
+    if not isValid(raw) or raw = "" then return {}
+    parsed = ParseJson(raw)
+    if not isValid(parsed) or Type(parsed) <> "roAssociativeArray" then return {}
+    return parsed
+end function
+
+' True when an item is hidden and has not been played since it was hidden.
+' seriesOnly keys on the series id only, otherwise it falls back to the item id.
+function isHiddenByMap(itemJson as object, hiddenMap as object, seriesOnly as boolean) as boolean
+    if hiddenMap.Count() = 0 or not isValid(itemJson) then return false
+
+    seriesId = itemJson.SeriesId
+    key = invalid
+    if isValid(seriesId) and seriesId <> ""
+        key = seriesId
+    else if not seriesOnly
+        key = itemJson.Id
+    end if
+    if not isValid(key) or key = "" then return false
+
+    hideTime = hiddenMap[key]
+    if not isValid(hideTime) then return false
+
+    userData = itemJson.UserData
+    if isValid(userData)
+        lastPlayed = userData.LastPlayedDate
+        if isValid(lastPlayed) and lastPlayed <> "" and lastPlayed > hideTime then return false
+    end if
+    return true
+end function
+
+function filterHiddenResults(results as object, hiddenMap as object, seriesOnly as boolean) as object
+    if hiddenMap.Count() = 0 then return results
+    filtered = []
+    for each entry in results
+        if not isHiddenByMap(entry.json, hiddenMap, seriesOnly)
+            filtered.push(entry)
+        end if
+    end for
+    return filtered
+end function
+
 function loadContinueWatching() as object
     results = []
 
@@ -127,10 +973,13 @@ function loadContinueWatching() as object
     }
     data = api.useritems.GetResumeItems(params)
 
-    if not isChainValid(data, "Items") then return results
+    if not isChainValid(data, "Items")
+        return results
+    end if
+
 
     for each item in data.Items
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
         tmp.Id = item.LookupCI("Id")
         tmp.name = item.LookupCI("name")
         tmp.type = item.LookupCI("Type")
@@ -161,7 +1010,211 @@ function loadContinueWatching() as object
         results.push(tmp)
     end for
 
-    return results
+    return filterHiddenResults(results, getHiddenItemsMap("ui.home.hiddenContinueWatchingItems"), false)
+end function
+
+' Load merged Continue Watching and Next Up items
+function loadMergedContinueWatching() as object
+    results = []
+
+    hiddenCW = getHiddenItemsMap("ui.home.hiddenContinueWatchingItems")
+    hiddenNU = getHiddenItemsMap("ui.home.hiddenNextUpSeries")
+
+    ' Load Continue Watching items
+    resumeParams = {
+        recursive: true,
+        SortBy: "DatePlayed",
+        SortOrder: "Descending",
+        Filters: "IsResumable",
+        MediaTypes: ItemType.VIDEO,
+        excludeItemTypes: ItemType.BOOK,
+        EnableTotalRecordCount: false
+    }
+    resumeData = api.useritems.GetResumeItems(resumeParams)
+
+    ' Load Next Up items
+    nextUpParams = {
+        recursive: true,
+        SortBy: "DatePlayed",
+        SortOrder: "Descending",
+        ImageTypeLimit: 1,
+        UserId: m.global.session.user.id,
+        DisableFirstEpisode: false,
+        limit: 25,
+        EnableTotalRecordCount: false
+    }
+
+    maxDaysInNextUp = m.global.session.user.settings["ui.details.maxdaysnextup"].ToInt()
+    if isValid(maxDaysInNextUp)
+        if maxDaysInNextUp > 0
+            dateToday = CreateObject("roDateTime")
+            dateCutoff = CreateObject("roDateTime")
+            dateCutoff.FromSeconds(dateToday.AsSeconds() - (maxDaysInNextUp * 86400))
+            nextUpParams.AddReplace("NextUpDateCutoff", dateCutoff.ToISOString())
+        end if
+    end if
+
+    nextUpData = api.shows.GetNextUp(nextUpParams)
+
+    ' Create a lookup map of resume item IDs for duplicate detection
+    resumeItemIds = {}
+
+    ' Add Continue Watching items first
+    if isChainValid(resumeData, "Items")
+        for each item in resumeData.Items
+            if isHiddenByMap(item, hiddenCW, false) then continue for
+            tmp = createSGNode("HomeData")
+            tmp.Id = item.LookupCI("Id")
+            tmp.name = item.LookupCI("name")
+            tmp.type = item.LookupCI("Type")
+            tmp.json = {
+                Id: item.LookupCI("Id"),
+                name: item.LookupCI("name"),
+                Type: item.LookupCI("Type"),
+                SeriesName: item.LookupCI("SeriesName"),
+                SeriesId: item.LookupCI("SeriesId"),
+                SeasonId: item.LookupCI("SeasonId"),
+                ProductionYear: item.LookupCI("ProductionYear"),
+                Status: item.LookupCI("Status"),
+                EndDate: item.LookupCI("EndDate"),
+                ParentIndexNumber: item.LookupCI("ParentIndexNumber"),
+                IndexNumber: item.LookupCI("IndexNumber"),
+                IndexNumberEnd: item.LookupCI("IndexNumberEnd"),
+                OfficialRating: item.LookupCI("OfficialRating"),
+                CollectionType: item.LookupCI("CollectionType"),
+                ImageTags: item.LookupCI("ImageTags"),
+                UserData: item.LookupCI("UserData"),
+                ParentThumbItemId: item.LookupCI("ParentThumbItemId"),
+                ParentThumbImageTag: item.LookupCI("ParentThumbImageTag"),
+                ParentBackdropImageTags: item.LookupCI("ParentBackdropImageTags"),
+                ParentBackdropItemId: item.LookupCI("ParentBackdropItemId"),
+                SeriesPrimaryImageTag: item.LookupCI("SeriesPrimaryImageTag"),
+                BackdropImageTags: item.LookupCI("BackdropImageTags")
+            }
+            results.push(tmp)
+            ' Track this ID to avoid duplicates
+            resumeItemIds[item.LookupCI("Id")] = true
+        end for
+    end if
+
+    recentPlayedParams = {
+        includeItemTypes: "Episode",
+        filters: "IsPlayed",
+        recursive: true,
+        sortBy: "DatePlayed",
+        sortOrder: "Descending",
+        limit: 100,
+        fields: "UserData,SeriesId",
+        UserId: m.global.session.user.id
+    }
+    recentPlayedResponse = api.items.get(recentPlayedParams)
+
+ ' Create a lookup map of series LastPlayedDate to populate nextup
+    seriesLastPlayedMap = {}
+    if isChainValid(recentPlayedResponse, "Items")
+        for each item in recentPlayedResponse.Items
+            sId = item.LookupCI("SeriesId")
+            userData = item.LookupCI("UserData")
+            if isValid(sId) and isValid(userData) and seriesLastPlayedMap[sId] = invalid
+                seriesLastPlayedMap[sId] = userData["LastPlayedDate"]
+            end if
+        end for
+    end if
+    ' Add Next Up items that aren't already in Continue Watching
+    if isChainValid(nextUpData, "Items")
+        for each item in nextUpData.Items
+            itemId = item.LookupCI("Id")
+            seriesId = item.LookupCI("SeriesId")
+            userData = item.LookupCI("UserData")
+            if not isValid(userData) then userData = {}
+            if userData["LastPlayedDate"] = invalid and isValid(seriesId)
+                userData["LastPlayedDate"] = seriesLastPlayedMap[seriesId]
+            end if
+            if isHiddenByMap(item, hiddenNU, true) then continue for
+            ' Only add if not already in resume items
+            if not resumeItemIds.DoesExist(itemId)
+                tmp = createSGNode("HomeData")
+                tmp.json = {
+                Id: itemId,
+                name: item.LookupCI("name"),
+                Type: item.LookupCI("Type"),
+                SeriesName: item.LookupCI("SeriesName"),
+                SeriesId: seriesId,
+                SeasonId: item.LookupCI("SeasonId"),
+                ProductionYear: item.LookupCI("ProductionYear"),
+                Status: item.LookupCI("Status"),
+                EndDate: item.LookupCI("EndDate"),
+                ParentIndexNumber: item.LookupCI("ParentIndexNumber"),
+                IndexNumber: item.LookupCI("IndexNumber"),
+                IndexNumberEnd: item.LookupCI("IndexNumberEnd"),
+                OfficialRating: item.LookupCI("OfficialRating"),
+                CollectionType: item.LookupCI("CollectionType"),
+                ImageTags: item.LookupCI("ImageTags"),
+                UserData: userData,
+                ParentThumbItemId: item.LookupCI("ParentThumbItemId"),
+                ParentThumbImageTag: item.LookupCI("ParentThumbImageTag"),
+                ParentBackdropImageTags: item.LookupCI("ParentBackdropImageTags"),
+                ParentBackdropItemId: item.LookupCI("ParentBackdropItemId"),
+                SeriesPrimaryImageTag: item.LookupCI("SeriesPrimaryImageTag"),
+                BackdropImageTags: item.LookupCI("BackdropImageTags")
+            }
+                results.push(tmp)
+            end if
+        end for
+    end if
+
+    sortedResults = sortServerResultsByDate(results)
+    return sortedResults
+end function
+
+' sortServerResultsByDate: Sorts multi-server results by a date field (descending)
+'
+' @param {array} results - Array of items from multiple servers
+' @return {array} Sorted array
+function sortServerResultsByDate(results as object) as object
+    if not isValidAndNotEmpty(results) then return []
+
+    ' Convert to array with sortable date values
+    sortableItems = []
+    for each item in results
+        dateValue = invalid
+        if isValid(item.json) and isValid(item.json.UserData)
+            dateValue = item.json.UserData.LastPlayedDate
+        end if
+        sortableItems.push({
+            item: item,
+            sortDate: dateValue
+        })
+    end for
+
+    ' Simple bubble sort (sufficient for small arrays)
+    n = sortableItems.count()
+    for i = 0 to n - 2
+        for j = 0 to n - i - 2
+            ' Compare dates (ISO strings compare correctly alphabetically for descending)
+            date1 = sortableItems[j].sortDate
+            date2 = sortableItems[j + 1].sortDate
+
+            ' Handle invalid dates
+            if not isValid(date1) then date1 = ""
+            if not isValid(date2) then date2 = ""
+
+            ' Swap if date1 < date2 (we want descending order)
+            if date1 < date2
+                temp = sortableItems[j]
+                sortableItems[j] = sortableItems[j + 1]
+                sortableItems[j + 1] = temp
+            end if
+        end for
+    end for
+
+    ' Extract sorted items
+    sortedResults = []
+    for each sortable in sortableItems
+        sortedResults.push(sortable.item)
+    end for
+
+    return sortedResults
 end function
 
 function loadSeasonOfEpisodes() as object
@@ -213,7 +1266,7 @@ function loadContinueListening() as object
     if not isChainValid(data, "Items") then return results
 
     for each item in data.Items
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
         tmp.Id = item.LookupCI("Id")
         tmp.name = item.LookupCI("name")
         tmp.type = item.LookupCI("Type")
@@ -257,8 +1310,8 @@ function loadMoreLikeThis() as object
         tmp = CreateObject("roSGNode", "ExtrasData")
         imgParms = {
             "Tags": item.PrimaryImageTag,
-            MaxWidth: 384,
-            MaxHeight: 196
+            MaxWidth: 468,
+            MaxHeight: 702
         }
         if isStringEqual(item.LookupCI("type"), ItemType.MUSICVIDEO)
             imgParms.MaxHeight = 330
@@ -350,30 +1403,58 @@ function loadSpecialFeatures() as object
     return results
 end function
 
-const THUMB_ASPECT_RATIO = 1.777 ' 16/9
+function loadSeasons() as object
+    results = []
 
-function calculateOnNowItemWidth(ratio as dynamic, isThumbImage as boolean) as float
-    ' Actual image height within the cell (not the full cell height,
-    ' which includes the title space below). Must match the image
-    ' height used for wide/movie/album (all are 261).
-    itemHeight = 261
-    maxWidth = homeRowItemSizes.WIDE_POSTER[0] ' ceiling
-    minWidth = homeRowItemSizes.MOVIE_POSTER[0] ' floor
+    if not isValid(m.top.itemId) or m.top.itemId = "" then return results
 
-    if isThumbImage
-        return itemHeight * THUMB_ASPECT_RATIO
-    end if
+    params = {
+        userId: m.global.session.user.id,
+        ParentId: m.top.itemId,
+        Fields: "Overview,PrimaryImageAspectRatio,ChildCount,MediaSources",
+        enableTotalRecordCount: true
+    }
 
-    if not isValid(ratio) or ratio <= 0
-        return minWidth ' no aspect ratio metadata -> usually falls back to channel logo, safer narrow
-    end if
+    data = api.items.Get(params)
 
-    calculatedWidth = itemHeight * ratio
+    if not isChainValid(data, "Items") then return results
 
-    if calculatedWidth > maxWidth then return maxWidth
-    if calculatedWidth < minWidth then return minWidth
+    for each season in data.Items
+        tmp = createSGNode("HomeData")
+        tmp.json = {
+            id: season.LookupCI("Id"),
+            name: season.LookupCI("Name"),
+            Type: season.LookupCI("Type"),
+            year: season.LookupCI("ProductionYear"),
+            overview: season.LookupCI("Overview"),
+            ImageTags: season.LookupCI("ImageTags"),
+            SeriesImageTags: season.LookupCI("SeriesImageTags"),
+            BackdropImageTags: season.LookupCI("BackdropImageTags"),
+            ParentBackdropImageTags: season.LookupCI("ParentBackdropImageTags"),
+            ParentBackdropItemId: season.LookupCI("ParentBackdropItemId"),
+            UserData: season.LookupCI("UserData")
+        }
 
-    return calculatedWidth
+        ' Build poster URL - use lowercase posterUrl to match ExtrasItem expectations
+        seasonId = season.LookupCI("Id")
+        params = {
+            maxWidth: 300,
+            quality: 90
+        }
+        if hasImageTagPrimary(season)
+            params.Tag = season.ImageTags.Primary
+            tmp.posterUrl = ImageUrl(seasonId, "Primary", params)
+        else if hasValidProperties(season, "SeriesImageTags", "Primary")
+            params.Tag = season.SeriesImageTags.Primary
+            tmp.posterUrl = ImageUrl(seasonId, "Primary", params)
+        else
+            tmp.posterUrl = ""
+        end if
+
+        results.push(tmp)
+    end for
+
+    return results
 end function
 
 function loadLiveTVOnNow() as object
@@ -394,12 +1475,7 @@ function loadLiveTVOnNow() as object
     if not isChainValid(data, "Items") then return results
 
     for each item in data.Items
-        tmp = CreateObject("roSGNode", "HomeData")
-        imageTags = item.LookupCI("ImageTags")
-        isThumbImage = chainLookupReturn(imageTags, ImageType.THUMB, false)
-
-        tmp.addField("FHDItemWidth", "float", false)
-        tmp.FHDItemWidth = calculateOnNowItemWidth(item.LookupCI("PrimaryImageAspectRatio"), isThumbImage)
+        tmp = createSGNode("HomeData")
         tmp.json = {
             id: item.LookupCI("Id"),
             name: item.LookupCI("name"),
@@ -436,8 +1512,50 @@ function loadLiveTVOnNow() as object
     return results
 end function
 
+function loadNextUpForShow() as object
+    ' Load next up episodes for a specific TV show
+    results = []
+
+    if not isValid(m.top.itemId) or m.top.itemId = "" then return results
+
+    params = {
+        SeriesId: m.top.itemId,
+        UserId: m.global.session.user.id,
+        EnableRewatching: false,
+        limit: 10,
+        EnableTotalRecordCount: false
+    }
+
+    data = api.shows.GetNextUp(params)
+
+    if isChainValid(data, "Items")
+        for each item in data.Items
+            tmp = createSGNode("HomeData")
+            tmp.json = item
+
+            ' Override imageWidth to 502 for wide episode display
+            tmp.imageWidth = 502
+
+            ' Set posterUrl to episode's wide thumbnail (overrides HomeData's series portrait)
+            if isValid(item.Id)
+                imgParams = { "maxHeight": 283, "maxWidth": 502 }
+                if hasImageTagPrimary(item)
+                    imgParams.Tag = item.ImageTags.Primary
+                end if
+                tmp.posterUrl = ImageURL(item.Id, "Primary", imgParams)
+            end if
+
+            results.push(tmp)
+        end for
+    end if
+
+    return results
+end function
+
 function loadNextUp() as object
     results = []
+
+    hiddenNU = getHiddenItemsMap("ui.home.hiddenNextUpSeries")
 
     params = {
         recursive: true,
@@ -445,7 +1563,6 @@ function loadNextUp() as object
         SortOrder: "Descending",
         ImageTypeLimit: 1,
         UserId: m.global.session.user.id,
-        EnableRewatching: m.global.session.user.settings["ui.details.enablerewatchingnextup"],
         DisableFirstEpisode: false,
         limit: 26,
         EnableTotalRecordCount: false
@@ -469,7 +1586,8 @@ function loadNextUp() as object
 
     if isChainValid(data, "Items")
         for each item in data.Items
-            tmp = CreateObject("roSGNode", "HomeData")
+            if isHiddenByMap(item, hiddenNU, true) then continue for
+            tmp = createSGNode("HomeData")
             tmp.json = item
             results.push(tmp)
             count++
@@ -481,7 +1599,7 @@ function loadNextUp() as object
     end if
 
     if addViewAll
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
         tmp.type = ItemType.COLLECTIONFOLDER
         tmp.usePoster = false
         tmp.json = {
@@ -500,24 +1618,30 @@ end function
 '
 function getFavoriteRowDefinitions() as object
     return [
-        { title: `${tr("Favorite")} ${tr("Movies")}`, includeItemTypes: ItemType.MOVIE, rowType: "poster" },
-        { title: `${tr("Favorite")} ${tr("Shows")}`, includeItemTypes: ItemType.SERIES, rowType: "poster" },
-        { title: `${tr("Favorite")} ${tr("Episodes")}`, includeItemTypes: ItemType.EPISODE, rowType: "wide" },
-        { title: `${tr("Favorite")} ${tr("Videos")}`, includeItemTypes: `${ItemType.VIDEO},${ItemType.MUSICVIDEO}`, rowType: "wide" },
-        { title: `${tr("Favorite")} ${tr("Collections")}`, includeItemTypes: ItemType.BOXSET, rowType: "poster" },
-        { title: `${tr("Favorite")} ${tr("Playlists")}`, includeItemTypes: ItemType.PLAYLIST, rowType: "album" },
-        { title: `${tr("Favorite")} ${tr("Cast & Crew")}`, queryType: "people", rowType: "poster" },
-        { title: `${tr("Favorite")} ${tr("Artists")}`, queryType: "artists", rowType: "album" },
-        { title: `${tr("Favorite")} ${tr("Albums")}`, includeItemTypes: ItemType.MUSICALBUM, rowType: "album" },
-        { title: `${tr("Favorite")} ${tr("Songs")}`, includeItemTypes: ItemType.AUDIO, rowType: "album" }
+        { rowKey: "movies", title: `${tr("Favorite")} ${tr("Movies")}`, includeItemTypes: ItemType.MOVIE, rowType: "poster" },
+        { rowKey: "shows", title: `${tr("Favorite")} ${tr("Shows")}`, includeItemTypes: ItemType.SERIES, rowType: "poster" },
+        { rowKey: "episodes", title: `${tr("Favorite")} ${tr("Episodes")}`, includeItemTypes: ItemType.EPISODE, rowType: "wide" },
+        { rowKey: "videos", title: `${tr("Favorite")} ${tr("Videos")}`, includeItemTypes: `${ItemType.VIDEO},${ItemType.MUSICVIDEO}`, rowType: "wide" },
+        { rowKey: "collections", title: `${tr("Favorite")} ${tr("Collections")}`, includeItemTypes: ItemType.BOXSET, rowType: "poster" },
+        { rowKey: "playlists", title: `${tr("Favorite")} ${tr("Playlists")}`, includeItemTypes: ItemType.PLAYLIST, rowType: "album" },
+        { rowKey: "people", title: `${tr("Favorite")} ${tr("Cast & Crew")}`, queryType: ItemType.PERSON, rowType: "poster" },
+        { rowKey: "artists", title: `${tr("Favorite")} ${tr("Artists")}`, queryType: ItemType.MUSICARTIST, rowType: "album" },
+        { rowKey: "albums", title: `${tr("Favorite")} ${tr("Albums")}`, includeItemTypes: ItemType.MUSICALBUM, rowType: "album" },
+        { rowKey: "songs", title: `${tr("Favorite")} ${tr("Songs")}`, includeItemTypes: ItemType.AUDIO, rowType: "album" },
+        { rowKey: "channels", title: `${tr("Favorite")} ${tr("Channels")}`, includeItemTypes: ItemType.TVCHANNEL, rowType: "wide" }
     ]
+end function
+
+function getFavoriteHomeRowLimit() as integer
+    return 24
 end function
 
 function getFavoriteQueryParams(sortField as string, sortOrder as string) as object
     return {
         userid: m.global.session.user.id,
         Filters: "IsFavorite",
-        Limit: 25,
+        IsFavorite: true,
+        Limit: getFavoriteHomeRowLimit() + 1,
         recursive: true,
         sortby: sortField,
         sortOrder: sortOrder,
@@ -556,7 +1680,9 @@ function createFavoriteHomeData(item as object) as object
         IndexNumber: item.LookupCI("IndexNumber"),
         OfficialRating: item.LookupCI("OfficialRating"),
         Album: item.LookupCI("Album"),
+        AlbumId: item.LookupCI("AlbumId"),
         AlbumArtist: item.LookupCI("AlbumArtist"),
+        AlbumPrimaryImageTag: item.LookupCI("AlbumPrimaryImageTag"),
         ChildCount: item.LookupCI("ChildCount"),
         CollectionType: item.LookupCI("CollectionType"),
         PrimaryImageTag: primaryImageTag,
@@ -573,14 +1699,53 @@ function createFavoriteHomeData(item as object) as object
     return tmp
 end function
 
-function createFavoriteHomeItems(data as object) as object
+function createFavoriteViewAllHomeData(favoriteRow as object, sortField as string, sortOrder as string) as object
+    tmp = CreateObject("roSGNode", "HomeData")
+    iconUrl = "pkg:/images/icons/gridView.png"
+    rowKey = favoriteRow.LookupCI("rowKey")
+
+    tmp.posterURL = string.EMPTY
+    tmp.thumbnailURL = string.EMPTY
+    tmp.widePosterURL = string.EMPTY
+    tmp.iconURL = iconUrl
+    tmp.json = {
+        Id: `favorite-${rowKey}`,
+        Name: tr("View All"),
+        Type: ItemType.FOLDER,
+        CollectionType: "favorites",
+        FavoriteViewAll: true,
+        IncludeItemTypes: favoriteRow.LookupCI("includeItemTypes") ?? string.EMPTY,
+        QueryType: favoriteRow.LookupCI("queryType") ?? string.EMPTY,
+        SortBy: sortField,
+        SortOrder: sortOrder
+    }
+
+    return tmp
+end function
+
+function createFavoriteHomeItems(data as object, favoriteRow as object, sortField as string, sortOrder as string) as object
     results = []
 
     if not isChainValid(data, "Items") then return results
 
+    favoriteRowLimit = getFavoriteHomeRowLimit()
+    count = 0
+    addViewAll = false
+
     for each item in data.Items
-        results.push(createFavoriteHomeData(item))
+        if count < favoriteRowLimit
+            results.push(createFavoriteHomeData(item))
+        else
+            addViewAll = true
+            exit for
+        end if
+
+        count++
     end for
+
+    if addViewAll
+        results.push(createFavoriteViewAllHomeData(favoriteRow, sortField, sortOrder))
+    end if
 
     return results
 end function
@@ -595,9 +1760,9 @@ function loadFavorites() as object
         queryType = favoriteRow.LookupCI("queryType") ?? string.EMPTY
         params = getFavoriteQueryParams(sortField, sortOrder)
 
-        if isStringEqual(queryType, "people")
+        if isStringEqual(queryType, ItemType.PERSON)
             data = api.persons.Get(params)
-        else if isStringEqual(queryType, "artists")
+        else if isStringEqual(queryType, ItemType.MUSICARTIST)
             params.IncludeItemTypes = `${ItemType.MUSICALBUM},${ItemType.AUDIO}`
             data = api.artists.Get(params)
         else
@@ -605,7 +1770,7 @@ function loadFavorites() as object
             data = api.items.Get(params)
         end if
 
-        items = createFavoriteHomeItems(data)
+        items = createFavoriteHomeItems(data, favoriteRow, sortField, sortOrder)
 
         if isValidAndNotEmpty(items)
             results.push({
@@ -674,7 +1839,7 @@ function loadMyList() as object
     for each item in myListData.Items
         if inArray([ItemType.BOOK, ItemType.AUDIO], item.type) then continue for
 
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
 
         params = {
             Tags: item.PrimaryImageTag,
@@ -711,7 +1876,7 @@ function loadMyList() as object
     end for
 
     if myListData.Items.count() > 3
-        tmp = CreateObject("roSGNode", "HomeData")
+        tmp = createSGNode("HomeData")
         tmp.id = playlistID
         tmp.type = ItemType.COLLECTIONFOLDER
         tmp.usePoster = false
@@ -838,6 +2003,22 @@ sub loadItems()
         return
     end if
 
+    ' A picked collection, genre or playlist shares the pluginDynamic prefix with the rows
+    ' the plugin proxies, so it has to be recognised before that branch claims it
+    picked = homeRowLayout.SourceFromId(m.top.itemsToLoad)
+    if isValid(picked)
+        m.top.content = loadPickedRow(picked)
+        return
+    end if
+
+    ' Row ids reach us lowercased when they come from settings and camel cased when they
+    ' come from the server, so match the prefix case-insensitively
+    lowerItemsToLoad = LCase(m.top.itemsToLoad)
+    if lowerItemsToLoad.startsWith("imdb_") or lowerItemsToLoad.startsWith("tmdb_") or lowerItemsToLoad.startsWith("seerr_") or lowerItemsToLoad.startsWith("plugindynamic:")
+        m.top.content = loadCustomDynamicList(m.top.itemsToLoad, m.top.additionalData)
+        return
+    end if
+
     if isStringEqual(m.top.itemsToLoad, "libraries")
         m.top.content = loadLibraries()
         return
@@ -848,8 +2029,28 @@ sub loadItems()
         return
     end if
 
+    if isStringEqual(m.top.itemsToLoad, "recentlyReleased")
+        m.top.content = loadRecentlyReleased()
+        return
+    end if
+
+    if isStringEqual(m.top.itemsToLoad, "sinceYouWatched")
+        m.top.content = loadSinceYouWatched()
+        return
+    end if
+
+    if isStringEqual(m.top.itemsToLoad, "rewatch")
+        m.top.content = loadRewatch()
+        return
+    end if
+
     if isStringEqual(m.top.itemsToLoad, "continue")
         m.top.content = loadContinueWatching()
+        return
+    end if
+
+    if isStringEqual(m.top.itemsToLoad, "mergedContinueWatching")
+        m.top.content = loadMergedContinueWatching()
         return
     end if
 
@@ -861,7 +2062,7 @@ sub loadItems()
     if isStringEqual(m.top.itemsToLoad, "seasonOfEpisodes")
         try
             m.top.content = loadSeasonOfEpisodes()
-        catch e
+        catch _e
             m.top.content = []
         end try
         return
@@ -882,6 +2083,41 @@ sub loadItems()
         return
     end if
 
+    if isStringEqual(m.top.itemsToLoad, "homeplaylists")
+        m.top.content = loadHomePlaylists()
+        return
+    end if
+
+    if isStringEqual(m.top.itemsToLoad, "collections")
+        m.top.content = loadCollections()
+        return
+    end if
+
+    if isStringEqual(m.top.itemsToLoad, "genres")
+        m.top.content = loadGenres()
+        return
+    end if
+
+    if isStringEqual(m.top.itemsToLoad, "studios")
+        m.top.content = loadStudios()
+        return
+    end if
+
+    if isStringEqual(m.top.itemsToLoad, "radarr_calendar")
+        m.top.content = loadArrCalendar("radarr")
+        return
+    end if
+
+    if isStringEqual(m.top.itemsToLoad, "sonarr_calendar")
+        m.top.content = loadArrCalendar("sonarr")
+        return
+    end if
+
+    if isStringEqual(m.top.itemsToLoad, "audio")
+        m.top.content = loadAudio()
+        return
+    end if
+
     if isStringEqual(m.top.itemsToLoad, "isInMyList")
         m.top.content = loadIsInMyList()
         return
@@ -898,12 +2134,30 @@ sub loadItems()
     end if
 
     if isStringEqual(m.top.itemsToLoad, "metaData")
-        m.top.content = [ItemMetaData(m.top.itemId)]
+        serverUrl = m.top.serverUrl
+        serverUserId = m.top.serverUserId
+        serverAuthToken = m.top.serverAuthToken
+
+        if isValidAndNotEmpty(serverUrl) and isValidAndNotEmpty(serverUserId) and isValidAndNotEmpty(serverAuthToken)
+            serverData = {
+                serverUrl: serverUrl,
+                userId: serverUserId,
+                authToken: serverAuthToken
+            }
+            m.top.content = [ItemMetaDataForServer(serverData, m.top.itemId)]
+        else
+            m.top.content = [ItemMetaData(m.top.itemId)]
+        end if
         return
     end if
 
     if isStringEqual(m.top.itemsToLoad, "personSeries")
         m.top.content = loadItemsByPerson(ItemType.SERIES)
+        return
+    end if
+
+    if isStringEqual(m.top.itemsToLoad, "nextup")
+        m.top.content = loadNextUpForShow()
         return
     end if
 
@@ -937,6 +2191,11 @@ sub loadItems()
         return
     end if
 
+    if isStringEqual(m.top.itemsToLoad, "seasons")
+        m.top.content = loadSeasons()
+        return
+    end if
+
     if isStringEqual(m.top.itemsToLoad, "continueListening")
         m.top.content = loadContinueListening()
         return
@@ -949,3 +2208,832 @@ sub loadItems()
 
     m.top.content = []
 end sub
+
+function decodeSeerrBase64(base64String as string) as string
+    if base64String = ""
+        return ""
+    end if
+    ba = CreateObject("roByteArray")
+    ba.FromBase64String(base64String)
+    return ba.ToAsciiString()
+end function
+
+function unwrapSeerrProxyResponse(data as object) as object
+    if not isValid(data) or type(data) <> "roAssociativeArray"
+        return invalid
+    end if
+    if isValidStringValue(data.FileContents)
+        decoded = decodeSeerrBase64(data.FileContents)
+        if decoded <> ""
+            return ParseJson(decoded)
+        end if
+    end if
+    return data
+end function
+
+function toNormalizedString(val as dynamic) as string
+    if not isValid(val) then return ""
+    valType = type(val)
+    if valType = "String" or valType = "roString"
+        return val
+    end if
+    if valType = "Integer" or valType = "roInt" or valType = "roInteger" or valType = "Float" or valType = "roFloat" or valType = "Double" or valType = "LongInteger"
+        return val.toStr()
+    end if
+    return ""
+end function
+
+' Orders raw API items newest first. DateCreated is ISO 8601, so comparing the strings gives
+' chronological order, and items missing the field settle at the end instead of the front.
+' roArray.SortBy() matches the field name case-sensitively, so it can't be used here.
+function sortByDateCreatedDescending(items as object) as object
+    sorted = []
+    dates = []
+
+    for each item in items
+        itemDate = toNormalizedString(item.LookupCI("DateCreated"))
+        placed = false
+
+        for i = 0 to sorted.Count() - 1
+            if itemDate > dates[i]
+                sorted.Insert(i, item)
+                dates.Insert(i, itemDate)
+                placed = true
+                exit for
+            end if
+        end for
+
+        if not placed
+            sorted.push(item)
+            dates.push(itemDate)
+        end if
+    end for
+
+    return sorted
+end function
+
+function loadCustomDynamicList(listName as string, additionalData as dynamic) as object
+    results = []
+
+    source = "imdb"
+    chartType = listName
+    paramsJson = "{}"
+
+    ' Ids arrive lowercased from settings and camel cased from the server
+    lowerListName = LCase(listName)
+
+    rowConfig = {}
+    if isValid(additionalData)
+        if type(additionalData) = "String" or type(additionalData) = "roString"
+            rowConfig = ParseJson(additionalData)
+        else if type(additionalData) = "roAssociativeArray" or type(additionalData) = "AssociativeArray"
+            rowConfig = additionalData
+        end if
+    end if
+
+    if lowerListName.startsWith("plugindynamic:")
+        source = chainLookupReturn(rowConfig, "source", "imdb")
+        chartType = chainLookupReturn(rowConfig, "type", "")
+        paramsMap = chainLookupReturn(rowConfig, "params", {})
+        paramsJson = FormatJson(paramsMap)
+    else if lowerListName.startsWith("tmdb_")
+        source = "tmdb_chart"
+        chartType = listName
+        if listName = "tmdb_popular_movies" then chartType = "movie/popular"
+        if listName = "tmdb_top_rated_movies" then chartType = "movie/top_rated"
+        if listName = "tmdb_now_playing_movies" then chartType = "movie/now_playing"
+        if listName = "tmdb_upcoming_movies" then chartType = "movie/upcoming"
+        if listName = "tmdb_popular_tv" then chartType = "tv/popular"
+        if listName = "tmdb_top_rated_tv" then chartType = "tv/top_rated"
+        if listName = "tmdb_airing_today_tv" then chartType = "tv/airing_today"
+        if listName = "tmdb_on_the_air_tv" then chartType = "tv/on_the_air"
+        if listName = "tmdb_trending_movie_daily" then chartType = "trending/movie/day"
+        if listName = "tmdb_trending_movie_weekly" then chartType = "trending/movie/week"
+        if listName = "tmdb_trending_tv_daily" then chartType = "trending/tv/day"
+        if listName = "tmdb_trending_tv_weekly" then chartType = "trending/tv/week"
+        if listName = "tmdb_trending_all_weekly" then chartType = "trending/all/week"
+
+        paramsJson = FormatJson({ source: source, type: chartType })
+    else if lowerListName.startsWith("seerr_")
+        source = "seerr"
+        chartType = listName
+    end if
+
+    if source = "seerr"
+        ' Map Seerr chart types to endpoints and parameters
+        endpoint = ""
+        queryParams = {}
+        isRequests = false
+
+        if chartType = "seerr_recent_requests" or chartType = "recentrequests" or chartType = "recentRequests"
+            endpoint = "/api/v1/request"
+            queryParams = { take: "20", skip: "0", sort: "modified", filter: "all" }
+            isRequests = true
+        else if chartType = "seerr_recently_added" or chartType = "recentlyadded" or chartType = "recentlyAdded"
+            endpoint = "/api/v1/media"
+            queryParams = { filter: "allavailable", sort: "mediaAdded", take: "20" }
+        else if chartType = "seerr_trending" or chartType = "trending"
+            endpoint = "/api/v1/discover/trending"
+            queryParams = { page: "1", language: "en" }
+        else if chartType = "seerr_popular_movies" or chartType = "popularmovies" or chartType = "popularMovies"
+            endpoint = "/api/v1/discover/movies"
+            queryParams = { page: "1", language: "en" }
+        else if chartType = "seerr_upcoming_movies" or chartType = "upcomingmovies" or chartType = "upcomingMovies"
+            endpoint = "/api/v1/discover/movies/upcoming"
+            queryParams = { language: "en" }
+        else if chartType = "seerr_popular_series" or chartType = "popularseries" or chartType = "popularSeries"
+            endpoint = "/api/v1/discover/tv"
+            queryParams = { page: "1", language: "en" }
+        else if chartType = "seerr_upcoming_series" or chartType = "upcomingseries" or chartType = "upcomingSeries"
+            endpoint = "/api/v1/discover/tv/upcoming"
+            queryParams = { language: "en" }
+        else if chartType = "seerr_watchlist" or chartType = "watchlist" or chartType = "yourWatchlist"
+            endpoint = "/api/v1/discover/watchlist"
+            queryParams = { page: "1" }
+        end if
+
+        ' The browse rows are tiles rather than media, so they build their own nodes
+        if chartType = "seerr_studios" or chartType = "studios" then return seerrTileRow("studio")
+        if chartType = "seerr_networks" or chartType = "networks" then return seerrTileRow("network")
+        if chartType = "seerr_movie_genres" or chartType = "genreMovies" then return seerrGenreTileRow("movie")
+        if chartType = "seerr_series_genres" or chartType = "genreTv" then return seerrGenreTileRow("tv")
+        if chartType = "seerr_shortcuts" or chartType = "shortcuts" then return seerrShortcutRow()
+
+        if endpoint <> ""
+            if Left(endpoint, 7) = "/api/v1"
+                proxyPath = Mid(endpoint, 8)
+            else
+                proxyPath = endpoint
+            end if
+            if Left(proxyPath, 1) <> "/" then proxyPath = "/" + proxyPath
+
+            req = APIRequest("/Moonfin/Seerr/Api" + proxyPath, queryParams)
+            response = unwrapSeerrProxyResponse(getJson(req))
+
+            if response <> invalid and isChainValid(response, "results")
+                resultsArray = response.results
+                for each item in resultsArray
+                    if not isValid(item) then continue for
+
+                    resItem = item
+                    if isRequests
+                        if item.media <> invalid
+                            resItem = item.media
+                            resItem.mediaType = item.type
+                        else
+                            continue for
+                        end if
+                    end if
+
+                    mediaType = resItem.LookupCI("mediaType")
+                    if not isValidAndNotEmpty(mediaType) then mediaType = resItem.LookupCI("media_type")
+                    if not isValidAndNotEmpty(mediaType) then mediaType = (resItem.type = "Series" or resItem.type = "tv") ? "tv" : "movie"
+
+                    tmdbId = resItem.LookupCI("tmdbId")
+                    if not isValid(tmdbId) then tmdbId = resItem.LookupCI("id")
+                    if not isValid(tmdbId) then continue for
+
+                    title = resItem.LookupCI("title")
+                    if not isValidAndNotEmpty(title) then title = resItem.LookupCI("name")
+                    title = toNormalizedString(title)
+                    if title = "" then title = "Unknown"
+
+                    posterPath = resItem.LookupCI("posterPath")
+                    if not isValidAndNotEmpty(posterPath) then posterPath = resItem.LookupCI("poster_path")
+
+                    posterUrl = ""
+                    if isValidAndNotEmpty(posterPath)
+                        if posterPath.startsWith("http")
+                            posterUrl = posterPath
+                        else
+                            tmdbUrls = GetTmdbImageBaseUrls()
+                            posterUrl = tmdbUrls.posterW342 + posterPath
+                        end if
+                    end if
+
+                    backdropPath = resItem.LookupCI("backdropPath")
+                    if not isValidAndNotEmpty(backdropPath) then backdropPath = resItem.LookupCI("backdrop_path")
+
+                    backdropUrl = ""
+                    if isValidAndNotEmpty(backdropPath)
+                        if backdropPath.startsWith("http")
+                            backdropUrl = backdropPath
+                        else
+                            tmdbUrls = GetTmdbImageBaseUrls()
+                            backdropUrl = tmdbUrls.backdropW1280 + backdropPath
+                        end if
+                    end if
+
+                    resItem.mediaType = mediaType
+
+                    tmp = createSGNode("HomeData")
+                    tmp.name = title
+                    tmp.type = (mediaType = "tv") ? "Series" : "Movie"
+                    tmp.usePoster = true
+                    if posterUrl <> "" then tmp.posterURL = posterUrl
+                    if backdropUrl <> "" then tmp.backdropURL = backdropUrl
+
+                    tmp.json = {
+                        Id: toNormalizedString(tmdbId),
+                        name: title,
+                        Type: tmp.type,
+                        SeerrTmdbId: toNormalizedString(tmdbId),
+                        SeerrMediaType: mediaType,
+                        SeerrPosterURL: posterUrl,
+                        SeerrItem: resItem
+                    }
+                    results.push(tmp)
+                end for
+            end if
+        end if
+    else
+        data = getJson(APIRequest("/Moonfin/CustomRows/Items", {
+            source: source,
+            type: chartType,
+            params: paramsJson
+        }))
+
+        if data <> invalid and chainLookupReturn(data, "success", false) = true and isChainValid(data, "items")
+            for each item in data.items
+                if not isValid(item) then continue for
+
+                jellyfinId = item.LookupCI("Id")
+                if not isValidAndNotEmpty(jellyfinId) then jellyfinId = item.LookupCI("id")
+
+                ' If this is a native Jellyfin item (e.g., from a dynamic genre or collection row), process via internalRowNode
+                if isValidAndNotEmpty(jellyfinId) and (isChainValid(item, "ImageTags") or isChainValid(item, "PrimaryImageTag") or isChainValid(item, "ServerId") or isChainValid(item, "CollectionType") or not isChainValid(item, "providerIds"))
+                    itemType = item.LookupCI("Type")
+                    if not isValidAndNotEmpty(itemType) then itemType = item.LookupCI("type")
+                    if not isValidAndNotEmpty(itemType) then itemType = "Movie"
+                    results.push(internalRowNode(item, itemType))
+                    continue for
+                end if
+
+                tmdbId = item.LookupCI("tmdbId")
+                if not isValidAndNotEmpty(tmdbId) then tmdbId = item.LookupCI("id")
+
+                imdbId = ""
+                providerIds = item.LookupCI("providerIds")
+                if isValid(providerIds)
+                    imdbId = providerIds.LookupCI("imdb")
+                    if not isValidAndNotEmpty(tmdbId) then tmdbId = providerIds.LookupCI("tmdb")
+                end if
+
+                if not isValidAndNotEmpty(tmdbId) and not isValidAndNotEmpty(imdbId)
+                    continue for
+                end if
+
+                title = item.LookupCI("name")
+                if not isValidAndNotEmpty(title) then title = item.LookupCI("title")
+                title = toNormalizedString(title)
+                if title = "" then title = "Unknown"
+
+                itemType = item.LookupCI("type")
+                if not isValidAndNotEmpty(itemType) then itemType = "Movie"
+
+                posterPath = item.LookupCI("posterUrl")
+                if not isValidAndNotEmpty(posterPath) then posterPath = item.LookupCI("poster_path")
+
+                posterUrl = ""
+                if isValidAndNotEmpty(posterPath)
+                    if posterPath.startsWith("http")
+                        posterUrl = posterPath
+                    else
+                        tmdbUrls = GetTmdbImageBaseUrls()
+                        posterUrl = tmdbUrls.posterW342 + posterPath
+                    end if
+                end if
+
+                backdropPath = item.LookupCI("backdropUrl")
+                if not isValidAndNotEmpty(backdropPath) then backdropPath = item.LookupCI("backdrop_path")
+
+                backdropUrl = ""
+                if isValidAndNotEmpty(backdropPath)
+                    if backdropPath.startsWith("http")
+                        backdropUrl = backdropPath
+                    else
+                        tmdbUrls = GetTmdbImageBaseUrls()
+                        backdropUrl = tmdbUrls.backdropW1280 + backdropPath
+                    end if
+                end if
+
+                seerrItem = {
+                    id: tmdbId,
+                    title: title,
+                    type: (itemType = "Series") ? "tv" : "movie",
+                    mediaType: (itemType = "Series") ? "tv" : "movie",
+                    posterPath: posterPath,
+                    backdropPath: backdropPath,
+                    productionYear: item.LookupCI("productionYear")
+                }
+
+                tmp = createSGNode("HomeData")
+                tmp.name = title
+                tmp.type = (itemType = "Series") ? "Series" : "Movie"
+                tmp.usePoster = true
+                if posterUrl <> "" then tmp.posterURL = posterUrl
+                if backdropUrl <> "" then tmp.backdropURL = backdropUrl
+
+                tmp.json = {
+                    Id: toNormalizedString(tmdbId),
+                    name: title,
+                    Type: tmp.type,
+                    SeerrTmdbId: toNormalizedString(tmdbId),
+                    SeerrMediaType: seerrItem.mediaType,
+                    SeerrPosterURL: posterUrl,
+                    SeerrItem: seerrItem
+                }
+                results.push(tmp)
+            end for
+        end if
+    end if
+
+    return results
+end function
+
+' internalRowNode: Builds a home card for one of the opt in internal rows
+'
+' @param {object} item - Item as returned by the server
+' @param {string} itemType - Value to store on the node's type field
+' @return {object} a HomeData node ready to append to a row
+function internalRowNode(item as object, itemType as string) as object
+    tmp = CreateObject("roSGNode", "HomeData")
+    tmp.type = itemType
+    ' Both are needed. The home card rebuilds its title from name, while the bookshelf and
+    ' gallery rows read title straight off the node.
+    tmp.name = item.name
+    tmp.title = item.name
+    tmp.id = item.id
+
+    params = { MaxWidth: 234, MaxHeight: 330 }
+    if hasImageTagPrimary(item)
+        params.Tag = item.ImageTags.Primary
+    end if
+    tmp.posterURL = ImageUrl(item.Id, "Primary", params)
+
+    ' HomeData refines the artwork for types it knows, such as MusicAlbum
+    tmp.json = item
+
+    return tmp
+end function
+
+' loadPickedRow: Items for one collection, genre or playlist the viewer put on the home
+' screen as a row of its own. Each source sorts and filters the way its tile row does, so a
+' picked row and the list it came from agree on what belongs in it.
+'
+' @param {object} picked - Source key and item id, from homeRowLayout.SourceFromId
+' @return {object} HomeData nodes for the row
+function loadPickedRow(picked as object) as object
+    results = []
+
+    itemId = picked.itemId
+    if not isValidAndNotEmpty(itemId) then return results
+
+    settings = m.global.session.user.settings
+    params = {
+        UserId: m.global.session.user.id,
+        Recursive: true,
+        Limit: 40,
+        Fields: "PrimaryImageAspectRatio,ProductionYear,PremiereDate,ImageTags,UserData,BackdropImageTags,SeriesPrimaryImageTag",
+        EnableTotalRecordCount: false
+    }
+
+    if isStringEqual(picked.source, "genres")
+        params.GenreIds = itemId
+        params.IncludeItemTypes = genresRowItemTypes(settings)
+        params.SortBy = rowSortByParam(getStringSetting(settings, "ui.home.genresRowSortBy", "name"))
+    else
+        params.ParentId = itemId
+
+        if isStringEqual(picked.source, "collections")
+            params.SortBy = rowSortByParam(getStringSetting(settings, "ui.home.collectionsRowSortBy", "name"))
+            ' The tile row hides episodes unless asked, so a picked collection does too
+            if not getBoolSetting(settings, "ui.home.collectionsRowShowEpisodes", false)
+                params.ExcludeItemTypes = "Episode"
+            end if
+        end if
+    end if
+
+    data = api.items.Get(params)
+    if not isChainValid(data, "Items") then return results
+
+    for each item in data.Items
+        results.push(makeHomeItem(item))
+    end for
+
+    return results
+end function
+
+' A tile that opens a filtered browse rather than a title. The markers ride on the node so
+' the home screen knows to push SeerrGenreBrowseScreen instead of a detail screen.
+function seerrBrowseTile(browseType as string, id as integer, name as string, mediaType as string, artUrl as string) as object
+    tile = createSGNode("HomeData")
+
+    ' The json goes on first. Setting it rebuilds the node from Jellyfin image tags, which
+    ' would throw away artwork that came from TMDB.
+    tile.json = {
+        Id: `seerr-${browseType}-${id.toStr()}`,
+        name: name,
+        Type: "SeerrBrowse",
+        SeerrBrowseType: browseType,
+        SeerrBrowseId: id,
+        SeerrBrowseName: name,
+        SeerrMediaType: mediaType
+    }
+
+    tile.id = `seerr-${browseType}-${id.toStr()}`
+    tile.name = name
+    tile.title = name
+    tile.type = "SeerrBrowse"
+    tile.usePoster = false
+    if artUrl <> "" then tile.posterURL = artUrl
+
+    return tile
+end function
+
+' The studios and networks Seerr offers, drawn as logos
+function seerrTileRow(browseType as string) as object
+    results = []
+
+    if browseType = "studio"
+        entries = seerrBrowseRows.Studios()
+        mediaType = "movie"
+    else
+        entries = seerrBrowseRows.Networks()
+        mediaType = "tv"
+    end if
+
+    for each entry in entries
+        results.push(seerrBrowseTile(browseType, entry.id, entry.name, mediaType, seerrBrowseRows.LogoUrl(entry.logoPath)))
+    end for
+
+    return results
+end function
+
+' Seerr names a backdrop per genre, which is what gives each tile its own artwork
+function seerrGenreTileRow(mediaType as string) as object
+    results = []
+
+    response = unwrapSeerrProxyResponse(getJson(APIRequest(`/Moonfin/Seerr/Api/discover/genreslider/${mediaType}`, {})))
+    if LCase(type(response)) <> "roarray" then return results
+
+    for each genre in response
+        if not isValid(genre) then continue for
+
+        genreId = genre.LookupCI("id")
+        genreName = toNormalizedString(genre.LookupCI("name"))
+        if not isValid(genreId) or genreName = "" then continue for
+
+        art = ""
+        backdrops = genre.LookupCI("backdrops")
+        if isValidAndNotEmpty(backdrops) then art = "https://image.tmdb.org/t/p/w780" + toNormalizedString(backdrops[0])
+
+        results.push(seerrBrowseTile("genre", genreId, genreName, mediaType, art))
+    end for
+
+    return results
+end function
+
+' The places Seerr can be browsed from, with a still borrowed off trending so the tiles
+' carry artwork. A failed read still leaves the row usable, just plainer.
+function seerrShortcutRow() as object
+    shortcuts = [
+        { key: "discover", name: tr("Discover") },
+        { key: "movies", name: tr("Movies") },
+        { key: "series", name: tr("TV Shows") },
+        { key: "requests", name: tr("Requests") }
+    ]
+
+    art = []
+    response = unwrapSeerrProxyResponse(getJson(APIRequest("/Moonfin/Seerr/Api/discover/trending", { page: "1", language: "en" })))
+    if isValid(response) and isChainValid(response, "results")
+        for each item in response.results
+            path = toNormalizedString(item.LookupCI("backdropPath"))
+            if path = "" then path = toNormalizedString(item.LookupCI("backdrop_path"))
+            if path <> "" then art.push("https://image.tmdb.org/t/p/w780" + path)
+        end for
+    end if
+
+    results = []
+    for i = 0 to shortcuts.count() - 1
+        entry = shortcuts[i]
+        still = i < art.count() ? art[i] : ""
+
+        tile = createSGNode("HomeData")
+        tile.json = {
+            Id: `seerr-shortcut-${entry.key}`,
+            name: entry.name,
+            Type: "SeerrShortcut",
+            SeerrShortcut: entry.key
+        }
+
+        tile.id = `seerr-shortcut-${entry.key}`
+        tile.name = entry.name
+        tile.title = entry.name
+        tile.type = "SeerrShortcut"
+        tile.usePoster = false
+        if still <> "" then tile.posterURL = still
+
+        results.push(tile)
+    end for
+
+    return results
+end function
+
+
+' The Radarr and Sonarr calendars, fetched through the plugin so the API key stays on the
+' server and a remote client still sees them. Merging is what the other clients do when
+' both are on and the viewer asked for one list.
+function loadArrCalendar(service as string) as object
+    settings = m.global.session.user.settings
+
+    radarrOn = getBoolSetting(settings, "calendar.radarr.enabled", false)
+    sonarrOn = getBoolSetting(settings, "calendar.sonarr.enabled", false)
+    merged = getBoolSetting(settings, "calendar.merge", false) and radarrOn and sonarrOn
+
+    results = []
+    if service = "radarr" or merged
+        if radarrOn then appendRadarrCalendar(results, settings)
+    end if
+    if service = "sonarr" or merged
+        if sonarrOn then appendSonarrCalendar(results, settings)
+    end if
+
+    sortByCalendarDate(results)
+    return results
+end function
+
+function arrCalendarItems(service as string) as object
+    now = CreateObject("roDateTime")
+    start = now.ToISOString()
+    now.AddSeconds(90 * 24 * 60 * 60)
+
+    data = getJson(APIRequest(`/Moonfin/Seerr/${service}/Calendar`, { start: start, end: now.ToISOString() }))
+    if LCase(type(data)) <> "roarray" then return []
+
+    return data
+end function
+
+' Radarr names three release dates and the viewer chooses which count, so the row shows the
+' soonest one still ahead and says which kind it is
+sub appendRadarrCalendar(results as object, settings as object)
+    showDate = getBoolSetting(settings, "calendar.radarr.showDate", true)
+    kinds = []
+    if getBoolSetting(settings, "calendar.radarr.showCinema", true) then kinds.push({ field: "inCinemas", label: tr("Cinema") })
+    if getBoolSetting(settings, "calendar.radarr.showDigital", true) then kinds.push({ field: "digitalRelease", label: tr("Digital") })
+    if getBoolSetting(settings, "calendar.radarr.showPhysical", true) then kinds.push({ field: "physicalRelease", label: tr("Physical") })
+    if kinds.count() = 0 then return
+
+    today = CreateObject("roDateTime").ToISOString()
+
+    for each movie in arrCalendarItems("Radarr")
+        soonest = ""
+        kindLabel = ""
+        for each kind in kinds
+            when = toNormalizedString(movie.LookupCI(kind.field))
+            if when = "" or when < today then continue for
+            if soonest = "" or when < soonest
+                soonest = when
+                kindLabel = kind.label
+            end if
+        end for
+        if soonest = "" then continue for
+
+        results.push(calendarNode(movie, toNormalizedString(movie.LookupCI("title")), "Movie", soonest, calendarSubtitle(kindLabel, soonest, showDate)))
+    end for
+end sub
+
+' Sonarr lists every episode, so only the next one per series earns a place in the row
+sub appendSonarrCalendar(results as object, settings as object)
+    showDate = getBoolSetting(settings, "calendar.sonarr.showDate", true)
+    showEpisode = getBoolSetting(settings, "calendar.sonarr.showEpisodeInfo", true)
+    today = CreateObject("roDateTime").ToISOString()
+
+    nextPerSeries = {}
+    for each episode in arrCalendarItems("Sonarr")
+        series = episode.LookupCI("series")
+        if not isValid(series) then continue for
+
+        airs = toNormalizedString(episode.LookupCI("airDateUtc"))
+        if airs = "" then airs = toNormalizedString(episode.LookupCI("airDate"))
+        if airs = "" or airs < today then continue for
+
+        key = toNormalizedString(series.LookupCI("id"))
+        held = nextPerSeries[key]
+        if isValid(held) and held.airs <= airs then continue for
+
+        nextPerSeries[key] = { episode: episode, series: series, airs: airs }
+    end for
+
+    for each key in nextPerSeries
+        entry = nextPerSeries[key]
+        label = ""
+        if showEpisode
+            season = entry.episode.LookupCI("seasonNumber")
+            number = entry.episode.LookupCI("episodeNumber")
+            if isValid(season) and isValid(number) then label = `S${season.ToStr()}E${number.ToStr()}`
+        end if
+
+        results.push(calendarNode(entry.series, toNormalizedString(entry.series.LookupCI("title")), "Series", entry.airs, calendarSubtitle(label, entry.airs, showDate)))
+    end for
+end sub
+
+function calendarSubtitle(label as string, airs as string, showDate as boolean) as string
+    parts = []
+    if label <> "" then parts.push(label)
+    if showDate and Len(airs) >= 10 then parts.push(Mid(airs, 1, 10))
+
+    return parts.count() > 0 ? parts.join(" ") : ""
+end function
+
+' Radarr and Sonarr both name their artwork the same way, so one reader covers both
+function arrImage(item as object, coverType as string) as string
+    images = item.LookupCI("images")
+    if not isValidAndNotEmpty(images) then return ""
+
+    for each image in images
+        if not isStringEqual(toNormalizedString(image.LookupCI("coverType")), coverType) then continue for
+
+        url = toNormalizedString(image.LookupCI("remoteUrl"))
+        if url = "" then url = toNormalizedString(image.LookupCI("url"))
+        if url <> "" then return url
+    end for
+
+    return ""
+end function
+
+function calendarNode(item as object, title as string, itemType as string, airs as string, subtitle as string) as object
+    node = createSGNode("HomeData")
+    node.json = {
+        Id: `cal-${itemType}-${toNormalizedString(item.LookupCI("id"))}`,
+        name: title,
+        Type: itemType,
+        Overview: toNormalizedString(item.LookupCI("overview")),
+        ProductionYear: item.LookupCI("year"),
+        CalendarDate: airs,
+        Subtitle: subtitle
+    }
+
+    node.id = `cal-${itemType}-${toNormalizedString(item.LookupCI("id"))}`
+    node.name = title
+    node.title = title
+    node.type = itemType
+    node.usePoster = true
+
+    poster = arrImage(item, "poster")
+    if poster = "" then poster = arrImage(item, "fanart")
+    if poster <> "" then node.posterURL = poster
+
+    backdrop = arrImage(item, "fanart")
+    if backdrop <> "" then node.backdropURL = backdrop
+
+    return node
+end function
+
+sub sortByCalendarDate(results as object)
+    for i = 1 to results.count() - 1
+        held = results[i]
+        j = i - 1
+        while j >= 0 and results[j].json.CalendarDate > held.json.CalendarDate
+            results[j + 1] = results[j]
+            j = j - 1
+        end while
+        results[j + 1] = held
+    end for
+end sub
+
+' rowSortByParam: Maps a sort choice to its Jellyfin sort parameter. The keys are the names
+' the plugin exchanges, so a sort this screen doesnt offer still resolves when a server pushes it.
+'
+' @param {string} sortBy - Sort name, for example "dateAdded"
+' @return {string} the value to send as SortBy
+function rowSortByParam(sortBy as string) as string
+    sortParams = {
+        name: "SortName",
+        dateAdded: "DateCreated",
+        premiereDate: "PremiereDate",
+        rating: "OfficialRating",
+        runtime: "Runtime",
+        random: "Random",
+        criticRating: "CriticRating",
+        communityRating: "CommunityRating"
+    }
+
+    return sortParams[sortBy] ?? "SortName"
+end function
+
+function loadCollections() as object
+    results = []
+
+    settings = m.global.session.user.settings
+    collectionsSortBy = getStringSetting(settings, "ui.home.collectionsRowSortBy", "name")
+
+    data = api.items.Get({
+        userid: m.global.session.user.id,
+        includeItemTypes: "BoxSet",
+        recursive: true,
+        SortBy: rowSortByParam(collectionsSortBy),
+        SortOrder: "Ascending",
+        Fields: "PrimaryImageAspectRatio,ProductionYear,UserData,BackdropImageTags,ImageTags",
+        EnableTotalRecordCount: false
+    })
+    if not isChainValid(data, "Items") then return results
+
+    for each item in data.Items
+        results.push(internalRowNode(item, "BoxSet"))
+    end for
+    return results
+end function
+
+' What the genres rows count as an item, so the tile row and a picked genre row agree
+function genresRowItemTypes(settings as object) as string
+    filterItemTypes = {
+        movies: "Movie",
+        series: "Series"
+    }
+
+    return filterItemTypes[getStringSetting(settings, "ui.home.genresRowItemFilter", "both")] ?? "Movie,Series"
+end function
+
+' The studios in the library, drawn as tiles the way the genres row is
+function loadStudios() as object
+    results = []
+
+    settings = m.global.session.user.settings
+    data = api.studios.Get({
+        userId: m.global.session.user.id,
+        sortBy: rowSortByParam(getStringSetting(settings, "ui.home.studiosRowSortBy", "name")),
+        sortOrder: "Ascending",
+        Fields: "PrimaryImageAspectRatio,ImageTags",
+        EnableTotalRecordCount: false
+    })
+    if not isChainValid(data, "items") then return results
+
+    for each item in data.items
+        results.push(internalRowNode(item, "Studio"))
+    end for
+    return results
+end function
+
+function loadGenres() as object
+    results = []
+
+    settings = m.global.session.user.settings
+    genresSortBy = getStringSetting(settings, "ui.home.genresRowSortBy", "name")
+
+    genres = api.genres.Get({
+        userId: m.global.session.user.id,
+        sortBy: rowSortByParam(genresSortBy),
+        sortOrder: "Ascending",
+        includeItemTypes: genresRowItemTypes(settings),
+        Fields: "PrimaryImageAspectRatio,ImageTags",
+        EnableTotalRecordCount: false
+    })
+    if not isChainValid(genres, "items") then return results
+
+    for each item in genres.items
+        results.push(internalRowNode(item, "Genre"))
+    end for
+    return results
+end function
+
+' The plain playlists task returns PlaylistData for the playlist picker, which carries no
+' artwork fields, so the home row needs its own loader
+function loadHomePlaylists() as object
+    results = []
+    data = api.items.Get({
+        userid: m.global.session.user.id,
+        includeItemTypes: "Playlist",
+        recursive: true,
+        SortBy: "SortName",
+        Fields: "PrimaryImageAspectRatio,ImageTags",
+        EnableTotalRecordCount: false
+    })
+    if not isChainValid(data, "Items") then return results
+
+    for each item in data.Items
+        if isStringEqual(item.name, "|My List|") then continue for
+        results.push(internalRowNode(item, "Playlist"))
+    end for
+    return results
+end function
+
+function loadAudio() as object
+    results = []
+    data = api.items.Get({
+        userid: m.global.session.user.id,
+        includeItemTypes: "MusicAlbum",
+        recursive: true,
+        SortBy: "DateCreated",
+        SortOrder: "Descending",
+        Limit: 25,
+        Fields: "PrimaryImageAspectRatio,ProductionYear,UserData,BackdropImageTags,ImageTags",
+        EnableTotalRecordCount: false
+    })
+    if not isChainValid(data, "Items") then return results
+
+    for each item in data.Items
+        results.push(internalRowNode(item, "MusicAlbum"))
+    end for
+    return results
+end function

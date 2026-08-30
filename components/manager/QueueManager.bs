@@ -22,7 +22,7 @@ sub init()
     m.queueTypes = []
     m.isPlaying = false
     ' Preroll videos only play if user has cinema mode setting enabled
-    m.isPrerollActive = m.global.session.user.settings["playback.cinemamode"]
+    m.isPrerollActive = toBoolean(m.global.session.user.settings["playback.cinemamode"])
     m.position = 0
     m.preferredAudioTrackIndex = -1
     m.preferredAudioTrackName = string.EMPTY
@@ -37,8 +37,7 @@ sub clear()
     m.isPlaying = false
     m.queue = []
     m.queueTypes = []
-    m.isPrerollActive = m.global.session.user.settings["playback.cinemamode"]
-
+    m.isPrerollActive = toBoolean(m.global.session.user.settings["playback.cinemamode"])
     setPosition(0)
     if not m.bypassNextPreferredAudioTrackIndexReset
         setPreferredAudioTrackIndex(-1)

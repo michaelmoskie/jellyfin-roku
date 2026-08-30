@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="MediaBarPickerOptionsTask" extends="Task">
+    <interface>
+        <field id="userId" type="string" />
+        <field id="settingName" type="string" />
+        <field id="contentType" type="string" value="both" />
+        <field id="options" type="array" value="[]" />
+        <field id="errorMessage" type="string" value="" />
+    </interface>
+</component>

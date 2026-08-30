@@ -2,6 +2,7 @@ import "pkg:/source/api/baserequest.bs"
 import "pkg:/source/api/Image.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/multiserver.bs"
 
 sub setFields()
     if not isValid(m.top.json) then return
@@ -43,7 +44,7 @@ end sub
 ' Set Watched Status
 ' Called from VisualLibraryScene.
 ' unplayedItemCount is not used for Movies (but signature needs to match)
-sub setWatched(isWatched as boolean, unplayedItemCount = 0 as integer)
+sub setWatched(isWatched as boolean, _unplayedItemCount = 0 as integer)
     if not isValid(m.top.json) then return
 
     json = m.top.json
@@ -64,15 +65,34 @@ sub setPoster()
         m.top.posterURL = m.top.image.url
     else
         if isValid(m.top.json)
-            if isValid(m.top.json.ImageTags) and isValid(m.top.json.ImageTags.Primary)
+            ' Check if this is from a remote server
+            isRemoteServer = isValidAndNotEmpty(m.top.json._serverUrl)
+            serverBaseUrl = ""
+            if isRemoteServer
+                serverBaseUrl = m.top.json._serverUrl
+            end if
+
+            if hasImageTagPrimary(m.top.json)
                 imgParams = { "maxHeight": 440, "maxWidth": 295, "Tag": m.top.json.ImageTags.Primary }
-                m.top.posterURL = ImageURL(m.top.json.id, "Primary", imgParams)
+                if isRemoteServer
+                    m.top.posterURL = buildImageURLForServer(serverBaseUrl, m.top.json.id, "Primary", imgParams)
+                else
+                    m.top.posterURL = ImageURL(m.top.json.id, "Primary", imgParams)
+                end if
             else if isValid(m.top.json.BackdropImageTags) and isValid(m.top.json.BackdropImageTags[0])
                 imgParams = { "maxHeight": 440, "Tag": m.top.json.BackdropImageTags[0] }
-                m.top.posterURL = ImageURL(m.top.json.id, "Backdrop", imgParams)
+                if isRemoteServer
+                    m.top.posterURL = buildImageURLForServer(serverBaseUrl, m.top.json.id, "Backdrop", imgParams)
+                else
+                    m.top.posterURL = ImageURL(m.top.json.id, "Backdrop", imgParams)
+                end if
             else if isValid(m.top.json.ParentThumbImageTag) and isValid(m.top.json.ParentThumbItemId)
                 imgParams = { "maxHeight": 440, "maxWidth": 295, "Tag": m.top.json.ParentThumbImageTag }
-                m.top.posterURL = ImageURL(m.top.json.ParentThumbItemId, "Thumb", imgParams)
+                if isRemoteServer
+                    m.top.posterURL = buildImageURLForServer(serverBaseUrl, m.top.json.ParentThumbItemId, "Thumb", imgParams)
+                else
+                    m.top.posterURL = ImageURL(m.top.json.ParentThumbItemId, "Thumb", imgParams)
+                end if
             end if
 
             if isChainValid(m.top.json, "ImageTags.Thumb")
@@ -83,7 +103,11 @@ sub setPoster()
             ' Add Backdrop Image
             if isValid(m.top.json.BackdropImageTags) and isValid(m.top.json.BackdropImageTags[0])
                 imgParams = { "maxHeight": 720, "maxWidth": 1280, "Tag": m.top.json.BackdropImageTags[0] }
-                m.top.backdropURL = ImageURL(m.top.json.id, "Backdrop", imgParams)
+                if isRemoteServer
+                    m.top.backdropURL = buildImageURLForServer(serverBaseUrl, m.top.json.id, "Backdrop", imgParams)
+                else
+                    m.top.backdropURL = ImageURL(m.top.json.id, "Backdrop", imgParams)
+                end if
             end if
         end if
     end if

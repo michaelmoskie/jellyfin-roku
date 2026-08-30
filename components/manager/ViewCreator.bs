@@ -1,4 +1,5 @@
-import "pkg:/source/enums/ItemType.bs"
+import "pkg:/source/api/baserequest.bs"
+import "pkg:/source/utils/remoteSubtitles.bs"
 import "pkg:/source/enums/MediaPlaybackState.bs"
 import "pkg:/source/enums/SubtitleSelection.bs"
 import "pkg:/source/enums/TaskControl.bs"
@@ -69,14 +70,22 @@ sub CreateVideoPlayerView()
         m.global.audioPlayer.content = invalid
     end if
 
+    currentItem = m.global.queueManager.callFunc("getCurrentItem")
+
     ' If the user has set a preferred audio track index, use it
     preferredAudioTrackIndex = m.global.queueManager.callFunc("getPreferredAudioTrackIndex")
     if preferredAudioTrackIndex < 0 then preferredAudioTrackIndex = 0
 
-    m.global.queueManager.callFunc("setSelectedAudioStreamIndex", preferredAudioTrackIndex)
+    selectedAudioIndex = preferredAudioTrackIndex
+    if isValid(currentItem.selectedAudioStreamIndex) and currentItem.selectedAudioStreamIndex >= 0
+        selectedAudioIndex = currentItem.selectedAudioStreamIndex
+    end if
+
+    m.global.queueManager.callFunc("setSelectedAudioStreamIndex", selectedAudioIndex)
 
     m.view = CreateObject("roSGNode", "VideoPlayerView")
     m.view.observeField("state", "onStateChange")
+    m.view.observeField("nowPlayingMetadata", "onNowPlayingMetadata")
     m.view.observeField("selectPlaybackInfoPressed", "onSelectPlaybackInfoPressed")
     m.view.observeField("selectSubtitlePressed", "onSelectSubtitlePressed")
     m.view.observeField("selectAudioPressed", "onSelectAudioPressed")
@@ -87,14 +96,22 @@ sub CreateVideoPlayerView()
     m.voiceInputTask.observeField("inputData", "onVoiceInputData")
     m.voiceInputTask.control = TaskControl.RUN
 
-    mediaSourceId = m.global.queueManager.callFunc("getCurrentItem").mediaSourceId
+    mediaSourceId = currentItem.mediaSourceId
 
     if not isValid(mediaSourceId) or mediaSourceId = ""
-        mediaSourceId = m.global.queueManager.callFunc("getCurrentItem").id
+        mediaSourceId = currentItem.id
     end if
 
     m.getPlaybackInfoTask = createObject("roSGNode", "GetPlaybackInfoTask")
     m.getPlaybackInfoTask.videoID = mediaSourceId
+
+    itemServerData = getServerInfoFromItem(currentItem)
+    if isValid(itemServerData)
+        m.getPlaybackInfoTask.serverUrl = itemServerData.serverUrl
+        m.getPlaybackInfoTask.serverUserId = itemServerData.userId
+        m.getPlaybackInfoTask.serverAuthToken = itemServerData.authToken
+    end if
+
     m.getPlaybackInfoTask.observeField("data", "onPlaybackInfoLoaded")
 
     m.global.sceneManager.callFunc("pushScene", m.view)
@@ -105,204 +122,163 @@ end sub
 ' -----------------
 
 
-' onSelectAudioPressed: Display audio selection dialog
-'
 sub onSelectAudioPressed()
+    if not isValidAndNotEmpty(m.view.fullAudioData) then return
+
     preferredAudioTrackName = m.global.queueManager.callFunc("getPreferredAudioTrackName")
 
-    audioData = {
-        data: []
-    }
+    currentItem = m.global.queueManager.callFunc("getCurrentItem")
+    selectedAudioIndex = m.view.audioIndex
+    if not isValid(selectedAudioIndex) or selectedAudioIndex < 0
+        if isValid(currentItem.selectedAudioStreamIndex)
+            selectedAudioIndex = currentItem.selectedAudioStreamIndex
+        end if
+    end if
+
+    audioTracks = []
 
     for each item in m.view.fullAudioData
-        audioStreamItem = {
-            "Index": item.Index,
+        audioTrack = {
+            "Title": item.DisplayTitle,
+            "StreamIndex": item.Index,
             "RokuTrackName": item.RokuTrackName,
-            "IsExternal": item.IsExternal,
-            "Track": {
-                "description": item.DisplayTitle
-            },
-            "Type": "audioselection"
+            "Language": item.Language,
+            "Codec": item.Codec,
+            "Channels": item.Channels,
+            "Selected": false
         }
 
         if isStringEqual(preferredAudioTrackName, string.EMPTY)
-            if m.view.audioIndex = item.Index
-                audioStreamItem.selected = true
+            if selectedAudioIndex = item.Index
+                audioTrack.Selected = true
             end if
         else
             if isStringEqual(item.RokuTrackName, preferredAudioTrackName)
-                audioStreamItem.selected = true
+                audioTrack.Selected = true
             end if
         end if
 
-        audioData.data.push(audioStreamItem)
+        audioTracks.push(audioTrack)
     end for
 
-    m.global.sceneManager.callFunc("radioDialog", tr("Select Audio"), audioData)
-    m.global.sceneManager.observeField("returnData", "onSelectionMade")
+    m.audioSelector = m.view.findNode("audioSelector")
+    m.audioSelector.audioTracks = audioTracks
+    m.audioSelector.visible = true
+    m.audioSelector.setFocus(true)
+    m.audioSelector.observeField("audioStreamIndex", "onAudioSelectorIndexChanged")
+    m.audioSelector.observeField("visible", "onAudioSelectorVisibleChanged")
 end sub
 
-' onSelectSpeedPressed: Display audio selection dialog
-'
-sub onSelectSpeedPressed()
-    speedData = {
-        data: []
-    }
+sub onSelectSubtitlePressed()
+    subtitleTracks = []
 
-    speeds = [0.5, 0.75, 1, 1.5, 2, 2.5, 3]
-    index = 0
-    for each speed in speeds
-        speedItem = {
-            "Index": index,
-            "Speed": speed,
+    subtitleTracks.push({
+        "Title": "None",
+        "StreamIndex": SubtitleSelection.NONE,
+        "Selected": false,
+        "json": {
+            "Index": SubtitleSelection.NONE,
             "IsExternal": false,
-            "Type": "speedselection",
+            "IsEncoded": false,
             "Track": {
-                "description": speed
+                "description": "None",
+                "TrackName": ""
             }
         }
-        index++
-        if speed = m.global.sceneManager.currentSpeed
-            speedItem.selected = true
-        end if
-        speedData.data.push(speedItem)
-    end for
-
-    m.global.sceneManager.callFunc("radioDialog", tr("Select Speed"), speedData)
-    m.global.sceneManager.observeField("returnData", "onSelectionMade")
-end sub
-
-' User requested subtitle selection popup
-sub onSelectSubtitlePressed()
-    subtitleData = {
-        data: []
-    }
-    selectedSubtitleIsExternal = false
-
-    for each item in m.view.fullSubtitleData
-        item.type = "subtitleselection"
-
-        if m.view.selectedSubtitle <> SubtitleSelection.NONE
-            ' Subtitle is a track within the file
-            if item.index = m.view.selectedSubtitle
-                item.selected = true
-                selectedSubtitleIsExternal = item.LookupCI("IsExternal")
-            end if
-        else
-            ' Subtitle is from an external source
-            availableSubtitleTrackIndex = availSubtitleTrackIdx(item.track.TrackName)
-            if availableSubtitleTrackIndex <> SubtitleSelection.NONE
-
-                ' Convert Jellyfin subtitle track name to Roku track name
-                subtitleFullTrackName = m.view.availableSubtitleTracks[availableSubtitleTrackIndex].TrackName
-
-                if subtitleFullTrackName = m.view.subtitleTrack
-                    item.selected = true
-                    selectedSubtitleIsExternal = item.LookupCI("IsExternal")
-                end if
-
-            end if
-        end if
-
-        item.StreamIndex = item.index
-
-        ' Put the selected item at the top of the option list
-        if isValid(item.selected) and item.selected
-            subtitleData.data.Unshift(item)
-        else
-            subtitleData.data.push(item)
-        end if
-    end for
-
-    ' Manually create the None option and place at top
-    subtitleData.data.Unshift({
-        "Index": SubtitleSelection.NONE,
-        "StreamIndex": SubtitleSelection.NONE,
-        "IsExternal": false,
-        "Track": {
-            "description": "None"
-        },
-        "Type": "subtitleselection"
     })
 
-    buttons = [tr("OK")]
+    if isValidAndNotEmpty(m.view.fullSubtitleData)
+        for each item in m.view.fullSubtitleData
+            isSelected = false
 
-    if selectedSubtitleIsExternal
-        if chainLookupReturn(m.global, "session.user.settings.`playback.subs.custom`", false)
-            buttons.push(tr("Adjust Subtitle Timing"))
+            if m.view.selectedSubtitle <> SubtitleSelection.NONE
+                if item.index = m.view.selectedSubtitle
+                    isSelected = true
+                end if
+            else
+                availableSubtitleTrackIndex = availSubtitleTrackIdx(item.track.TrackName)
+                if availableSubtitleTrackIndex <> SubtitleSelection.NONE
+                    subtitleFullTrackName = m.view.availableSubtitleTracks[availableSubtitleTrackIndex].TrackName
+                    if subtitleFullTrackName = m.view.subtitleTrack
+                        isSelected = true
+                    end if
+                end if
+            end if
+
+            subtitleTrack = {
+                "Title": item.Track.description,
+                "StreamIndex": item.index,
+                "Selected": isSelected,
+                "json": {
+                    "Index": item.index,
+                    "IsExternal": item.LookupCI("IsExternal"),
+                    "IsEncoded": item.LookupCI("IsEncoded"),
+                    "Language": chainLookupReturn(item, "Track.Language", ""),
+                    "IsForced": item.LookupCI("IsForced"),
+                    "Track": item.Track
+                }
+            }
+
+            subtitleTracks.push(subtitleTrack)
+        end for
+    end if
+
+    m.subtitleSelector = m.view.findNode("subtitleSelector")
+    m.subtitleSelector.subtitleTracks = subtitleTracks
+    m.subtitleSelector.visible = true
+    m.subtitleSelector.setFocus(true)
+    m.subtitleSelector.observeField("subtitleStream", "onSubtitleSelectorStreamChanged")
+    m.subtitleSelector.observeField("visible", "onSubtitleSelectorVisibleChanged")
+    m.subtitleSelector.observeField("downloadRequested", "onSubtitleDownloadRequested")
+end sub
+
+sub onAudioSelectorIndexChanged()
+    selectedIndex = m.audioSelector.audioStreamIndex
+
+    selectedRokuTrackName = ""
+    for each item in m.view.fullAudioData
+        if item.Index = selectedIndex
+            selectedRokuTrackName = item.RokuTrackName
+            exit for
         end if
-    end if
+    end for
 
-    m.global.sceneManager.callFunc("radioDialog", tr("Select Subtitles"), subtitleData, buttons)
-    m.global.sceneManager.observeField("returnData", "onSelectionMade")
-end sub
-
-' User has selected something from the radioDialog popup
-sub onSelectionMade()
-    m.global.sceneManager.unobserveField("returnData")
-
-    if not isValid(m.global.sceneManager.returnData) then return
-    if not isValid(m.global.sceneManager.returnData.type) then return
-
-    if LCase(m.global.sceneManager.returnData.type) = "subtitleselection"
-        processSubtitleSelection()
-        return
-    end if
-
-    if LCase(m.global.sceneManager.returnData.type) = "audioselection"
-        processAudioSelection()
-        return
-    end if
-
-    if isStringEqual(chainLookup(m.global.sceneManager, "returnData.type"), "speedselection")
-        processSpeedSelection()
-        return
-    end if
-end sub
-
-
-' processAudioSelection: Audio track selection handler
-'
-sub processAudioSelection()
-    selectedAudioTrack = m.global.sceneManager.returnData
-
-    if not isChainValid(selectedAudioTrack, "index") then return
-
-    m.global.queueManager.callFunc("setPreferredAudioTrackName", selectedAudioTrack.LookupCI("RokuTrackName"))
+    m.global.queueManager.callFunc("setPreferredAudioTrackName", selectedRokuTrackName)
 
     for each audioTrack in m.view.availableAudioTracks
-        if isStringEqual(audioTrack.LookupCI("name"), selectedAudioTrack.LookupCI("RokuTrackName"))
+        if isStringEqual(audioTrack.LookupCI("name"), selectedRokuTrackName)
             m.global.queueManager.callFunc("setPreferredAudioTrackIndex", audioTrack.LookupCI("Track").toint())
             m.view.audioIndex = audioTrack.LookupCI("Track").toint()
             return
         end if
     end for
 
-    m.global.queueManager.callFunc("setPreferredAudioTrackIndex", selectedAudioTrack.index)
-    m.view.audioIndex = selectedAudioTrack.index
+    m.global.queueManager.callFunc("setPreferredAudioTrackIndex", selectedIndex)
+    m.view.audioIndex = selectedIndex
 end sub
 
-' processSpeedSelection: Speed selection handler
-'
-sub processSpeedSelection()
-    selectedSpeed = chainLookupReturn(m.global.sceneManager, "returnData", { speed: 1 })
-
-    m.global.sceneManager.currentSpeed = selectedSpeed.speed
-    m.view.selectedSpeed = selectedSpeed.speed
+sub onAudioSelectorVisibleChanged()
+    if not m.audioSelector.visible
+        m.audioSelector.unobserveField("audioStreamIndex")
+        m.view.setFocus(true)
+    end if
 end sub
 
-sub processSubtitleSelection()
-    m.selectedSubtitle = m.global.sceneManager.returnData
+sub onSubtitleSelectorStreamChanged()
+    selectedNode = m.subtitleSelector.subtitleStream
+    if not isValid(selectedNode) then return
 
-    ' The selected encoded subtitle did not change.
-    if m.view.selectedSubtitle <> SubtitleSelection.NONE or m.selectedSubtitle.index <> SubtitleSelection.NONE
-        if m.view.selectedSubtitle = m.selectedSubtitle.index then return
+    originalData = selectedNode.json
+    if not isValid(originalData) then return
+
+    m.selectedSubtitle = originalData
+
+    if m.view.selectedSubtitle <> SubtitleSelection.NONE or m.selectedSubtitle.Index <> SubtitleSelection.NONE
+        if m.view.selectedSubtitle = m.selectedSubtitle.Index then return
     end if
 
-    ' The playbackData is now outdated and must be refreshed
     m.playbackData = invalid
 
-    ' Find previously selected subtitle and identify if it was encoded
     for each item in m.view.fullSubtitleData
         if item.index = m.view.selectedSubtitle
             m.view.previousSubtitleWasEncoded = item.IsEncoded
@@ -310,7 +286,7 @@ sub processSubtitleSelection()
         end if
     end for
 
-    if LCase(m.selectedSubtitle.track.description) = "none"
+    if LCase(m.selectedSubtitle.Track.description) = "none"
         m.view.globalCaptionMode = "Off"
         m.view.subtitleTrack = ""
 
@@ -323,13 +299,10 @@ sub processSubtitleSelection()
     end if
 
     if m.selectedSubtitle.IsEncoded
-        ' Roku can not natively display these subtitles, so turn off the caption mode on the device
         m.view.globalCaptionMode = "Off"
     else
-        ' Roku can natively display these subtitles, ensure the caption mode on the device is on
         m.view.globalCaptionMode = "On"
 
-        ' Roku may rearrange subtitle tracks. Look up track based on name to ensure we get the correct index
         availableSubtitleTrackIndex = availSubtitleTrackIdx(m.selectedSubtitle.Track.TrackName)
         if availableSubtitleTrackIndex = SubtitleSelection.NONE then return
 
@@ -338,6 +311,40 @@ sub processSubtitleSelection()
 
     m.global.queueManager.callFunc("setPreferredSubtitleTrack", m.selectedSubtitle)
     m.view.selectedSubtitle = m.selectedSubtitle.Index
+end sub
+
+sub onSubtitleDownloadRequested()
+    if not m.subtitleSelector.downloadRequested then return
+
+    m.subtitleSelector.downloadRequested = false
+
+    currentItem = m.global.queueManager.callFunc("getCurrentItem")
+    if not isValid(currentItem) then return
+    if not isValidAndNotEmpty(currentItem.id) then return
+
+    dialog = m.view.findNode("subtitleDownloadDialog")
+    if not isValid(dialog) then return
+
+    dialog.unobserveField("visible")
+    dialog.observeField("visible", "onSubtitleDownloadDialogVisibleChanged")
+    dialog.itemId = currentItem.id
+    dialog.language = remoteSubtitles.LanguageFor(m.view.fullSubtitleData, m.view.selectedSubtitle, m.view.audioIndex)
+    dialog.visible = true
+    dialog.setFocus(true)
+    dialog.callFunc("startSearch")
+end sub
+
+sub onSubtitleDownloadDialogVisibleChanged()
+    dialog = m.view.findNode("subtitleDownloadDialog")
+    if isValid(dialog) and not dialog.visible then m.view.setFocus(true)
+end sub
+
+sub onSubtitleSelectorVisibleChanged()
+    if not m.subtitleSelector.visible
+        m.subtitleSelector.unobserveField("subtitleStream")
+        m.subtitleSelector.unobserveField("downloadRequested")
+        m.view.setFocus(true)
+    end if
 end sub
 
 ' User requested playback info
@@ -363,7 +370,16 @@ end sub
 
 ' Playback state change event handlers
 sub onStateChange()
-    ' Ignore errors, they are handled inside VideoPlayerView.bs
+
+    currentItem = m.global.queueManager.callFunc("getCurrentItem")
+    if isValid(currentItem)
+        itemServerData = getServerInfoFromItem(currentItem)
+        if isValid(itemServerData)
+        else
+        end if
+    end if
+
+    ' If the state changed due to an error, we don't want to continue the queue
     if m.view.errorCode <> 0
         return
     end if
@@ -387,6 +403,7 @@ sub onStateChange()
 
                 ' Stop VoiceInputTask when playback ends
                 if isValid(m.voiceInputTask)
+                    m.voiceInputTask.nowPlayingData = { title: string.EMPTY, contentType: string.EMPTY } ' clear before stopping
                     m.voiceInputTask.control = TaskControl.STOP
                 end if
 
@@ -422,7 +439,7 @@ sub onStateChange()
         end if
 
         episodeToShowAtFinish = string.EMPTY
-        gotoNextEpisodeAfterCurrentEnds = chainLookupReturn(m.global.session, "user.settings.`playback.showNextUpAfterFinish`", false)
+        gotoNextEpisodeAfterCurrentEnds = m.global.session.user.settings["playback.showNextUpAfterFinish"] ?? false
         if gotoNextEpisodeAfterCurrentEnds
             episodeToShowAtFinish = m.global.queueManager.callFunc("getEpisodeToShowAtFinish")
         end if
@@ -436,12 +453,18 @@ sub onStateChange()
 
         ' Stop VoiceInputTask when playback ends
         if isValid(m.voiceInputTask)
+            m.voiceInputTask.nowPlayingData = { title: string.EMPTY, contentType: string.EMPTY } ' clear before stopping
             m.voiceInputTask.control = TaskControl.STOP
         end if
 
         ' Playback completed, return user to previous screen
         m.global.sceneManager.callFunc("popScene")
         m.global.audioPlayer.loopMode = ""
+    else if LCase(m.view.state) = "stopped"
+        if isValid(m.voiceInputTask)
+            m.voiceInputTask.nowPlayingData = { title: string.EMPTY, contentType: string.EMPTY } ' clear before stopping
+            m.voiceInputTask.control = TaskControl.STOP
+        end if
     end if
 end sub
 
@@ -460,6 +483,7 @@ sub stillWatchingTimerComplete()
 
     ' Stop VoiceInputTask when playback ends
     if isValid(m.voiceInputTask)
+        m.voiceInputTask.nowPlayingData = { title: string.EMPTY, contentType: string.EMPTY } ' clear before stopping
         m.voiceInputTask.control = TaskControl.STOP
     end if
     m.global.sceneManager.callFunc("popScene")
@@ -516,6 +540,13 @@ sub onVoiceInputData()
     end if
 end sub
 
+' Forward Now Playing metadata from VideoPlayerView to VoiceInputTask.
+' VoiceInputTask calls roAppManager on its own thread since it cannot be called from render thread.
+sub onNowPlayingMetadata()
+    if not isValid(m.voiceInputTask) then return
+    m.voiceInputTask.nowPlayingData = m.view.nowPlayingMetadata
+end sub
+
 ' handleTransportCommand: Decodes and handles a voice/transport command.
 ' Returns an assocarray with "status" and optionally "cmd" for VideoPlayerView.
 ' Status values follow Roku's EventResponse spec:
@@ -565,7 +596,7 @@ function handleTransportCommand(data as object) as object
         ret.status = TransportStatus.SUCCESS
 
     else if isStringEqual(cmd, TransportCommand.PAUSE) or isStringEqual(cmd, TransportCommand.STOP)
-        ret.cmd = { type: TransportCommand.PAUSE}
+        ret.cmd = { type: TransportCommand.PAUSE }
         ret.status = TransportStatus.SUCCESS
 
     else if isStringEqual(cmd, TransportCommand.PLAYPAUSE)
@@ -599,41 +630,9 @@ function handleTransportCommand(data as object) as object
         ret.status = TransportStatus.UNHANDLED
 
     else if isStringEqual(cmd, TransportCommand.NOWPLAYING)
+        ' Metadata was already sent to Roku OS when playback started in VideoPlayerView.
         currentItem = m.global.queueManager.callFunc("getCurrentItem")
         if isValid(currentItem)
-            itemData = currentItem.json ?? currentItem
-            mediaItemType = LCase(itemData.Type)
-
-            ' Build a descriptive title including year (movies) or season/episode info (TV episodes).
-            ' NOTE: During testing (es-MX, Roku voice remote), Roku Voice only announced the base
-            ' title and did not read the year/season/episode suffix. This may be a limitation
-            ' of the locale/TTS, or may work correctly in other regions/languages. The full
-            ' title is still passed per the official spec, in case it is supported elsewhere.
-            if isStringEqual(mediaItemType, ItemType.MOVIE)
-                displayTitle = itemData.Name ?? itemData.title
-                if isValid(itemData.ProductionYear)
-                    displayTitle += `, ${itemData.ProductionYear}`
-                end if
-
-            else if isStringEqual(mediaItemType, ItemType.EPISODE)
-                season = isValid(itemData.ParentIndexNumber) ? StrI(itemData.ParentIndexNumber).trim() : "0"
-                episode = isValid(itemData.IndexNumber) ? StrI(itemData.IndexNumber).trim() : "0"
-                seasonStr = Left("0" + season, 2)
-                episodeStr = Left("0" + episode, 2)
-                displayTitle = `${itemData.SeriesName} - S${seasonStr}E${episodeStr} - ${itemData.Name ?? itemData.title}`
-                if isValid(itemData.ProductionYear)
-                    displayTitle += `, ${itemData.ProductionYear}`
-                end if
-
-            else
-                displayTitle = itemData.Name ?? itemData.title
-            end if
-
-            appMgr = CreateObject("roAppManager")
-            appMgr.SetNowPlayingContentMetaData({
-                title: displayTitle,
-                contentType: mediaItemType
-            })
             ret.status = TransportStatus.SUCCESS
         else
             ret.status = TransportStatus.ERROR_GENERIC

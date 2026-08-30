@@ -1,6 +1,7 @@
 import "pkg:/source/api/baserequest.bs"
 import "pkg:/source/api/Image.bs"
 import "pkg:/source/utils/config.bs"
+import "pkg:/source/utils/multiserver.bs"
 
 sub setFields()
     json = m.top.json
@@ -18,15 +19,21 @@ sub setPoster()
     if m.top.image <> invalid
         m.top.posterURL = m.top.image.url
     else if m.top.json.ImageTags.Primary <> invalid
+        ' Check if this is from a remote server
+        isRemoteServer = isValidAndNotEmpty(m.top.json._serverUrl)
         imgParams = { "maxHeight": 440, "maxWidth": 295 }
-        m.top.posterURL = ImageURL(m.top.json.id, "Primary", imgParams)
+        if isRemoteServer
+            m.top.posterURL = buildImageURLForServer(m.top.json._serverUrl, m.top.json.id, "Primary", imgParams)
+        else
+            m.top.posterURL = ImageURL(m.top.json.id, "Primary", imgParams)
+        end if
     end if
 end sub
 
 ' Set Watched Status
 ' Called from VisualLibraryScene.
 ' unplayedItemCount is not used for Movies (but signature needs to match)
-sub setWatched(isWatched as boolean, unplayedItemCount = 0 as integer)
+sub setWatched(isWatched as boolean, _unplayedItemCount = 0 as integer)
     if not isValid(m.top.json) then return
 
     json = m.top.json

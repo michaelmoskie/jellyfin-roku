@@ -4,10 +4,15 @@
   <interface>
     <field id="itemsToLoad" type="string" value="" />
     <field id="itemId" type="string" />
+    <field id="itemIds" type="array" />
     <field id="showID" type="string" />
     <field id="seasonID" type="string" />
     <field id="metadata" type="assocarray" />
     <field id="peopleList" type="array" />
     <field id="content" type="array" />
+    <field id="serverUrl" type="string" value="" />
+    <field id="serverUserId" type="string" value="" />
+    <field id="serverAuthToken" type="string" value="" />
+    <field id="additionalData" type="assocarray" />
   </interface>
 </component>

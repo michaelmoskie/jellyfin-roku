@@ -1,3 +1,4 @@
+import "pkg:/source/enums/ImageType.bs"
 import "pkg:/source/enums/MediaPlaybackState.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/parsedUrl.bs"
@@ -90,7 +91,7 @@ end function
 function formatTime(time) as string
     hours = time.getHours()
     minHourDigits = 1
-    if m.global.device.clockFormat = "12h"
+    if m.global.device.clockFormat = "12h" and not get_user_setting_bool("playback.use24hourclock", false)
         meridian = "AM"
         if hours = 0
             hours = 12
@@ -136,12 +137,6 @@ end function
 
 function lastFocusedChild(obj as object) as object
     if isValid(obj)
-        if isValid(obj.focusedChild) and isValid(obj.focusedChild.focusedChild) and LCase(obj.focusedChild.focusedChild.subType()) = "tvseasondetails"
-            if isValid(obj.focusedChild.focusedChild.lastFocus)
-                return obj.focusedChild.focusedChild.lastFocus
-            end if
-        end if
-
         child = obj
         for i = 0 to obj.getChildCount()
             if isValid(obj.focusedChild)
@@ -194,6 +189,57 @@ function show_dialog(message as string, options = [], defaultSelection = 0) as i
 
     return result
 end function
+
+' Updates button visual state for detail screens (Movies, TV Shows, Episodes)
+' @param buttonGroups - Array of button group nodes
+' @param buttonIndex - Index of the button to highlight
+' @param itemIsFavorited - Boolean or invalid indicating if item is favorited
+' @param itemContent - Optional item content node for fallback favorite check
+' @param unfocusedLabelColor - Optional color for unfocused labels (default: "#CCCCCC")
+sub updateDetailButtonVisualState(buttonGroups as object, buttonIndex as integer, itemIsFavorited as dynamic, itemContent = invalid as dynamic, unfocusedLabelColor = "#CCCCCC" as string)
+    for i = 0 to buttonGroups.count() - 1
+        btnGroup = buttonGroups[i]
+        bgRect = btnGroup.findNode(btnGroup.id + "Background")
+        icon = btnGroup.findNode(btnGroup.id + "Icon")
+        label = btnGroup.findNode(btnGroup.id + "Text")
+
+        isFavoriteButton = (btnGroup.id = "favoriteButton")
+        isFavorited = false
+        if isFavoriteButton
+            if isValid(itemIsFavorited)
+                isFavorited = itemIsFavorited
+            else if isValid(itemContent) and isChainValid(itemContent, "json.UserData.IsFavorite")
+                isFavorited = itemContent.json.UserData.IsFavorite
+            end if
+        end if
+
+        if i = buttonIndex
+            ' This button is focused - show white background and change icon to grey
+            if bgRect <> invalid then bgRect.opacity = 1
+            if icon <> invalid
+                ' Keep favorite icon red if item is favorited, otherwise grey
+                if isFavoriteButton and isFavorited
+                    icon.blendColor = "#FF0000FF"
+                else
+                    icon.blendColor = "#666666FF"
+                end if
+            end if
+            if label <> invalid and label.hasField("color") then label.color = "#FFFFFF"
+        else
+            ' This button is not focused - hide background and reset icon color
+            if bgRect <> invalid then bgRect.opacity = 0
+            if icon <> invalid
+                ' Keep favorite icon red if item is favorited, otherwise white
+                if isFavoriteButton and isFavorited
+                    icon.blendColor = "#FF0000FF"
+                else
+                    icon.blendColor = "#FFFFFFFF"
+                end if
+            end if
+            if label <> invalid and label.hasField("color") then label.color = unfocusedLabelColor
+        end if
+    end for
+end sub
 
 function message_dialog(message = "" as string)
     return show_dialog(message, ["OK"])
@@ -281,9 +327,9 @@ function urlCandidates(input as string)
         if not isValidAndNotEmpty(url.port) ' if the port isn't defined, use default jellyfin and proto ports
             ' jellyfin defaults
             if isStringEqual(proto, "https")
-                finalCandidates.push(ParsedUrl(`${url.proto}://${url.host}:8920${url.path}${urlQuery}`))
+                finalCandidates.push(ParsedUrl(`${proto}://${url.host}:8920${url.path}${urlQuery}`))
             else if isStringEqual(proto, "http")
-                finalCandidates.push(ParsedUrl(`${url.proto}://${url.host}:8096${url.path}${urlQuery}`))
+                finalCandidates.push(ParsedUrl(`${proto}://${url.host}:8096${url.path}${urlQuery}`))
             end if
         end if
     end for
@@ -291,10 +337,13 @@ function urlCandidates(input as string)
 end function
 
 sub setFieldTextValue(field, value)
+    setFieldText(field, value)
+end sub
+
+sub setFieldText(field, value)
     node = m.top.findNode(field)
     if node = invalid or value = invalid then return
 
-    ' Handle non strings... Which _shouldn't_ happen, but hey
     if type(value) = "roInt" or type(value) = "Integer"
         value = str(value).trim()
     else if type(value) = "roFloat" or type(value) = "Float"
@@ -405,6 +454,11 @@ function chainLookupReturn(root as dynamic, propertyPath as string, default as d
     return rootPath
 end function
 
+' Returns true when the modern home rows style is selected.
+function isModernHomeRows() as boolean
+    return isStringEqual(chainLookupReturn(m.global.session, "user.settings.`ui.home.rowsStyle`", "v2"), "v2")
+end function
+
 ' chainLookup: Returns value from property chain using case insensitive lookups
 '
 ' @param {dynamic} root - high-level object to test property chain against
@@ -431,6 +485,38 @@ function chainLookup(root as dynamic, propertyPath as string) as dynamic
     return chainLookup(rootPath, nextPath)
 end function
 
+' getPreferredLanguage: Reads a language preference from the user's settings
+' The language pickers store "anyLanguage" when the user has no preference
+'
+' @param {string} settingKey - user setting key to read
+' @return {dynamic} the preferred language code, or invalid when there is no preference
+function getPreferredLanguage(settingKey as string) as dynamic
+    value = chainLookupReturn(m.global.session, "user.settings.`" + settingKey + "`", invalid)
+    if isStringEqual(value, "anyLanguage") then return invalid
+    return value
+end function
+
+' getSeriesThumbnailSource: Finds series level artwork to stand in for an episode's own image
+' Prefers the parent thumbnail and falls back to the series poster, keeping each tag paired
+' with the item it belongs to. Returns invalid when the series has neither, so callers can
+' fall back to the episode's own images rather than show nothing.
+'
+' @param {dynamic} itemJson - episode item returned by the server
+' @return {dynamic} an object with id, tag and imageType, or invalid
+function getSeriesThumbnailSource(itemJson as dynamic) as dynamic
+    if not isValid(itemJson) then return invalid
+
+    if isValid(itemJson.ParentThumbImageTag) and isValidAndNotEmpty(itemJson.ParentThumbItemId)
+        return { id: itemJson.ParentThumbItemId, tag: itemJson.ParentThumbImageTag, imageType: ImageType.THUMB }
+    end if
+
+    if isValid(itemJson.SeriesPrimaryImageTag) and isValidAndNotEmpty(itemJson.SeriesId)
+        return { id: itemJson.SeriesId, tag: itemJson.SeriesPrimaryImageTag, imageType: ImageType.PRIMARY }
+    end if
+
+    return invalid
+end function
+
 ' Returns whether or not passed value is valid and not empty
 ' Accepts a string, or any countable type (arrays and lists)
 function isValidAndNotEmpty(input as dynamic) as boolean
@@ -447,9 +533,28 @@ function isValidAndNotEmpty(input as dynamic) as boolean
     else if countableTypes.doesExist(inputType)
         return input.count() > 0
     else
-        print "Called isValidAndNotEmpty() with invalid type: ", inputType
         return false
     end if
+end function
+
+' The plugin stores library, collection and genre ids as dashed guids while the
+' server hands the same ids back without dashes, so ids are compared on this
+' form rather than as they arrive.
+function guidKey(id as dynamic) as string
+    if not isValidAndNotEmpty(id) then return ""
+
+    return LCase(id.toStr().Replace("-", ""))
+end function
+
+function isGuidInArray(id as dynamic, ids as dynamic) as boolean
+    key = guidKey(id)
+    if key = "" or not isValidAndNotEmpty(ids) then return false
+
+    for each candidate in ids
+        if guidKey(candidate) = key then return true
+    end for
+
+    return false
 end function
 
 ' Returns true if the string is a loopback, such as 'localhost' or '127.0.0.1'
@@ -474,11 +579,127 @@ function roundNumber(f as float) as integer
     end if
 end function
 
+' Alias for roundNumber - rounds number to nearest integer
+function round(f as float) as integer
+    return roundNumber(f)
+end function
+
 ' Converts ticks to minutes
 function getMinutes(ticks) as integer
     ' A tick is .1ms, so 1/10,000,000 for ticks to seconds,
     ' then 1/60 for seconds to minutes... 1/600,000,000
     return roundNumber(ticks / 600000000.0)
+end function
+
+' Converts ticks to total runtime in minutes
+function getRuntime(ticks) as integer
+    ' A tick is .1ms, so 1/10,000,000 for ticks to seconds,
+    ' then 1/60 for seconds to minutes... 1/600,000,000
+    return roundNumber(ticks / 600000000.0)
+end function
+
+' Formats runtime ticks as human-readable string (e.g., "2h 15m")
+function getFormattedRuntime(ticks) as string
+    if not isValid(ticks) then return ""
+
+    totalMinutes = roundNumber(ticks / 600000000.0)
+    hours = int(totalMinutes / 60)
+    minutes = totalMinutes mod 60
+
+    if hours > 0
+        if minutes > 0
+            return stri(hours).trim() + "h " + stri(minutes).trim() + "m"
+        else
+            return stri(hours).trim() + "h"
+        end if
+    else
+        return stri(minutes).trim() + "m"
+    end if
+end function
+
+' Calculates end time by adding runtime ticks to current time
+function getEndTime(ticks) as string
+    date = CreateObject("roDateTime")
+    duration_s = int(ticks / 10000000.0)
+    date.fromSeconds(date.asSeconds() + duration_s)
+    date.toLocalTime()
+    return formatTime(date)
+end function
+
+' Get backdrop blur amount for detail screens (movies, TV shows, episodes)
+' The value is used in ImageURL params to control Jellyfin's server-side blur processing.
+' The modern detail screen reuses this same setting as a backdrop scrim strength, so the
+' accepted range covers every value that screen can store.
+'
+' @return {integer} Blur amount (0 to 25) from user settings, or 10 if not set
+function getBackdropBlurAmount() as integer
+    if not isValid(m.global) or not isValid(m.global.session) then return 10
+    if not isValid(m.global.session.user) or not isValid(m.global.session.user.settings) then return 10
+
+    blurSetting = m.global.session.user.settings["ui.backdrop.detailBlurAmount"]
+    if isValid(blurSetting)
+        blurValue = val(blurSetting)
+        if blurValue >= 0 and blurValue <= 25
+            return blurValue
+        end if
+    end if
+
+    return 10 ' Default blur amount
+end function
+
+'
+' Get backdrop blur amount for home and discovery screens (home, genres, favorites)
+' @return {integer} Blur amount from user settings, or 10 if not set
+function getHomeBackdropBlurAmount() as integer
+    if not isValid(m.global) or not isValid(m.global.session) then return 10
+    if not isValid(m.global.session.user) or not isValid(m.global.session.user.settings) then return 10
+
+    blurSetting = m.global.session.user.settings["ui.backdrop.homeBlurAmount"]
+    if isValid(blurSetting)
+        blurValue = val(blurSetting)
+        if blurValue >= 0 and blurValue <= 20
+            return blurValue
+        end if
+    end if
+
+    return 10 ' Default blur amount
+end function
+
+
+' Get whether theme music auto-play is enabled
+' Returns a boolean indicating if theme music should play on detail screens
+'
+' @return {boolean} True if theme music auto-play is enabled, false otherwise
+function isThemeMusicEnabled() as boolean
+    if not isValid(m.global) or not isValid(m.global.session) then return false
+    if not isValid(m.global.session.user) or not isValid(m.global.session.user.settings) then return false
+
+    themeMusicSetting = toBoolean(m.global.session.user.settings["playback.thememusic.enabled"])
+    settingType = LCase(Type(themeMusicSetting))
+
+    if settingType = "boolean" or settingType = "roboolean"
+        return themeMusicSetting
+    end if
+
+    if settingType = "integer" or settingType = "rointeger" or settingType = "int" or settingType = "roint"
+        return themeMusicSetting <> 0
+    end if
+
+    if settingType = "float" or settingType = "rofloat" or settingType = "double" or settingType = "rodouble"
+        return themeMusicSetting <> 0
+    end if
+
+    if settingType = "string" or settingType = "rostring"
+        normalizedSetting = LCase(themeMusicSetting.trim())
+        if normalizedSetting = "1" or normalizedSetting = "yes" or normalizedSetting = "on"
+            return true
+        end if
+        if normalizedSetting = "0" or normalizedSetting = "no" or normalizedSetting = "off"
+            return false
+        end if
+    end if
+
+    return false ' Default is disabled
 end function
 
 '
@@ -581,7 +802,7 @@ sub startLoadingSpinner(disableRemote = true as boolean)
         m.scene = m.top.getScene()
     end if
 
-    if not m.scene.isLoading
+    if isValid(m.scene) and isValid(m.scene.isLoading) and not m.scene.isLoading
         m.scene.disableRemote = disableRemote
         m.scene.isLoading = true
     end if
@@ -592,7 +813,7 @@ sub stopLoadingSpinner()
         m.scene = m.top.getScene()
     end if
 
-    if m.scene.isLoading
+    if isValid(m.scene) and isValid(m.scene.isLoading) and m.scene.isLoading
         m.scene.disableRemote = false
         m.scene.isLoading = false
     end if
@@ -618,15 +839,66 @@ function shuffleArray(array as object) as object
     return array
 end function
 
+function normalizeSceneGraphColorString(colorSetting as dynamic) as dynamic
+    if not isValid(colorSetting) then return invalid
+
+    colorValue = colorSetting.toStr().Trim()
+    if colorValue = "" then return invalid
+
+    if colorValue.left(1) = "#"
+        colorValue = colorValue.mid(1)
+    else if colorValue.left(2) = "0x" or colorValue.left(2) = "0X"
+        colorValue = colorValue.mid(2)
+    end if
+
+    colorValue = UCase(colorValue)
+
+    if Len(colorValue) = 6
+        return "0x" + colorValue + "FF"
+    else if Len(colorValue) = 8
+        return "0x" + colorValue
+    end if
+
+    return invalid
+end function
+
+function formatSceneGraphColor(colorSetting as dynamic, defaultColor as string) as string
+    normalizedDefault = normalizeSceneGraphColorString(defaultColor)
+    if not isValidAndNotEmpty(normalizedDefault)
+        normalizedDefault = "0xFFFFFFFF"
+    end if
+
+    colorType = Type(colorSetting)
+    if colorType <> "String" and colorType <> "roString"
+        return normalizedDefault
+    end if
+
+    normalizedColor = normalizeSceneGraphColorString(colorSetting)
+    if isValidAndNotEmpty(normalizedColor)
+        return normalizedColor
+    end if
+
+    return normalizedDefault
+end function
+
+' Format overlay color setting to a valid SceneGraph color string.
+function formatOverlayColor(colorSetting as dynamic, defaultColor as string) as string
+    return formatSceneGraphColor(colorSetting, defaultColor)
+end function
+
 ' convert value to boolean and return value
 function toBoolean(value as dynamic) as dynamic
     if value = invalid then return invalid
-    if Type(value) = "Boolean" then return value
-    if Type(value) <> "String" then return value
+    valueType = LCase(Type(value))
 
-    if value = "true"
+    if valueType = "boolean" or valueType = "roboolean" then return value
+    if valueType <> "string" and valueType <> "rostring" then return value
+
+    normalizedValue = LCase(value.trim())
+
+    if normalizedValue = "true"
         return true
-    else if value = "false"
+    else if normalizedValue = "false"
         return false
     else
         return value
@@ -749,6 +1021,318 @@ function getDefaultAudioTrackIndex(streams as dynamic)
     return -1
 end function
 
+' Sets the lastFocus property on the active scene to the provided component
+' This is a common pattern when setting focus to ensure the scene manager
+' knows where to restore focus when returning to this scene
+sub setLastFocus(component as object)
+    group = m.global.sceneManager.callFunc("getActiveScene")
+    group.lastFocus = component
+end sub
+
+' Gets the active scene and sets its lastFocus property to the provided component
+' Returns the active scene group for additional operations if needed
+function getActiveSceneAndSetFocus(component as object) as object
+    group = m.global.sceneManager.callFunc("getActiveScene")
+    group.lastFocus = component
+    return group
+end function
+
+' Preserves the focus state of the home rows before navigation
+' This is used when navigating away from the home screen to ensure
+' the user returns to the same position they left from
+sub preserveHomeRowsFocus()
+    group = m.global.sceneManager.callFunc("getActiveScene")
+    group.lastFocus = group.homeRows
+end sub
+
+' Initializes and moves a dialog scrollbar based on the focused item
+' This is used by RadioDialog to handle its scrollbar UI
+' Parameters:
+'   contentArea: The dialog's content area node containing the scrollbar
+'   radioOptions: The option list node that contains the selectable items
+'   scrollBarColumn: Array containing the scrollbar column node (passed by reference)
+'   scrollBarThumb: Array containing the scrollbar thumb node (passed by reference)
+'   scrollAmount: The amount to scroll per item (passed by reference)
+'   onScrollBarFocusCallback: String name of the callback function to observe focus changes
+sub setupAndMoveDialogScrollBar(contentArea as object, radioOptions as object, scrollBarColumn as object, scrollBarThumb as object, scrollAmount as object, onScrollBarFocusCallback as string)
+    ' If we haven't found the scrollbar column node yet, try to find it now
+    if scrollBarColumn.count() = 0
+        scrollBar = findNodeBySubtype(contentArea, "StdDlgScrollbar")
+        if scrollBar.count() = 0 or not isValid(scrollBar[0]) or not isValid(scrollBar[0].node)
+            return
+        end if
+
+        scrollBarColumnNodes = findNodeBySubtype(scrollBar[0].node, "Poster")
+        if scrollBarColumnNodes.count() = 0 or not isValid(scrollBarColumnNodes[0]) or not isValid(scrollBarColumnNodes[0].node)
+            return
+        end if
+
+        scrollBarThumbNodes = findNodeBySubtype(scrollBarColumnNodes[0].node, "Poster")
+        if scrollBarThumbNodes.count() = 0 or not isValid(scrollBarThumbNodes[0]) or not isValid(scrollBarThumbNodes[0].node)
+            return
+        end if
+
+        scrollBarThumbNodes[0].node.blendColor = "#444444"
+        ' If the user presses left then right, it's possible for us to lose focus. Ensure focus stays on the option list.
+        scrollBar[0].node.observeField("focusedChild", onScrollBarFocusCallback)
+
+        ' Hide the default scrollbar background
+        scrollBarColumnNodes[0].node.uri = ""
+
+        ' Create a new scrollbar background so we can move the original nodes freely
+        scrollbarBackground = createObject("roSGNode", "Rectangle")
+        scrollbarBackground.color = "#101010"
+        scrollbarBackground.opacity = "0.3"
+        scrollbarBackground.width = "30"
+        scrollbarBackground.height = contentArea.clippingRect.height
+        scrollbarBackground.translation = [0, 0]
+        scrollBar[0].node.insertChild(scrollbarBackground, 0)
+
+        ' Determine the proper scroll amount for the scrollbar
+        calculatedScrollAmount = (contentArea.clippingRect.height - int(scrollBarThumbNodes[0].node.height)) / radioOptions.getChildCount()
+        calculatedScrollAmount += calculatedScrollAmount / radioOptions.getChildCount()
+
+        ' Update the passed-in arrays/values (BrightScript passes objects by reference)
+        scrollBarColumn.clear()
+        scrollBarColumn.push(scrollBarColumnNodes[0])
+        scrollBarThumb.clear()
+        scrollBarThumb.push(scrollBarThumbNodes[0])
+        scrollAmount.value = calculatedScrollAmount
+    end if
+
+    if not isvalid(radioOptions.focusedChild) or not isvalid(radioOptions.focusedChild.id) then return
+
+    scrollBarColumn[0].node.translation = [0, val(radioOptions.focusedChild.id) * scrollAmount.value]
+end sub
+
+' Gets the currently focused item from an ItemGrid component
+' Returns the content node of the focused item, or invalid if no item is focused
+' Parameters:
+'   itemGrid: The ItemGrid component to get the focused item from
+function getItemGridFocusedItem(itemGrid as object) as dynamic
+    if not isValid(itemGrid) then return invalid
+    if not isValid(itemGrid.itemFocused) then return invalid
+    if not isValid(itemGrid.content) then return invalid
+
+    return itemGrid.content.getChild(itemGrid.itemFocused)
+end function
+
+' Handles section navigation escape key logic for detail screens with sections
+' This is a common pattern in screens like ArtistView with multiple scrollable sections
+' Parameters:
+'   escapeDirection: The direction key that was pressed ("up", "down", "left")
+'   sectionNavigation: The navigation menu component
+'   sectionScroller: The section scroller component
+'   setFocusCallback: Optional function name to call when focusing the navigation (for focus tracking)
+sub handleSectionNavigationEscape(escapeDirection as string, sectionNavigation as object, sectionScroller as object)
+    if escapeDirection = "up"
+        sectionNavigation.selected = sectionScroller.displayedIndex - 1
+    else if escapeDirection = "left"
+        sectionNavigation.setFocus(true)
+        setLastFocus(sectionNavigation)
+    else if escapeDirection = "down"
+        if sectionScroller.displayedIndex + 1 < sectionNavigation.getChildCount()
+            sectionNavigation.selected = sectionScroller.displayedIndex + 1
+        end if
+    end if
+end sub
+
+' Handles the common pattern of stopping a loading operation
+' Used in library views when data loading fails or completes
+' Parameters:
+'   loadingFlag: Reference to the m.Loading or m.loading flag to set to false
+sub stopLoadingOperation()
+    m.Loading = false
+    stopLoadingSpinner()
+end sub
+
+' Shared utility for managing background image queuing during transitions
+' Sets a new background image URI, or queues it if an animation/load is in progress
+'
+' Parameters:
+'   backgroundUri: The URI of the background image to set
+'   newBackdropNode: Reference to the Poster node for the new backdrop
+'   swapAnimationNode: Reference to the Animation node for backdrop swapping
+'
+' Returns: true if URI was set immediately, false if queued (stored in m.queuedBGUri)
+'
+' Usage:
+'   setBackgroundWithQueue(uri, m.newBackdrop, m.swapAnimation)
+function setBackgroundWithQueue(backgroundUri as string, newBackdropNode as object, swapAnimationNode as object) as boolean
+    if get_user_setting_bool("ui.library.hideBackdrops", false)
+        newBackdropNode.uri = ""
+        return true
+    end if
+
+    animationState = LCase(swapAnimationNode.state)
+    loadStatus = LCase(newBackdropNode.loadStatus)
+
+    if animationState <> "stopped" or loadStatus = "loading"
+        m.queuedBGUri = backgroundUri
+        return false
+    end if
+
+    newBackdropNode.uri = backgroundUri
+    return true
+end function
+
+' Validates nested object properties in a single check
+' Useful for checking if an object has deeply nested valid properties
+'
+' Parameters:
+'   obj: The root object to validate
+'   prop1: First property name (string) to check on obj
+'   prop2: Optional second property name (string) to check on obj.prop1
+'
+' Returns: true if all specified nested properties are valid
+'
+' Usage:
+'   hasValidProperties(item, "ImageTags", "Primary") - checks item.ImageTags and item.ImageTags.Primary
+'   hasValidProperties(item, "UserData", "Played") - checks item.UserData and item.UserData.Played
+'   hasValidProperties(item, "json") - checks only item.json
+function hasValidProperties(obj as object, prop1 as string, prop2 = invalid as dynamic) as boolean
+    if not isValid(obj)
+        return false
+    end if
+
+    ' Check first level property
+    firstLevel = obj[prop1]
+    if not isValid(firstLevel)
+        return false
+    end if
+
+    ' If no second property specified, we're done
+    if prop2 = invalid
+        return true
+    end if
+
+    ' Check second level property
+    return isValid(firstLevel[prop2])
+end function
+
+' Convenience function for common ImageTags.Primary validation pattern
+'
+' Parameters:
+'   obj: Object with ImageTags property (item, json, etc.)
+'
+' Returns: true if obj.ImageTags.Primary exists and is valid
+'
+' Usage:
+'   if hasImageTagPrimary(item) then...
+function hasImageTagPrimary(obj as object) as boolean
+    return hasValidProperties(obj, "ImageTags", "Primary")
+end function
+
+' Convenience wrapper for creating SceneGraph nodes
+' Reduces boilerplate for common node creation patterns
+'
+' Parameters:
+'   nodeType: String name of the node type to create
+'
+' Returns: The created roSGNode object
+'
+' Usage:
+'   tmp = createSGNode("HomeData")
+'   content = createSGNode("ContentNode")
+function createSGNode(nodeType as string) as object
+    return CreateObject("roSGNode", nodeType)
+end function
+
+' Attempts to focus the navbar/overhang from the current screen.
+' This is a helper function to reduce code duplication across screens.
+' Typically called when the user presses the UP key from content.
+'
+' Parameters:
+'   componentNode: The current component node (usually m.top)
+'
+' Returns: True if overhang was found and focused, false otherwise
+'
+' Usage in onKeyEvent:
+'   if key = "up" or key = "Up"
+'       return FocusOverhang(m.top)
+'   end if
+function FocusOverhang(componentNode as object) as boolean
+    if not isValid(componentNode) then return false
+
+    scene = componentNode.getScene()
+    if not isValid(scene) then return false
+
+    sidebar = scene.findNode("sidebar")
+    if isValid(sidebar) and sidebar.visible
+        return false
+    end if
+
+    nav = scene.findNode("overhang")
+    if isValid(nav)
+        nav.setFocus(true)
+        return true
+    end if
+
+    return false
+end function
+
+function FocusSidebar(componentNode as object) as boolean
+    if not isValid(componentNode) then return false
+
+    scene = componentNode.getScene()
+    if not isValid(scene) then return false
+
+    sidebar = scene.findNode("sidebar")
+    if isValid(sidebar) and sidebar.visible
+        sidebar.setFocus(true)
+        return true
+    end if
+
+    return false
+end function
+
+' The nav is either the bar across the top or the rail down the left, so this
+' hands focus to whichever one the user is running
+function FocusNav(componentNode as object) as boolean
+    if FocusOverhang(componentNode) then return true
+
+    return FocusSidebar(componentNode)
+end function
+
+' A screen asking for a clear top means the bar that would sit over its content,
+' so the rail down the left is left where it is
+sub hideContentNav(scene as object)
+    nav = getActiveNav(scene)
+    if not isValid(nav) or nav.isSubType("Sidebar") then return
+
+    nav.isVisible = false
+end sub
+
+function getActiveNav(scene as object) as object
+    if not isValid(scene) then return invalid
+
+    sidebar = scene.findNode("sidebar")
+    if isValid(sidebar) and sidebar.visible
+        return sidebar
+    end if
+
+    return scene.findNode("overhang")
+end function
+
+sub centerButtonRowInContainer(buttonRow as object, buttonCount as integer, buttonWidth = 168 as integer, buttonSpacing = 40 as integer, containerOffset = 0 as integer)
+    if buttonRow = invalid or buttonCount = 0 then return
+
+    totalWidth = (buttonCount * buttonWidth) + ((buttonCount - 1) * buttonSpacing)
+    screenWidth = 1920
+    centerX = ((screenWidth - totalWidth) / 2) - containerOffset
+
+    currentTranslation = buttonRow.translation
+    buttonRow.translation = [centerX, currentTranslation[1]]
+end sub
+
+function getEndTimeFromTicks(ticks) as string
+    date = CreateObject("roDateTime")
+    durationSeconds = int(ticks / 10000000.0)
+    date.fromSeconds(date.asSeconds() + durationSeconds)
+    date.toLocalTime()
+    return formatTime(date)
+end function
+
 function serverVersionMeetsMinimumRequirements(systemVersion as string, targetVersion as roArray) as boolean
     version = systemVersion.split(".")
     if version.Count() < 3
@@ -773,19 +1357,30 @@ function serverVersionMeetsMinimumRequirements(systemVersion as string, targetVe
     return true
 end function
 
-' MaskGroup sizes are not automatically scaled by SceneGraph on HD devices
-' when using an FHD design resolution. Apply HD_SCALE_FACTOR to keep
-' masks aligned correctly. Callers should use asset/maskSize values divisible
-' by 3 (e.g. 66, not 64) to avoid truncation error from Int().
-' isHDDevice is cached on m.global.device at startup (see SaveDeviceToGlobal
-' in globals.bs) to avoid repeated roDeviceInfo lookups as more MaskGroup
-' usages are added.
-const HD_SCALE_FACTOR = 2.0 / 3.0
+' Strip HTML tags from a string, decode common HTML entities, and normalize whitespace
+function stripHtmlTags(text as string) as string
+    if text = "" then return text
 
-function scaleMaskSize(size as integer) as integer
-    if chainLookupReturn(m.global.device, "isHDDevice", false)
-        return Int(size * HD_SCALE_FACTOR)
-    end if
+    ' Remove HTML tags
+    htmlRegex = CreateObject("roRegex", "<[^>]*>", "s")
+    result = htmlRegex.ReplaceAll(text, "")
 
-    return size
+    ' Decode common HTML entities
+    result = result.Replace("&amp;", "&")
+    result = result.Replace("&lt;", "<")
+    result = result.Replace("&gt;", ">")
+    result = result.Replace("&quot;", chr(34))
+    result = result.Replace("&#39;", "'")
+    result = result.Replace("&apos;", "'")
+    result = result.Replace("&nbsp;", " ")
+
+    ' Replace <br> variants that may have been missed
+    brRegex = CreateObject("roRegex", "<br\s*/?>", "is")
+    result = brRegex.ReplaceAll(result, chr(10))
+
+    ' Collapse multiple blank lines to a single one
+    blankLineRegex = CreateObject("roRegex", "(\n\s*){3,}", "s")
+    result = blankLineRegex.ReplaceAll(result, chr(10) + chr(10))
+
+    return result.trim()
 end function

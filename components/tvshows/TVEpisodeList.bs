@@ -14,17 +14,12 @@ sub init()
     m.scrollBar.color = ColorPalette.BLACK77
     m.thumb.color = ColorPalette.LIGHTGREY
 
-    m.firstUnwatched = 0
     m.top.content = setData()
     updateSize()
 
     m.top.observeFieldscoped("numColumns", "onNumColumnsChange")
     m.top.observeFieldscoped("currFocusRow", "onCurrFocusRowChange")
     m.top.observeFieldscoped("clippingRect", "onclippingRectChange")
-
-    if chainLookupReturn(m.global.session, "user.settings.`ui.tvshows.startListFromUnwatched`", false)
-        m.top.jumpToItem = m.firstUnwatched
-    end if
 
     calculateButtonThumbProperties()
 end sub
@@ -81,44 +76,21 @@ end sub
 
 sub updateSize()
     m.top.itemSpacing = [20, 20]
-
-    if m.top.numColumns = 1
-        m.top.itemSize = [1620, 300]
-        return
-    end if
-
-    ' Size of the individual episodes
-    m.top.itemSize = [805, 200]
+    m.top.itemSize = [1620, 300]
 end sub
 
 sub setupRows()
     updateSize()
     objects = m.top.objects
     m.top.numRows = objects.items.count()
-    m.top.numColumns = chainLookupReturn(m.global.session, "user.settings.TVSeasonDetails-twocolumnepisodelist", true) ? 2 : 1
+    m.top.numColumns = 1
     m.top.content = setData()
     calculateButtonThumbProperties()
-
-    if chainLookupReturn(m.global.session, "user.settings.`ui.tvshows.startListFromUnwatched`", false)
-        m.top.jumpToItem = m.firstUnwatched
-    end if
 end sub
 
 function setData()
     data = CreateObject("roSGNode", "ContentNode")
     if not isValid(m.top.objects) then return data
-
-    i = 0
-    m.firstUnwatched = -1
-    for each item in m.top.objects.items
-        if m.firstUnwatched = -1
-            if not chainLookupReturn(item, "watched", false)
-                m.firstUnwatched = i
-                exit for
-            end if
-        end if
-        i++
-    end for
 
     data.appendChildren(m.top.objects.items)
 
@@ -128,5 +100,8 @@ function setData()
 end function
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    if not press then return false
+    if key = "" then return false
+
     return false
 end function

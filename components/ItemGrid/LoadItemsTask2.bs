@@ -3,19 +3,130 @@ import "pkg:/source/api/Image.bs"
 import "pkg:/source/api/Items.bs"
 import "pkg:/source/api/sdk.bs"
 import "pkg:/source/enums/ImageType.bs"
+import "pkg:/source/enums/ItemType.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/deviceCapabilities.bs"
 import "pkg:/source/utils/misc.bs"
+
+' Helper functions for multi-server API calls
+
+' Check if we're using a different server than the current session
+function isUsingRemoteServer() as boolean
+    return isValidAndNotEmpty(m.top.serverUrl)
+end function
+
+' Get the user ID to use for API calls
+function getTargetUserId() as string
+    if isUsingRemoteServer() and isValidAndNotEmpty(m.top.serverUserId)
+        return m.top.serverUserId
+    end if
+    return m.global.session.user.id
+end function
+
+' Get the server URL to use for API calls
+function getTargetServerUrl() as string
+    if isUsingRemoteServer()
+        return m.top.serverUrl
+    end if
+    return m.global.session.server.url
+end function
+
+' Build authorization header for the target server
+function buildTargetAuthHeader() as string
+    if isUsingRemoteServer() and isValidAndNotEmpty(m.top.serverAuthToken)
+        ' Build auth header for remote server - must match format used by other API calls
+        QUOTE = Chr(34)
+        auth = "MediaBrowser" + " Client=" + QUOTE + m.global.app.name + " Roku" + QUOTE
+        auth = auth + ", Device=" + QUOTE + m.global.device.name + " (" + m.global.device.model + ")" + QUOTE
+        auth = auth + ", Version=" + QUOTE + m.global.app.version + QUOTE
+        auth = auth + ", DeviceId=" + QUOTE + m.global.device.serverDeviceName + QUOTE
+        auth = auth + ", Token=" + QUOTE + m.top.serverAuthToken + QUOTE
+        return auth
+    end if
+    return buildAuthHeader()
+end function
+
+' Make an API request to the target server
+function targetAPIRequest(path as string, params = {} as object) as object
+    if isUsingRemoteServer()
+        ' Build URL for remote server
+        serverUrl = getTargetServerUrl()
+        if serverUrl.right(1) = "/"
+            serverUrl = serverUrl.left(serverUrl.len() - 1)
+        end if
+        if path.left(1) <> "/"
+            path = "/" + path
+        end if
+        fullUrl = serverUrl + path
+
+        ' Build query string
+        paramArray = []
+        for each key in params
+            paramArray.push(key + "=" + params[key].toStr().encodeUriComponent())
+        end for
+        if paramArray.count() > 0
+            fullUrl = fullUrl + "?" + paramArray.join("&")
+        end if
+
+        ' Create request
+        req = CreateObject("roUrlTransfer")
+        req.setUrl(fullUrl)
+        req.setCertificatesFile("common:/certs/ca-bundle.crt")
+        req.initClientCertificates()
+        req.RetainBodyOnError(true)
+        req.EnableEncodings(true)
+        req.addHeader("Content-Type", "application/json")
+        req.addHeader("Authorization", buildTargetAuthHeader())
+
+        return req
+    end if
+
+    ' Use standard API request for current server
+    return APIRequest(path, params)
+end function
+
+' Get image URL for the target server
+function getTargetImageURL(itemId as string, imageType = "Primary" as string, imageIndex = 0 as integer, params = {} as object) as string
+    serverUrl = getTargetServerUrl()
+    if serverUrl.right(1) = "/"
+        serverUrl = serverUrl.left(serverUrl.len() - 1)
+    end if
+
+    ' Build image URL
+    targetImgUrl = serverUrl + "/Items/" + itemId + "/Images/" + imageType
+
+    if imageIndex > 0
+        targetImgUrl = targetImgUrl + "/" + imageIndex.toStr()
+    end if
+
+    ' Add quality params
+    paramArray = []
+    for each key in params
+        paramArray.push(key + "=" + params[key].toStr().encodeUriComponent())
+    end for
+    if paramArray.count() > 0
+        targetImgUrl = targetImgUrl + "?" + paramArray.join("&")
+    end if
+
+    return targetImgUrl
+end function
 
 sub init()
     m.top.filter = "All"
     m.top.sortField = "SortName"
     m.top.functionName = "loadItems"
 
-    m.top.limit = chainLookupReturn(m.global.session, "user.settings.`ui.library.loadItemsLimit`", 60)
+    m.top.limit = 100 ' Load 100 items at a time for performance
 end sub
 
 sub loadItems()
+    ' Allow pagination by resetting hasExecuted for each batch
+    ' Note: startIndex changes trigger new execution
+    if m.top.hasExecuted = true and m.top.startIndex = 0
+        return
+    end if
+
+    m.top.hasExecuted = true
     results = []
 
     sort_field = m.top.sortField
@@ -40,18 +151,29 @@ sub loadItems()
     params = {
         limit: m.top.limit,
         StartIndex: m.top.startIndex,
-        parentid: m.top.itemId,
         SortBy: sort_field,
         SortOrder: sort_order,
         recursive: m.top.recursive,
-        Fields: "Overview, RecursiveItemCount",
+        Fields: "Overview, ChildCount, RecursiveItemCount, ProviderIds",
         StudioIds: m.top.studioIds,
         genreIds: m.top.genreIds
     }
 
+    ' Filter by genre name when no genre ID is available (e.g. navbar genre browse)
+    if isValidAndNotEmpty(m.top.genreNames)
+        params.Genres = m.top.genreNames
+    end if
+
+    ' Only add parentId if it's not empty
+    if m.top.itemId <> ""
+        params.append({ parentId: m.top.itemId })
+    else
+    end if
+
+
     ' Handle special case when getting names starting with numeral
-    if m.top.NameStartsWith <> ""
-        if m.top.NameStartsWith = "#"
+    if m.top.nameStartsWith <> ""
+        if m.top.nameStartsWith = "#"
             if m.top.ItemType = "LiveTV" or m.top.ItemType = "TvChannel"
                 params.searchterm = "A"
                 params.append({ parentid: " " })
@@ -117,49 +239,64 @@ sub loadItems()
         params.append({ IncludeItemTypes: m.top.ItemType })
     end if
 
+    if m.top.excludeItemTypes <> ""
+        params.append({ ExcludeItemTypes: m.top.excludeItemTypes })
+    end if
+
+    if not m.top.collapseBoxSetItems
+        params.append({ CollapseBoxSetItems: false })
+    end if
+
     if m.top.ItemType = "LiveTV"
         url = "LiveTv/Channels"
-        params.append({ UserId: m.global.session.user.id })
+        params.append({ UserId: getTargetUserId() })
     else if m.top.view = "Networks"
         url = "Studios"
-        params.append({ UserId: m.global.session.user.id })
+        params.append({ UserId: getTargetUserId() })
     else if isStringEqual(m.top.view, "Genres")
         url = "Genres"
-        params.append({ UserId: m.global.session.user.id, includeItemTypes: m.top.itemType })
+        params.append({ UserId: getTargetUserId(), includeItemTypes: m.top.itemType })
     else if m.top.ItemType = "MusicArtist"
         url = "Artists"
         params.append({
-            UserId: m.global.session.user.id,
+            UserId: getTargetUserId(),
             Fields: "Genres"
         })
         params.IncludeItemTypes = "MusicAlbum,Audio"
     else if m.top.ItemType = "AlbumArtists"
         url = "Artists/AlbumArtists"
         params.append({
-            UserId: m.global.session.user.id,
+            UserId: getTargetUserId(),
             Fields: "Genres"
         })
         params.IncludeItemTypes = "MusicAlbum,Audio"
-    else if m.top.ItemType = "MusicAlbum"
-        url = "Items"
-        params.append({ ImageTypeLimit: 1, UserId: m.global.session.user.id })
-        ' Request Primary artwork (album cover) and Backdrop as fallback
-        params.append({ EnableImageTypes: "Primary,Backdrop" })
-        ' Remove heavy fields that bloat the JSON response
-        ' Overview (long text) and RecursiveItemCount (not used in grid)
-        params.delete("Fields")
+    else if m.top.ItemType = "MusicAlbum" or m.top.ItemType = "Audio" or m.top.ItemType.Instr("MusicAlbum,") >= 0
+        ' Handle single music types and AllMusic view (MusicAlbum,MusicArtist,Audio)
+        url = Substitute("Users/{0}/Items/", getTargetUserId())
+        params.append({ ImageTypeLimit: 1 })
+        params.append({ EnableImageTypes: "Primary,Backdrop,Banner,Thumb" })
+
+        ' For AllMusic view or songs, enable recursive search
+        if m.top.recursive = true or m.top.ItemType = "Audio" or m.top.ItemType.Instr("Audio") >= 0
+            params.recursive = true
+        end if
     else if m.top.ItemType = "audiobooks"
         params.append({ mediaTypes: "Audio", UserId: m.global.session.user.id })
         params.append({ Filters: "IsNotFolder" })
         params.append({ EnableImageTypes: "Primary,Backdrop,Banner,Thumb" })
-        url = "Items"
+        url = Substitute("Users/{0}/Items/", getTargetUserId())
     else if LCase(m.top.ItemType) = "nextup"
         url = "Shows/NextUp"
         params.limit = 100 ' If you have more than 100 in your Next Up queue, maybe go outside a bit more.
         params.append({ ImageTypeLimit: 1 })
         params.append({ EnableImageTypes: "Primary,Backdrop,Banner,Thumb" })
     else if isStringEqual(m.top.ItemType, "mylist")
-        data = api.GetUserViews({ "userId": m.global.session.user.id })
+        ' mylist is not supported for remote servers currently
+        if isUsingRemoteServer()
+            m.top.content = []
+            return
+        end if
+        data = api.GetUserViews({ "userId": getTargetUserId() })
         if not isChainValid(data, "Items") then return
 
         myListPlaylist = invalid
@@ -167,7 +304,7 @@ sub loadItems()
         for each item in data.LookupCI("items")
             if isStringEqual(item.LookupCI("CollectionType"), "playlists")
                 myListPlaylist = api.items.Get({
-                    "userid": m.global.session.user.id,
+                    "userid": getTargetUserId(),
                     "includeItemTypes": "Playlist",
                     "nameStartsWith": "|My List|",
                     "parentId": item.LookupCI("id")
@@ -185,7 +322,7 @@ sub loadItems()
         url = "/items/"
 
         params.append({
-            UserId: m.global.session.user.id,
+            UserId: getTargetUserId(),
             ImageTypeLimit: 1,
             EnableImageTypes: `${ImageType.PRIMARY}, ${ImageType.BACKDROP}, ${ImageType.THUMB}`,
             Limit: 50,
@@ -193,14 +330,39 @@ sub loadItems()
             ParentId: playlistID
         })
     else
-        params.append({
-            UserId: m.global.session.user.id
-        })
-        url = "Items"
+        url = Substitute("Users/{0}/Items/", getTargetUserId())
     end if
 
-    resp = APIRequest(url, params)
-    data = getJson(resp)
+    ' Make API request with timeout handling
+    resp = targetAPIRequest(url, params)
+
+    ' Add timeout by checking if request is valid
+    if not isValid(resp)
+        ' Request setup failed
+        m.top.content = []
+        m.top.hasExecuted = false
+        return
+    end if
+
+    ' Get response - handle remote server separately since we need GetToString
+    if isUsingRemoteServer()
+        responseBody = resp.GetToString()
+        if responseBody <> invalid and responseBody <> ""
+            data = ParseJson(responseBody)
+        else
+            data = invalid
+        end if
+    else
+        data = getJson(resp)
+    end if
+
+    ' Check if API call timed out or failed
+    if not isValid(data)
+        ' API request failed or timed out
+        m.top.content = []
+        m.top.hasExecuted = false
+        return
+    end if
 
     ' If user has filtered by #, include special characters sorted after Z as well
     if isValid(params.NameLessThan)
@@ -210,7 +372,7 @@ sub loadItems()
             params.NameStartsWithOrGreater = "z"
 
             ' Perform 2nd API lookup for items starting with Z or greater
-            startsWithZAndGreaterResp = APIRequest(url, params)
+            startsWithZAndGreaterResp = targetAPIRequest(url, params)
             startsWithZAndGreaterData = getJson(startsWithZAndGreaterResp)
 
             if isValidAndNotEmpty(startsWithZAndGreaterData)
@@ -240,7 +402,11 @@ sub loadItems()
             if m.top.ItemType = "audiobooks"
                 if item.Type = "AudioBook"
                     tmp = CreateObject("roSGNode", "MusicSongData")
-                    tmp.posterUrl = api.items.GetImageURL(item.id, "primary", 0, { "maxHeight": 280, "maxWidth": 280, "quality": "90" })
+                    if isUsingRemoteServer()
+                        tmp.posterUrl = getTargetImageURL(item.id, "primary", 0, { "maxHeight": 280, "maxWidth": 280, "quality": "90" })
+                    else
+                        tmp.posterUrl = api.items.GetImageURL(item.id, "primary", 0, { "maxHeight": 280, "maxWidth": 280, "quality": "90" })
+                    end if
                     tmp.type = "audiobook"
                     tmp.json = item
                     tmp.title = item.name
@@ -284,101 +450,124 @@ sub loadItems()
                 else if LCase(item.Type) = "recording"
                     tmp = CreateObject("roSGNode", "RecordingData")
                 else if item.Type = "Genre"
-                    itemLimit = m.top.numberOfColumns ?? 7
-
+                    ' Genre card data for the genre grid view
                     tmp = CreateObject("roSGNode", "ContentNode")
+                    tmp.addField("json", "assocarray", false)
                     tmp.title = item.name
 
-                    genreData = api.items.Get({
-                        UserId: m.global.session.user.id,
-                        SortBy: "Random",
-                        SortOrder: "Ascending",
-                        IncludeItemTypes: m.top.itemType,
-                        Recursive: true,
-                        Fields: "PrimaryImageAspectRatio,MediaSourceCount,BasicSyncInfo",
-                        ImageTypeLimit: 1,
-                        EnableImageTypes: "Primary",
-                        Limit: itemLimit,
-                        GenreIds: item.id,
-                        EnableTotalRecordCount: false,
-                        ParentId: m.top.itemId
-                    })
+                    ' Get item count and a backdrop image for this genre
+                    genreItemCount = 0
+                    backdropUrl = ""
 
-                    if genreData.Items.Count() > (itemLimit - 2)
-                        ' Add View All item to the start of the row
-                        row = tmp.createChild("FolderData")
-
-                        row.libraryID = m.top.genreIds
-                        row.parentFolder = m.top.itemId
-                        row.id = m.top.itemId
-                        row.title = tr("View All") + " " + item.name
-                        item.name = tr("View All") + " " + item.name
-                        row.json = item
-                        row.type = "Folder"
-                        row.itemType = m.top.itemType
-
-                        if LCase(m.top.itemType) = "movie"
-                            genreItemImage = api.items.GetImageURL(item.id)
-                        else
-                            genreItemImage = invalid
-                            row.posterURL = invalid
-                        end if
-
-                        row.FHDPOSTERURL = genreItemImage
-                        row.HDPOSTERURL = genreItemImage
-                        row.SDPOSTERURL = genreItemImage
-
-                        genreData.Items.Pop()
+                    if isUsingRemoteServer()
+                        genreItemData = { Items: [], TotalRecordCount: 0 }
+                    else
+                        genreItemData = api.items.Get({
+                            UserId: getTargetUserId(),
+                            SortBy: "Random",
+                            SortOrder: "Ascending",
+                            IncludeItemTypes: m.top.itemType,
+                            Recursive: true,
+                            Fields: "BackdropImageTags",
+                            ImageTypeLimit: 1,
+                            EnableImageTypes: "Backdrop",
+                            Limit: 5,
+                            GenreIds: item.id,
+                            EnableTotalRecordCount: true,
+                            ParentId: m.top.itemId
+                        })
                     end if
 
-                    for each genreItem in genreData.Items
-                        if LCase(m.top.itemType) = "movie"
-                            row = tmp.createChild("MovieData")
-                        else
-                            row = tmp.createChild("SeriesData")
-                        end if
+                    if isValid(genreItemData)
+                        genreItemCount = genreItemData.TotalRecordCount ?? 0
 
-                        genreItemImage = api.items.GetImageURL(genreItem.id)
-                        row.title = genreItem.name
-                        row.FHDPOSTERURL = genreItemImage
-                        row.HDPOSTERURL = genreItemImage
-                        row.SDPOSTERURL = genreItemImage
+                        ' Find first item with a backdrop image
+                        for each genreItem in genreItemData.Items
+                            if isValid(genreItem.BackdropImageTags) and genreItem.BackdropImageTags.Count() > 0
+                                backdropUrl = api.items.GetImageURL(genreItem.id, "backdrop", 0, { "maxWidth": 780, "quality": "80" })
+                                exit for
+                            end if
+                            ' Fall back to parent backdrop if available
+                            if isValid(genreItem.ParentBackdropItemId) and isValid(genreItem.ParentBackdropImageTags) and genreItem.ParentBackdropImageTags.Count() > 0
+                                backdropUrl = api.items.GetImageURL(genreItem.ParentBackdropItemId, "backdrop", 0, { "maxWidth": 780, "quality": "80" })
+                                exit for
+                            end if
+                        end for
+                    end if
 
-                        genreItem.AddReplace("passedData", m.top.passToItem)
-
-                        row.json = genreItem
-
-                        row.id = genreItem.id
-                        row.type = genreItem.type
-                    end for
+                    ' Skip empty genres
+                    if genreItemCount = 0
+                        tmp = invalid
+                    else
+                        tmp.json = {
+                            id: item.id,
+                            Name: item.name,
+                            Type: "Genre",
+                            itemCount: genreItemCount,
+                            backdropUrl: backdropUrl,
+                            libraryId: m.top.genreIds,
+                            parentFolder: m.top.itemId,
+                            itemType: m.top.itemType
+                        }
+                    end if
 
                 else if item.Type = "Studio"
                     tmp = CreateObject("roSGNode", "FolderData")
                 else if item.Type = "MusicAlbum"
                     tmp = CreateObject("roSGNode", "MusicAlbumData")
                     tmp.type = "MusicAlbum"
-                    if isChainValid(item, "ImageTags.Primary")
-                        tmp.posterURL = ImageURL(item.id, "Primary")
+                    if isUsingRemoteServer()
+                        ' For remote server, use direct image URL
+                        tmp.posterUrl = getTargetImageURL(item.id, "Primary")
+                    else if api.items.HeadImageURLByName(item.id, "primary")
+                        tmp.posterUrl = ImageURL(item.id, "Primary")
+                    else if api.items.HeadImageURLByName(item.id, "backdrop")
+                        tmp.posterUrl = ImageURL(item.id, "backdrop")
+                    else
+                        tmp.posterUrl = "pkg:/images/icons/audio_track.png"
                     end if
                 else if item.Type = "MusicArtist"
                     tmp = CreateObject("roSGNode", "MusicArtistData")
+                else if isStringEqual(item.Type, ItemType.PERSON)
+                    tmp = CreateObject("roSGNode", "PersonData")
                 else if item.Type = "Audio"
                     tmp = CreateObject("roSGNode", "MusicSongData")
-                    tmp.type = "Audio"
-                    tmp.image = api.items.GetImageURL(item.id, "primary", 0, { "maxHeight": 280, "maxWidth": 280, "quality": "90" })
+                    tmp.type = "audio"
+                    if isUsingRemoteServer()
+                        songImageURL = getTargetImageURL(item.id, "primary", 0, { "maxHeight": 280, "maxWidth": 280, "quality": "90" })
+                    else
+                        songImageURL = api.items.GetImageURL(item.id, "primary", 0, { "maxHeight": 280, "maxWidth": 280, "quality": "90" })
+                    end if
+                    if isValid(songImageURL) and songImageURL <> ""
+                        tmp.posterUrl = songImageURL
+                    else
+                        tmp.posterUrl = "pkg:/images/icons/audio_track.png"
+                    end if
                 else if item.Type = "MusicGenre"
                     tmp = CreateObject("roSGNode", "FolderData")
                     tmp.title = item.name
                     tmp.parentFolder = m.top.itemId
                     tmp.json = item
                     tmp.type = "Folder"
-                    tmp.posterUrl = api.items.GetImageURL(item.id, "primary", 0, { "maxHeight": 270, "maxWidth": 270, "quality": "90" })
+                    if isUsingRemoteServer()
+                        tmp.posterUrl = getTargetImageURL(item.id, "primary", 0, { "maxHeight": 270, "maxWidth": 270, "quality": "90" })
+                    else
+                        tmp.posterUrl = api.items.GetImageURL(item.id, "primary", 0, { "maxHeight": 270, "maxWidth": 270, "quality": "90" })
+                    end if
                 else
-                    ' print `Unknown Type ${item.Type}`
                 end if
             end if
 
             if tmp <> invalid
+                ' Add multi-server metadata if using remote server
+                if isUsingRemoteServer()
+                    item.AddReplace("_serverUrl", m.top.serverUrl)
+                    item.AddReplace("_userId", m.top.serverUserId)
+                    item.AddReplace("_authToken", m.top.serverAuthToken)
+                    item.AddReplace("_serverId", m.top.serverId)
+                    item.AddReplace("_serverName", m.top.serverName)
+                end if
+
                 item.AddReplace("passedData", m.top.passToItem)
                 if not isStringEqual(item.Type, "genre") and LCase(item.Type) <> "musicgenre"
                     tmp.parentFolder = m.top.itemId
@@ -392,5 +581,13 @@ sub loadItems()
             end if
         end for
     end if
+
+    ' Store total record count for pagination if available
+    if isValid(data) and isValid(data.TotalRecordCount)
+        m.top.totalRecordCount = data.TotalRecordCount
+    end if
+
     m.top.content = results
+    ' Reset hasExecuted for next pagination batch
+    m.top.hasExecuted = false
 end sub

@@ -1,96 +1,229 @@
 import "pkg:/source/api/baserequest.bs"
 import "pkg:/source/api/Image.bs"
 import "pkg:/source/api/Items.bs"
+import "pkg:/source/enums/ColorPalette.bs"
 import "pkg:/source/enums/ItemType.bs"
 import "pkg:/source/enums/TaskControl.bs"
 import "pkg:/source/enums/ViewLoadStatus.bs"
 import "pkg:/source/utils/config.bs"
 import "pkg:/source/utils/deviceCapabilities.bs"
+import "pkg:/source/utils/tvKeyboard.bs"
 
 sub init()
-    m.top.imageDisplayMode = "scaleToZoom"
     m.loadItemsTask1 = createObject("roSGNode", "LoadItemsTask")
     m.top.optionsAvailable = false
     m.searchRow = m.top.findnode("searchRow")
+    m.searchRow.focusBitmapBlendColor = ColorPalette.WHITE
     m.searchTask = CreateObject("roSGNode", "SearchTask")
+    m.searchBox = m.top.findNode("SearchBox")
 
-    'set label text
+    m.searchRequestId = 0
+    m.activeSearchToken = ""
+
+    m.searchTabs = m.top.findNode("searchTabs")
+    m.searchTabs.observeFieldScoped("selectedIndex", "onSearchTabSelected")
+    m.searchTabs.observeFieldScoped("escape", "onSearchTabEscape")
+    m.searchRow.observeFieldScoped("groupSummary", "onGroupSummaryChanged")
+    m.tabKeys = []
+
     m.searchHelpText = m.top.findNode("SearchHelpText")
     m.searchHelpText.text = tr("You can search for Titles, People, Live TV Channels and more")
 
     m.loadStatus = ViewLoadStatus.INIT
+    m.searchRow.observeFieldScoped("selectedItem", "onSearchRowItemSelected")
+end sub
+
+' Opened only when the viewer asks for it, so back always has somewhere to go
+sub openSearchKeyboard()
+    m.searchBox.focused = true
+
+    if isValid(m.keyboard) and m.keyboard.visible
+        m.keyboard.setFocus(true)
+        m.top.lastFocus = m.keyboard
+        return
+    end if
+
+    m.keyboard = tvKeyboard.Open(m.top.getScene(), {
+        hint: tr("Search"),
+        text: m.searchBox.query,
+        showScrim: false
+    })
+    m.keyboard.observeField("text", "onSearchTextChanged")
+    m.keyboard.observeField("submitted", "onSearchSubmitted")
+    m.keyboard.observeField("cancelled", "onSearchKeyboardClosed")
+    m.keyboard.observeField("escape", "onSearchKeyboardEscaped")
+    m.top.lastFocus = m.keyboard
+end sub
+
+' Typing only updates what the box shows. Searching on every letter costs a
+' request and a full rebuild of every row, so the query waits to be submitted
+sub onSearchTextChanged(event as object)
+    m.searchBox.query = event.getData()
+end sub
+
+sub onSearchSubmitted(event as object)
+    m.searchBox.search_values = event.getRoSGNode().text
+    onSearchKeyboardClosed(invalid)
+end sub
+
+sub focusResults()
+    m.searchBox.focused = false
+    m.searchRow.setFocus(true)
+    m.top.lastFocus = m.searchRow
+end sub
+
+' The search box is where the screen rests, and where back from anywhere else
+' on it returns to, so there is always a way out to the nav
+sub focusSearchBox()
+    m.searchBox.focused = true
+    m.searchBox.setFocus(true)
+    m.top.lastFocus = m.searchBox
+end sub
+
+function hasResults() as boolean
+    return isValid(m.searchRow.content) and m.searchRow.content.getChildCount() > 0
+end function
+
+sub hideSearchKeyboard()
+    m.searchBox.focused = false
+    tvKeyboard.Release(m.keyboard, ["text", "submitted", "cancelled", "escape"])
+    m.keyboard = invalid
+end sub
+
+' Stepping up off the top row only means anything when there are results above
+sub onSearchKeyboardEscaped(_event as object)
+    if not hasResults() then return
+
+    hideSearchKeyboard()
+    focusResults()
+end sub
+
+' Something has to take focus when the keyboard closes, or the screen stops
+' answering the remote altogether
+sub onSearchKeyboardClosed(_event as object)
+    hideSearchKeyboard()
+    focusSearchBox()
+end sub
+
+sub onSearchRowItemSelected()
+    selectedItem = m.searchRow.selectedItem
+    if isValid(selectedItem)
+        if selectedItem.isSeerrResult <> invalid and selectedItem.isSeerrResult = true
+            ShowSeerrDetails(selectedItem)
+        else
+            m.top.selectedItem = selectedItem
+        end if
+    end if
 end sub
 
 sub searchMedias()
     query = m.top.searchAlpha
-    'if user deletes the search string hide the spinner
-    if query.len() = 0
-        stopLoadingSpinner()
-    end if
-    'if search task is running and user selectes another letter stop the search and load the next letter
-    m.searchTask.control = "stop"
-    if query <> invalid and query <> ""
-        startLoadingSpinner(false)
-    end if
-    m.searchTask.observeField("results", "loadResults")
-    m.searchTask.query = query
-    m.top.overhangTitle = tr("Search") + ": " + query
-    m.searchTask.control = "RUN"
 
+    if query.len() = 0
+        m.searchTask.control = "stop"
+        m.activeSearchToken = ""
+        m.searchTask.requestToken = ""
+        stopLoadingSpinner()
+        m.top.selectedItem = invalid
+        m.searchRow.selectedItem = invalid
+        m.searchRow.itemData = invalid
+        m.searchRow.content = CreateObject("roSGNode", "ContentNode")
+        m.searchHelpText.visible = true
+        return
+    end if
+
+    m.searchRequestId = m.searchRequestId + 1
+    m.activeSearchToken = m.searchRequestId.toStr() + ":" + query
+
+    m.searchTask.control = "stop"
+    startLoadingSpinner(false)
+    m.searchTask.unobserveFieldScoped("results")
+    m.searchTask.observeFieldScoped("results", "loadResults")
+    m.searchTask.query = query
+    m.searchTask.requestToken = m.activeSearchToken
+    m.searchTask.control = "RUN"
 end sub
 
 sub loadResults()
-    m.searchTask.unobserveField("results")
+    results = m.searchTask.results
+    if not isValid(results) then return
+
+    resultToken = results.requestToken
+    if m.activeSearchToken = "" or not isValid(resultToken) or resultToken <> m.activeSearchToken
+        return
+    end if
 
     stopLoadingSpinner()
-    m.searchRow.itemData = m.searchTask.results
-    m.searchRow.query = m.top.SearchAlpha
+
+    m.searchRow.itemData = results
+    m.top.selectedItem = invalid
+    m.searchRow.selectedItem = invalid
     m.searchHelpText.visible = false
-    if m.searchTask.results.TotalRecordCount = 0
-        ' make sure focus is on the keyboard
+
+    if not isValidAndNotEmpty(chainLookup(results, "items"))
         if m.searchRow.isinFocusChain()
-            m.searchAlphabox.setFocus(true)
-            group = m.global.sceneManager.callFunc("getActiveScene")
-            group.lastFocus = m.searchAlphabox
+            m.searchBox.setFocus(true)
+            m.top.lastFocus = m.searchBox
         end if
         return
     end if
-    m.searchAlphabox = m.top.findnode("searchResults")
-    m.searchAlphabox.translation = "[470, 85]"
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
-    m.searchAlphabox = m.top.findNode("search_Key")
-    if m.searchAlphabox.textEditBox.hasFocus()
-        m.searchAlphabox.textEditBox.translation = "[0, -150]"
-    else
-        m.searchAlphabox.textEditBox.translation = "[0, 0]"
+    if not press then return false
+
+    ' Up or back from the results returns to the search box rather than opening
+    ' the keyboard again, which would leave nowhere to go
+    if (key = "up" or key = "back") and m.searchRow.isinFocusChain()
+        if m.searchTabs.visible
+            focusSearchTabs()
+        else
+            focusSearchBox()
+        end if
+        return true
     end if
 
-    if key = "left" and m.searchRow.isinFocusChain()
-        m.searchAlphabox.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.searchAlphabox
-        return true
-    else if key = "right" and m.searchRow.content <> invalid and m.searchRow.content.getChildCount() > 0
-        m.searchRow.setFocus(true)
-        group = m.global.sceneManager.callFunc("getActiveScene")
-        group.lastFocus = m.searchRow
-        return true
-    else if key = "play" and m.searchRow.isinFocusChain() and m.searchRow.rowItemFocused.count() > 0
-        if m.searchRow.rowItemFocused <> invalid
-            selectedContent = m.searchRow.content.getChild(m.searchRow.rowItemFocused[0])
-            if selectedContent <> invalid
-                selectedItem = selectedContent.getChild(m.searchRow.rowItemFocused[1])
-                if selectedItem <> invalid
-                    m.top.quickPlayNode = selectedItem
-                    return true
-                end if
-            end if
+    if m.searchBox.isinFocusChain()
+        if key = "OK"
+            openSearchKeyboard()
+            return true
+        end if
+
+        ' The search box is the top of the screen, so up from it leaves for
+        ' whichever nav is showing
+        if key = "up"
+            m.searchBox.focused = false
+            return FocusNav(m.top)
+        end if
+
+        if key = "down" and hasResults()
+            focusSearchTabs()
+            return true
         end if
     end if
-    return false
 
+    if key = "play" and m.searchRow.isinFocusChain() and isValidAndNotEmpty(m.searchRow.rowItemFocused)
+        focusedItem = getItemFocused()
+        if isValid(focusedItem)
+            m.top.quickPlayNode = focusedItem
+            return true
+        end if
+    end if
+
+    ' Fallback selection path for cases where SearchRow key handling is skipped
+    if (key = "ok" or key = "OK") and m.searchRow.isinFocusChain()
+        focusedItem = getItemFocused()
+        if isValid(focusedItem)
+            if focusedItem.isSeerrResult <> invalid and focusedItem.isSeerrResult = true
+                ShowSeerrDetails(focusedItem)
+            else
+                m.top.selectedItem = focusedItem
+            end if
+            return true
+        end if
+    end if
+
+    return false
 end function
 
 function getItemFocused() as object
@@ -103,33 +236,53 @@ function getItemFocused() as object
     return selectedContent.getChild(m.searchRow.rowItemFocused[1])
 end function
 
-sub OnScreenShown()
-    group = m.global.sceneManager.callFunc("getActiveScene")
+sub OnScreenShown(_isReturning = false as boolean)
+    m.searchRow.unobserveFieldScoped("selectedItem")
 
+    ' Coming back from a result leaves the results in charge, while arriving
+    ' fresh means the viewer is here to type
     if isValid(m.top.lastFocus)
         m.top.lastFocus.setFocus(true)
-        group.lastFocus = m.top.lastFocus
     else
-        m.top.setFocus(true)
-        group.lastFocus = m.top
+        focusSearchBox()
     end if
+
+    m.searchRow.observeFieldScoped("selectedItem", "onSearchRowItemSelected")
+    m.top.selectedItem = invalid
 
     if isStringEqual(m.loadStatus, ViewLoadStatus.INIT)
         m.loadStatus = ViewLoadStatus.FIRSTLOAD
         return
     end if
 
+    if _isReturning then return
+
     focusedItem = getItemFocused()
 
     if not isValid(focusedItem) then return
 
-    ' Only refresh meta data for specific item types
     if not inArray([ItemType.EPISODE, ItemType.MOVIE, ItemType.SEASON, ItemType.SERIES, ItemType.VIDEO, ItemType.MUSICVIDEO, ItemType.RECORDING, ItemType.BOXSET], focusedItem.LookupCI("type")) then return
 
     m.loadItemsTask1.itemId = focusedItem.LookupCI("id")
-    m.loadItemsTask1.observeField("content", "onItemDataLoaded")
+    m.loadItemsTask1.observeFieldScoped("content", "onItemDataLoaded")
     m.loadItemsTask1.itemsToLoad = "metaData"
     m.loadItemsTask1.control = TaskControl.RUN
+end sub
+
+sub OnScreenHidden()
+    ' Leaving with the keyboard open would leave it sat over the next screen
+    if isValid(m.keyboard) and m.keyboard.visible then hideSearchKeyboard()
+
+    if m.searchRow.hasFocus() or m.searchRow.isinFocusChain()
+        m.top.lastFocus = m.searchRow
+    else if m.searchBox.isinFocusChain()
+        m.top.lastFocus = m.searchBox
+    else
+        scene = m.top.getScene()
+        if isValid(scene) and isValid(scene.focusedChild)
+            m.top.lastFocus = scene.focusedChild
+        end if
+    end if
 end sub
 
 sub onItemDataLoaded()
@@ -143,4 +296,74 @@ sub onItemDataLoaded()
     if not isValid(focusedItem) then return
 
     focusedItem.callFunc("setWatched", chainLookupReturn(itemData[0], "json.UserData.Played", false), chainLookupReturn(itemData[0], "json.UserData.UnplayedItemCount", 0))
+end sub
+
+sub onGroupSummaryChanged()
+    summary = m.searchRow.groupSummary
+    if not isValidAndNotEmpty(summary)
+        m.searchTabs.visible = false
+        m.tabKeys = []
+        return
+    end if
+
+    total = 0
+    for each entry in summary
+        total += entry.count
+    end for
+
+    ' Seerr leads, then everything at once, then a tab per group, which is the
+    ' order the other clients lay them out in
+    tabDefs = []
+    m.tabKeys = []
+    allIndex = 0
+
+    for each entry in summary
+        if entry.key <> "seerr" then continue for
+
+        tabDefs.push({ id: entry.key, label: entry.title + ": " + Str(entry.count).trim() })
+        m.tabKeys.push(entry.key)
+        allIndex = 1
+    end for
+
+    tabDefs.push({ id: "all", label: tr("All") + ": " + Str(total).trim() })
+    m.tabKeys.push("")
+
+    for each entry in summary
+        if entry.key = "seerr" then continue for
+
+        tabDefs.push({ id: entry.key, label: entry.title + ": " + Str(entry.count).trim() })
+        m.tabKeys.push(entry.key)
+    end for
+
+    m.searchTabs.tabs = tabDefs
+    m.searchTabs.visible = true
+
+    ' A fresh set of results always starts on everything at once
+    if m.searchRow.activeGroup = "" then m.searchTabs.selectedIndex = allIndex
+end sub
+
+sub onSearchTabSelected()
+    index = m.searchTabs.selectedIndex
+    if index < 0 or index >= m.tabKeys.count() then return
+    if m.searchRow.activeGroup = m.tabKeys[index] then return
+
+    m.searchRow.activeGroup = m.tabKeys[index]
+    m.searchRow.itemData = m.searchRow.itemData
+end sub
+
+sub onSearchTabEscape()
+    if m.searchTabs.escape = "up"
+        focusSearchBox()
+        return
+    end if
+
+    if hasResults()
+        focusResults()
+    end if
+end sub
+
+sub focusSearchTabs()
+    m.searchBox.focused = false
+    m.searchTabs.setFocus(true)
+    m.top.lastFocus = m.searchTabs
 end sub

@@ -1,0 +1,34 @@
+import "pkg:/source/utils/misc.bs"
+import "pkg:/source/utils/themeApply.bs"
+
+sub init()
+    m.imageGroup = m.top.findNode("imageGroup")
+    m.logo = m.top.findNode("logo")
+    m.placeholder = m.top.findNode("placeholder")
+    m.name = m.top.findNode("name")
+    m.focusRing = m.top.findNode("focusRing")
+
+    m.name.font.size = 20
+
+    themeApply.ApplyToItem(m.top)
+end sub
+
+' The name always shows underneath, so a studio whose logo never arrives still
+' reads as itself
+sub onContentChanged()
+    cont = m.top.itemContent
+    if not isValid(cont) then return
+
+    m.name.text = cont.name
+
+    hasLogo = isValidAndNotEmpty(cont.logoUrl)
+    if hasLogo then m.logo.uri = cont.logoUrl
+    m.logo.visible = hasLogo
+    m.placeholder.visible = not hasLogo
+end sub
+
+sub onFocusChanged()
+    focused = m.top.itemHasFocus
+    m.focusRing.visible = focused
+    m.imageGroup.scale = focused ? [1.05, 1.05] : [1.0, 1.0]
+end sub

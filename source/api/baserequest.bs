@@ -25,7 +25,6 @@ function buildParams(params = {} as object) as string
         else if field.value = invalid
             item = field.key + "=null"
         else if field <> invalid
-            print "Unhandled param type: " + type(field.value)
             item = field.key + "=" + field.value.EncodeUriComponent()
         end if
 
@@ -84,22 +83,22 @@ function APIRequest(url as string, params = {} as object) as dynamic
     full_url = buildURL(url, params)
     if full_url = invalid then return invalid
 
-    serverURL = m.global.session.server.url
-    if serverURL = invalid then return invalid
-
-    req = createObject("roUrlTransfer")
+    req = CreateObject("roUrlTransfer")
     req.setUrl(full_url)
     req = authRequest(req)
     ' SSL cert
-    if serverURL.left(8) = "https://"
+    if LCase(full_url).left(8) = "https://"
         setCertificateAuthority(req)
     end if
 
     return req
 end function
 
+' APIRequest hands back invalid when there is no server to build a URL against,
+' so callers can reach here before a server has been picked
 function getJson(req)
-    'req.retainBodyOnError(True)
+    if req = invalid then return invalid
+
     data = req.GetToString()
     if data = invalid or data = ""
         return invalid
@@ -184,22 +183,138 @@ function deleteVoid(req)
     return true
 end function
 
-function get_url()
-    serverURL = m.global.session.server.url
-    if serverURL <> invalid
-        if serverURL.right(1) = "/"
-            serverURL = serverURL.left(serverURL.len() - 1)
-        end if
+function getRuntimeContextValue(key as string) as dynamic
+    if not isValidAndNotEmpty(key)
+        return invalid
+    end if
 
-        ' append http:// to the start if not specified
-        if serverURL.left(7) <> "http://" and serverURL.left(8) <> "https://"
-            serverURL = "http://" + serverURL
+    runtimeContext = GetGlobalAA()
+    if isValid(runtimeContext) and runtimeContext.DoesExist(key)
+        return runtimeContext[key]
+    end if
+
+    return invalid
+end function
+
+function getRegistryValue(section as string, key as string) as dynamic
+    if not isValidAndNotEmpty(section) or not isValidAndNotEmpty(key)
+        return invalid
+    end if
+
+    registry = CreateObject("roRegistrySection", section)
+    if registry.exists(key)
+        return registry.read(key)
+    end if
+
+    return invalid
+end function
+
+function getActiveUserIdFromRegistry() as dynamic
+    runtimeUserId = getRuntimeContextValue("moonfin.userId")
+    if isValidAndNotEmpty(runtimeUserId)
+        return runtimeUserId
+    end if
+
+    activeUserId = getRegistryValue("Jellyfin", "active_user")
+    if isValidAndNotEmpty(activeUserId)
+        return activeUserId
+    end if
+
+    usersRaw = getRegistryValue("Jellyfin", "available_users")
+    if not isValidAndNotEmpty(usersRaw)
+        return invalid
+    end if
+
+    users = ParseJson(usersRaw)
+    if type(users) = "roArray" or type(users) = "Array"
+        if users.count() = 1
+            firstUser = users[0]
+            if isValid(firstUser) and isValidAndNotEmpty(firstUser.id)
+                return firstUser.id
+            end if
         end if
     end if
+
+    return invalid
+end function
+
+function getServerUrlFromRegistry() as dynamic
+    serverURL = getRuntimeContextValue("moonfin.serverUrl")
+    if isValidAndNotEmpty(serverURL)
+        return serverURL
+    end if
+
+    serverURL = getRegistryValue("Jellyfin", "server")
+    if isValidAndNotEmpty(serverURL)
+        return serverURL
+    end if
+
+    activeUserId = getActiveUserIdFromRegistry()
+    if isValidAndNotEmpty(activeUserId)
+        serverURL = getRegistryValue(activeUserId, "serverUrl")
+        if isValidAndNotEmpty(serverURL)
+            return serverURL
+        end if
+    end if
+
+    usersRaw = getRegistryValue("Jellyfin", "available_users")
+    if isValidAndNotEmpty(usersRaw)
+        users = ParseJson(usersRaw)
+        if (type(users) = "roArray" or type(users) = "Array") and users.count() = 1
+            firstUser = users[0]
+            if isValid(firstUser) and isValidAndNotEmpty(firstUser.server)
+                return firstUser.server
+            end if
+        end if
+    end if
+
+    return invalid
+end function
+
+function getAuthTokenFromRegistry() as dynamic
+    authToken = getRuntimeContextValue("moonfin.authToken")
+    if isValidAndNotEmpty(authToken)
+        return authToken
+    end if
+
+    activeUserId = getActiveUserIdFromRegistry()
+    if isValidAndNotEmpty(activeUserId)
+        authToken = getRegistryValue(activeUserId, "token")
+        if isValidAndNotEmpty(authToken)
+            return authToken
+        end if
+    end if
+
+    if isValid(m) and isChainValid(m, "global.session.user.authToken")
+        authToken = chainLookupReturn(m, "global.session.user.authToken", invalid)
+        if isValidAndNotEmpty(authToken)
+            return authToken
+        end if
+    end if
+
+    return invalid
+end function
+
+function get_url()
+    serverURL = getServerUrlFromRegistry()
+    if not isValidAndNotEmpty(serverURL) then return invalid
+
+    serverURL = serverURL.toStr().trim()
+
+    if serverURL.right(1) = "/"
+        serverURL = serverURL.left(serverURL.len() - 1)
+    end if
+
+    if serverURL.left(7) <> "http://" and serverURL.left(8) <> "https://"
+        serverURL = "http://" + serverURL
+    end if
+
     return serverURL
 end function
 
 function getString(req)
+    if req = invalid then return ""
+
     data = req.GetToString()
     return data
 end function
@@ -216,6 +331,101 @@ function postString(req, data = "" as string)
     return resp.getString()
 end function
 
+function buildAuthHeader() as string
+    QUOTE = Chr(34)
+    headerContext = getAuthHeaderContext()
+
+    auth = "MediaBrowser" + " Client=" + QUOTE + headerContext.appName + " Roku" + QUOTE
+    auth = auth + ", Device=" + QUOTE + headerContext.deviceName + " (" + headerContext.deviceModel + ")" + QUOTE
+    auth = auth + ", Version=" + QUOTE + headerContext.appVersion + QUOTE
+    auth = auth + ", DeviceId=" + QUOTE + headerContext.deviceId + QUOTE
+    if isValidAndNotEmpty(headerContext.authToken)
+        auth = auth + ", Token=" + QUOTE + headerContext.authToken + QUOTE
+    end if
+
+    return auth
+end function
+
+function getAuthHeaderContext() as object
+    context = {
+        appName: getRuntimeContextValue("moonfin.appName"),
+        appVersion: getRuntimeContextValue("moonfin.appVersion"),
+        deviceName: getRuntimeContextValue("moonfin.deviceName"),
+        deviceModel: getRuntimeContextValue("moonfin.deviceModel"),
+        deviceId: getRuntimeContextValue("moonfin.deviceId"),
+        authToken: invalid
+    }
+
+    applyGlobalIdentity(context)
+    applyDeviceIdentity(context)
+
+    fillIdentity(context, "appName", "Moonfin")
+    fillIdentity(context, "appVersion", "0.0.0")
+    fillIdentity(context, "deviceName", "Roku")
+    fillIdentity(context, "deviceModel", "Roku")
+    fillIdentity(context, "deviceId", "Roku")
+
+    authToken = getAuthTokenFromRegistry()
+    if isValidAndNotEmpty(authToken)
+        context.authToken = authToken
+    end if
+
+    return context
+end function
+
+sub fillIdentity(context as object, field as string, value as dynamic)
+    if isValidAndNotEmpty(context[field]) then return
+    if isValidAndNotEmpty(value) then context[field] = value
+end sub
+
+function identityIsComplete(context as object) as boolean
+    return isValidAndNotEmpty(context.appName) and isValidAndNotEmpty(context.appVersion) and isValidAndNotEmpty(context.deviceName) and isValidAndNotEmpty(context.deviceModel) and isValidAndNotEmpty(context.deviceId)
+end function
+
+' Every thread keeps its own GetGlobalAA, so what the main thread stored there is
+' invisible to a task. Without this a task reports itself as a different device
+' and gets a session of its own. The global node is shared by every thread
+sub applyGlobalIdentity(context as object)
+    if identityIsComplete(context) then return
+    if not isValid(m) then return
+
+    globalNode = m.global
+    if not isValid(globalNode) then return
+
+    app = globalNode.app
+    if isValid(app)
+        fillIdentity(context, "appName", app.name)
+        fillIdentity(context, "appVersion", app.version)
+    end if
+
+    device = globalNode.device
+    if not isValid(device) then return
+
+    fillIdentity(context, "deviceName", device.name)
+    fillIdentity(context, "deviceModel", device.model)
+    fillIdentity(context, "deviceId", device.serverDeviceName)
+end sub
+
+' Anything still missing means the request went out before the globals were ready,
+' so ask the box itself rather than sending a placeholder
+sub applyDeviceIdentity(context as object)
+    if identityIsComplete(context) then return
+
+    appInfo = CreateObject("roAppInfo")
+    if isValid(appInfo)
+        fillIdentity(context, "appName", appInfo.GetTitle())
+        fillIdentity(context, "appVersion", appInfo.GetVersion())
+    end if
+
+    deviceInfo = CreateObject("roDeviceInfo")
+    if not isValid(deviceInfo) then return
+
+    fillIdentity(context, "deviceName", deviceInfo.GetModelDisplayName())
+    fillIdentity(context, "deviceName", deviceInfo.GetModel())
+    fillIdentity(context, "deviceModel", deviceInfo.GetModel())
+    fillIdentity(context, "deviceId", deviceInfo.GetChannelClientID())
+end sub
+
 ' sets the certificate authority by file path on the passed node
 sub setCertificateAuthority(request as object) as void
     request.setCertificatesFile("common:/certs/ca-bundle.crt")
@@ -227,22 +437,118 @@ function authRequest(req as object) as object
     return req
 end function
 
-' Returns a string containing the "Authorization" header payload
-function buildAuthHeader() as string
-    QUOTE = Chr(34)
-    auth = "MediaBrowser" + " Client=" + QUOTE + "Jellyfin Roku" + QUOTE
-    auth = auth + ", Device=" + QUOTE + m.global.device.name + " (" + m.global.device.model + ")" + QUOTE
-    auth = auth + ", Version=" + QUOTE + m.global.app.version + QUOTE
+function authRequestForServer(req as object, serverData as object) as object
+    req.AddHeader("Authorization", buildAuthHeaderForServer(serverData))
+    return req
+end function
 
-    if m.global.session.user.id <> invalid
-        auth = auth + ", UserId=" + QUOTE + m.global.session.user.id + QUOTE
+function buildAuthHeaderForServer(serverData as object) as string
+    QUOTE = Chr(34)
+    headerContext = getAuthHeaderContext()
+
+    auth = "MediaBrowser" + " Client=" + QUOTE + headerContext.appName + " Roku" + QUOTE
+    auth = auth + ", Device=" + QUOTE + headerContext.deviceName + " (" + headerContext.deviceModel + ")" + QUOTE
+    auth = auth + ", Version=" + QUOTE + headerContext.appVersion + QUOTE
+
+    if isValidAndNotEmpty(serverData.userId)
+        auth = auth + ", UserId=" + QUOTE + serverData.userId + QUOTE
     end if
 
-    auth = auth + ", DeviceId=" + QUOTE + m.global.device.serverDeviceName + QUOTE
+    auth = auth + ", DeviceId=" + QUOTE + headerContext.deviceId + QUOTE
 
-    if m.global.session.user.authToken <> invalid
-        auth = auth + ", Token=" + QUOTE + m.global.session.user.authToken + QUOTE
+    if isValidAndNotEmpty(serverData.authToken)
+        auth = auth + ", Token=" + QUOTE + serverData.authToken + QUOTE
     end if
 
     return auth
+end function
+
+function buildURLForServer(serverUrl as string, path as string, params = {} as object) as string
+    if serverUrl = "" then return ""
+
+    if serverUrl.right(1) = "/"
+        serverUrl = serverUrl.left(serverUrl.len() - 1)
+    end if
+
+    if serverUrl.left(7) <> "http://" and serverUrl.left(8) <> "https://"
+        serverUrl = "http://" + serverUrl
+    end if
+
+    pathParts = path.split("?")
+    realPath = pathParts[0]
+    pathQuery = ""
+    if pathParts.count() > 1
+        pathQuery = pathParts[1]
+    end if
+
+    if not realPath.startswith("/")
+        realPath = "/" + realPath
+    end if
+
+    full_url = serverUrl + realPath
+
+    hasPathQuery = isValidAndNotEmpty(pathQuery)
+    hasParams = isValidAndNotEmpty(params)
+
+    if hasPathQuery or hasParams
+        full_url = full_url + "?"
+        if hasPathQuery
+            full_url = full_url + pathQuery
+            if hasParams
+                full_url = full_url + "&"
+            end if
+        end if
+        if hasParams
+            full_url = full_url + buildParams(params)
+        end if
+    end if
+
+    return full_url
+end function
+
+function APIRequestForServer(serverUrl as string, userId as string, authToken as string, url as string, params = {} as object) as dynamic
+    full_url = buildURLForServer(serverUrl, url, params)
+    if full_url = "" then return invalid
+
+    req = CreateObject("roUrlTransfer")
+    req.setUrl(full_url)
+
+    serverData = {
+        serverUrl: serverUrl,
+        userId: userId,
+        authToken: authToken
+    }
+    req.AddHeader("Authorization", buildAuthHeaderForServer(serverData))
+
+    if serverUrl.left(8) = "https://"
+        setCertificateAuthority(req)
+    end if
+
+    return req
+end function
+
+function getServerInfoFromItem(item as object) as object
+    if not isValid(item) then return invalid
+
+    jsonData = item
+    if isValid(item.json)
+        jsonData = item.json
+    end if
+
+    if not isValid(jsonData._serverUrl) then return invalid
+    if not isValid(jsonData._userId) then return invalid
+    if not isValid(jsonData._authToken) then return invalid
+
+    return {
+        serverUrl: jsonData._serverUrl,
+        userId: jsonData._userId,
+        authToken: jsonData._authToken,
+        serverId: jsonData._serverId,
+        serverName: jsonData._serverName
+    }
+end function
+
+function isMultiServerItem(item as object) as boolean
+    itemServerData = getServerInfoFromItem(item)
+    return isValid(itemServerData)
 end function

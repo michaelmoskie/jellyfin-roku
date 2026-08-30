@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="MediaBar" extends="Group">
+    <children>
+        <!-- Note: Backdrop is managed by parent Home component, not locally -->
+
+        <!-- Darkens the top and foot of the artwork so the logo and the info box
+            keep their contrast. Its place and size are settled at runtime. -->
+        <Poster
+            id="featuredGradient"
+            uri="pkg:/images/mediabar/featuredgradient.png"
+            loadDisplayMode="scaleToFill"
+            visible="false"
+        />
+
+        <Poster
+            id="logoShadow"
+            uri=""
+            loadDisplayMode="scaleToFit"
+            blendColor="0x000000"
+            opacity="0.6"
+            visible="false"
+        />
+
+        <Poster
+            id="logoImage"
+            uri=""
+            loadDisplayMode="scaleToFit"
+            visible="false"
+        />
+
+        <!-- Title text (if no logo available) -->
+        <Label
+            id="titleText"
+            text=""
+            font="font:LargeBoldSystemFont"
+            color="0xFFFFFFFF"
+            wrap="true"
+            maxLines="2"
+            visible="false"
+        />
+
+        <!-- Info overlay content with background box. Its place, width and the
+            row of facts inside it are all settled at runtime. -->
+        <Poster
+            id="infoBackground"
+            uri="pkg:/images/mediabar/infobox23.9.png"
+            loadDisplayMode="scaleToFit"
+        />
+
+        <LayoutGroup
+            id="infoOverlayContent"
+            layoutDirection="vert">
+            <LayoutGroup id="metadataRow" layoutDirection="horiz" vertAlignment="center" />
+
+            <RatingsRow
+                id="ratingsRow"
+                visible="false"
+                labelColor="#FFFFFF"
+            />
+
+            <Label
+                id="overviewLabel"
+                font="font:SmallestSystemFont"
+                color="0xFFFFFFE6"
+                wrap="true"
+                maxLines="3"
+                text=""
+            />
+        </LayoutGroup>
+
+        <!-- Never shown, they just lend their sizes to the row built at runtime -->
+        <Label id="featuredMetaFont" font="font:SmallestBoldSystemFont" visible="false" />
+        <Label id="featuredBadgeFont" font="font:SmallestBoldSystemFont" visible="false" />
+
+        <!-- Left navigation arrow -->
+        <Group
+            id="leftArrow"
+            translation="[20, 282]"
+            visible="false"
+        >
+            <Poster
+                id="leftArrowBg"
+                width="70"
+                height="70"
+                uri="pkg:/images/icons/circle.png"
+                loadDisplayMode="scaleToFit"
+            />
+            <Poster
+                width="48"
+                height="48"
+                translation="[8, 11]"
+                uri="pkg:/images/icons/chevron-left.png"
+                loadDisplayMode="scaleToFit"
+            />
+        </Group>
+
+        <!-- Right navigation arrow -->
+        <Group
+            id="rightArrow"
+            translation="[1830, 282]"
+            visible="false"
+        >
+            <Poster
+                id="rightArrowBg"
+                width="70"
+                height="70"
+                uri="pkg:/images/icons/circle.png"
+                loadDisplayMode="scaleToFit"
+            />
+            <Poster
+                width="48"
+                height="48"
+                translation="[13, 11]"
+                uri="pkg:/images/icons/chevron-right.png"
+                loadDisplayMode="scaleToFit"
+            />
+        </Group>
+
+        <Poster
+            id="dotsBackground"
+            uri="pkg:/images/dots.9.png"
+            loadDisplayMode="scaleToFit"
+        />
+        <LayoutGroup
+            id="indicatorDots"
+            layoutDirection="horiz"
+            vertAlignment="center"
+        />
+
+        <!-- Banner mode: a rounded card across the top with the rows below it.
+            Its place and width are settled at runtime, since a docked sidebar
+            takes a bite out of the left of the screen. -->
+        <Group id="bannerGroup" visible="false">
+            <MaskGroup id="bannerMask" maskUri="pkg:/images/banner/cardmask.png">
+                <Rectangle id="bannerCardBg" color="#101010" />
+                <Poster id="bannerBackdrop" loadDisplayMode="scaleToZoom" />
+                <Poster id="bannerGradient" uri="pkg:/images/banner/cardgradient.png"
+                    loadDisplayMode="scaleToFill" />
+                <Group id="bannerContent">
+                    <Poster id="bannerLogo" width="340" height="90" loadDisplayMode="scaleToFit"
+                        visible="false" />
+                    <Label id="bannerTitle" ellipsisText="..."
+                        font="font:LargeBoldSystemFont" color="#FFFFFF" visible="false" />
+                    <Label id="bannerMeta" font="font:SmallSystemFont" color="#FFFFFFBF" />
+                    <RatingsRow id="bannerRatings" visible="false"
+                        labelFont="font:SmallestBoldSystemFont" labelColor="#FFFFFF"
+                        iconHeight="24" ratingSpacing="16" />
+                </Group>
+                <LayoutGroup id="bannerDots" layoutDirection="horiz" vertAlignment="center" />
+            </MaskGroup>
+            <Poster id="bannerFocus" uri="pkg:/images/banner/bannerfocus16.9.png"
+                loadDisplayMode="scaleToFit" visible="false" />
+        </Group>
+
+        <!-- MakD mode: a column down the left over a dimmed backdrop, with the
+            run's position in the opposite corner. The negative offset lands it
+            at the top of the screen, since this component sits well down the
+            page. -->
+        <Group id="makdGroup" visible="false" translation="[0, -223]">
+            <Rectangle id="makdScrim" width="1920" height="1080" color="#000000A3" />
+            <Poster id="makdLogo" width="360" height="140"
+                loadDisplayMode="scaleToFit" visible="false" />
+            <Group id="makdText">
+                <Label id="makdTitle" width="452" ellipsisText="..."
+                    font="font:ExtraLargeBoldSystemFont" color="#FFFFFF" visible="false" />
+                <Group id="makdMeta" />
+                <RatingsRow id="makdRatings" visible="false"
+                    labelFont="font:SmallestBoldSystemFont" labelColor="#FFFFFF"
+                    iconHeight="24" ratingSpacing="16" />
+                <Label id="makdOverview" width="452" wrap="true" maxLines="4"
+                    font="font:SmallSystemFont" color="#FFFFFFF2" />
+                <!-- Never shown, it just lends its size to the row built at runtime -->
+                <Label id="makdMetaFont" font="font:SmallestBoldSystemFont" visible="false" />
+            </Group>
+            <Group id="makdDots">
+                <Poster id="makdDotsBg" uri="pkg:/images/makd/dotspill14.9.png"
+                    loadDisplayMode="scaleToFit" blendColor="#000000" opacity="0.55" />
+                <LayoutGroup id="makdDotRow" layoutDirection="horiz" vertAlignment="center"
+                    itemSpacings="[8]" translation="[14, 10]" />
+            </Group>
+        </Group>
+
+        <!-- Gallery mode. The negative offset lands the row at the top of the
+            screen, since this component sits well down the page. -->
+        <Group id="galleryGroup" visible="false" translation="[24, -126]">
+            <!-- An ambient wash behind the panels, tinted by the open one's genre -->
+            <Poster
+                id="galleryGlow"
+                uri="pkg:/images/gallery/glow.png"
+                loadDisplayMode="scaleToFill"
+                translation="[-56, -303]"
+                width="1600"
+                height="1600"
+                opacity="0.42"
+            />
+            <MarkupGrid
+                id="galleryGrid"
+                itemComponentName="GalleryItem"
+                numColumns="5"
+                numRows="1"
+                itemSize="[1920, 951]"
+                rowHeights="[951]"
+                itemSpacing="[6, 0]"
+                drawFocusFeedback="false"
+                columnWidths="[1478, 92, 92, 92, 92]"
+            />
+        </Group>
+
+        <!-- Bookshelf mode -->
+        <Group id="bookshelfGroup" visible="false" translation="[29, 30]">
+            <MarkupGrid
+                id="bookshelfGrid"
+                itemComponentName="BookshelfItem"
+                numRows="1"
+                itemSize="[60, 800]"
+                itemSpacing="[5, 0]"
+                drawFocusFeedback="false"
+                columnWidths="[660, 60, 60, 60, 60]"
+            />
+        </Group>
+
+        <!-- Aya mode: a rounded hero frame that floats in the page over a dimmed
+            copy of the same artwork. The negative offset lands it at the top of
+            the screen, since this component sits well down the page. -->
+        <Group id="ayaGroup" visible="false" translation="[80, -73]" scaleRotateCenter="[880, 351]">
+            <MaskGroup id="ayaMask" maskUri="pkg:/images/mediabar/aya_frame_mask.png">
+                <Rectangle id="ayaFrameBg" width="1760" height="702" color="#101010" />
+                <Poster id="ayaBackdrop" width="1760" height="702" loadDisplayMode="scaleToZoom" />
+                <Poster id="ayaBackdropNext" width="1760" height="702"
+                    loadDisplayMode="scaleToZoom" opacity="0" />
+                <Poster id="ayaLogo" translation="[44, 40]" width="340" height="100"
+                    loadDisplayMode="scaleToFit" visible="false" />
+                <Label id="ayaTitle" translation="[44, 40]" width="440" wrap="true"
+                    maxLines="2" font="font:LargeBoldSystemFont" color="#FFFFFF" visible="false" />
+                <LayoutGroup id="ayaIndicators" layoutDirection="horiz"
+                    vertAlignment="center" itemSpacings="[5]" />
+            </MaskGroup>
+            <Poster id="ayaFocusRing" uri="pkg:/images/mediabar/ayafocus.9.png"
+                translation="[-4, -4]" width="1768" height="710" loadDisplayMode="scaleToFit"
+                blendColor="#FFFFFF" visible="false" />
+        </Group>
+
+        <!-- Pause indicator (shows when paused) -->
+        <Group
+            id="pauseIndicator"
+            translation="[1772, 808]"
+            visible="false"
+        >
+            <Rectangle
+                width="148"
+                height="50"
+                color="0x000000"
+                opacity="0.8"
+            />
+            <Label
+                translation="[12, 10]"
+                text="PAUSED"
+                font="font:SmallBoldSystemFont"
+                color="0xFFFFFFFF"
+            />
+        </Group>
+
+        <Animation id="ayaSlideIn" duration="0.42" repeat="false" easeFunction="outCubic">
+            <FloatFieldInterpolator id="ayaSlideInInterp" key="[0.0, 1.0]" keyValue="[0.0, 1.0]"
+                fieldToInterp="ayaBackdropNext.opacity" />
+        </Animation>
+
+        <Animation id="contentFadeOut" duration="0.2" repeat="false" easeFunction="linear">
+            <FloatFieldInterpolator id="contentFadeOutInterp" key="[0.0, 1.0]" keyValue="[1.0, 0.0]" fieldToInterp="infoOverlayContent.opacity" />
+            <FloatFieldInterpolator id="logoFadeOutInterp" key="[0.0, 1.0]" keyValue="[1.0, 0.0]" fieldToInterp="logoImage.opacity" />
+            <FloatFieldInterpolator id="logoShadowFadeOutInterp" key="[0.0, 1.0]" keyValue="[0.6, 0.0]" fieldToInterp="logoShadow.opacity" />
+            <FloatFieldInterpolator id="titleFadeOutInterp" key="[0.0, 1.0]" keyValue="[1.0, 0.0]" fieldToInterp="titleText.opacity" />
+            <FloatFieldInterpolator id="infoBgFadeOutInterp" key="[0.0, 1.0]" keyValue="[1.0, 0.0]" fieldToInterp="infoBackground.opacity" />
+        </Animation>
+
+        <Animation id="contentFadeIn" duration="0.3" repeat="false" easeFunction="inOutQuad">
+            <FloatFieldInterpolator id="contentFadeInInterp" key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="infoOverlayContent.opacity" />
+            <FloatFieldInterpolator id="logoFadeInInterp" key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="logoImage.opacity" />
+            <FloatFieldInterpolator id="logoShadowFadeInInterp" key="[0.0, 1.0]" keyValue="[0.0, 0.6]" fieldToInterp="logoShadow.opacity" />
+            <FloatFieldInterpolator id="titleFadeInInterp" key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="titleText.opacity" />
+            <FloatFieldInterpolator id="infoBgFadeInInterp" key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="infoBackground.opacity" />
+        </Animation>
+    </children>
+
+    <interface>
+        <field id="itemSelected" type="node" alwaysNotify="true" />
+        <field id="hasFocus" type="boolean" value="false" alwaysNotify="true" />
+        <field id="currentBackdrop" type="string" alwaysNotify="true" />
+        <function name="refreshCurrentDisplay" />
+    </interface>
+</component>
