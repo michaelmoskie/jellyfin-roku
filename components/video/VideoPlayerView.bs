@@ -1235,8 +1235,6 @@ sub displaySingleTrickplayImage(trickPosition as integer, whichImage as integer)
     ' For the five image trickplay the center image is large, the other images are small.  These factors can be used to adjust the sizes.
     largeTileSizeFactor = 1.2
     smallTileSizeFactor = 0.7
-    tileBuffer = 15 ' Space between trickplay images when using the 5 tile trickplay image display
-
     if whichImage = 0
         if m.global.session.user.settings["playback.trickplay.displayTrickplayFormat"] = "single"
             tileSizeFactor = 1.0

@@ -356,6 +356,8 @@ namespace session
             tmpSettings["ui.guide.indicator.live"] = toBoolean(displayLive)
             tmpSettings["ui.guide.indicator.repeat"] = toBoolean(displayRepeat)
             tmpSettings["display.livetv.landing"] = toBoolean(displayScreen)
+            tmpSettings["display.livetv.channelOrder"] = liveTvChannelOrder
+            tmpSettings["ui.guide.favorites.at.top"] = toBoolean(liveTvFavoritesAtTop)
             session.user.Update("settings", tmpSettings)
 
             userId = m.global.session.user.id
@@ -364,6 +366,8 @@ namespace session
                 reg.write("ui.guide.indicator.live", displayLive)
                 reg.write("ui.guide.indicator.repeat", displayRepeat)
                 reg.write("display.livetv.landing", displayScreen)
+                reg.write("display.livetv.channelOrder", liveTvChannelOrder)
+                reg.write("ui.guide.favorites.at.top", liveTvFavoritesAtTop)
                 reg.flush()
             end if
         end sub
