@@ -482,7 +482,7 @@ end sub
 
 '
 ' Display dialog to user with an OK button
-sub radioDialog(title, message, buttons = [tr("OK")], id = "OKDialog")
+sub radioDialog(title, message, buttons = [tr("OK")], _id = "OKDialog")
     m.itemID = string.EMPTY
     m.userselection = false
 

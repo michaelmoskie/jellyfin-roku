@@ -370,9 +370,11 @@ function wrapSingleLine(line as string, maxWidth as integer) as string
                 for each tag in openTags
                     output += tag
                 end for
-                currentPlainText = token.value
                 output += token.value
+                currentPlainText = token.value
             else
+                ' This loop state is read by the next expanded token; bslint flags the final iteration path.
+                ' bs:disable-next-line
                 currentPlainText = candidateText
                 output += token.value
             end if

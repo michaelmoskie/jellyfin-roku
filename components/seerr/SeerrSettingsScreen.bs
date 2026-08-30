@@ -179,7 +179,7 @@ sub onTestConnectionPressed()
     ' Removed - now handled via Settings > Integrations > Seerr
 end sub
 
-sub onConnectionTestResponse(event as object)
+sub onConnectionTestResponse(_event as object)
 end sub
 
 sub onEnableDisablePressed()
